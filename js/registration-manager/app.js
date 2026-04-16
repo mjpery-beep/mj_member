@@ -770,6 +770,8 @@
         var generatorEndTime = typeof safeGeneratorState.endTime === 'string'
             ? safeGeneratorState.endTime
             : '';
+        var isSingleGeneratorMode = generatorMode === 'custom';
+        var showGeneratorEndDate = generatorMode !== 'custom';
         var generatorMonthlyOrdinal = typeof safeGeneratorState.monthlyOrdinal === 'string'
             ? safeGeneratorState.monthlyOrdinal
             : 'first';
@@ -1730,9 +1732,10 @@
                             value: generatorMode,
                             onInput: function (event) { handleGeneratorChange('mode', event.currentTarget.value); },
                         }, [
+                            h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Ajoute date unique')),
+                            h('option', { value: 'range' }, getString(strings, 'occurrenceGeneratorModeRange', 'Plage de dates')),
                             h('option', { value: 'weekly' }, getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')),
                             h('option', { value: 'monthly' }, getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')),
-                            h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Personnalisé')),
                         ]),
                     ]),
                     generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
@@ -1770,7 +1773,10 @@
                     ]),
                     h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
                         h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorStartDate', 'Date de début')),
+                            h('label', { class: 'mj-regmgr-occurrence__label' }, isSingleGeneratorMode
+                                ? getString(strings, 'occurrenceDateLabel', 'Date')
+                                : getString(strings, 'occurrenceGeneratorStartDate', 'Date de début')
+                            ),
                             h('input', {
                                 type: 'date',
                                 class: 'mj-regmgr-occurrence__input',
@@ -1778,7 +1784,7 @@
                                 onInput: function (event) { handleGeneratorChange('startDate', event.currentTarget.value); },
                             }),
                         ]),
-                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        showGeneratorEndDate && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
                             h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorEndDate', 'Date de fin')),
                             h('input', {
                                 type: 'date',
@@ -2165,6 +2171,8 @@
         var WEEKLY_GENERATION_HARD_CAP = 208; // safeguard (~4 years weekly)
         var MONTHLY_GENERATION_LIMIT = 12;
         var MONTHLY_GENERATION_HARD_CAP = 120; // safeguard (10 years monthly)
+        var RANGE_GENERATION_LIMIT = 60;
+        var RANGE_GENERATION_HARD_CAP = 730; // safeguard (2 years daily)
         var DAY_IN_MS = 24 * 60 * 60 * 1000;
 
         var buildGeneratorPlan = useCallback(function () {
@@ -2212,6 +2220,58 @@
                     ? safeGeneratorState.monthlyWeekday
                     : 'mon',
             };
+
+            if (generatorMode === 'custom') {
+                var customStart = plan.startTime;
+                var customEnd = plan.endTime;
+                if (customStart && customEnd) {
+                    var customDateIso = formatISODate(startDate);
+                    additions.push({
+                        id: generateOccurrenceId(customDateIso, customStart, localOccurrences.length),
+                        date: customDateIso,
+                        startTime: customStart,
+                        endTime: customEnd,
+                        status: 'planned',
+                        reason: '',
+                        source: 'generated',
+                    });
+                }
+                plan.endDateISO = '';
+                return { additions: additions, plan: plan };
+            }
+
+            if (generatorMode === 'range') {
+                var rangeEndDate = endDate || startDate;
+                if (rangeEndDate < startDate) {
+                    rangeEndDate = startDate;
+                }
+
+                plan.endDateISO = formatISODate(rangeEndDate);
+
+                var rangeStartTime = plan.startTime;
+                var rangeEndTime = plan.endTime;
+                if (rangeStartTime && rangeEndTime) {
+                    var rangeCap = allowExtendedCap ? RANGE_GENERATION_HARD_CAP : RANGE_GENERATION_LIMIT;
+                    var rangeCursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+                    var rangeIterations = 0;
+                    while (rangeIterations < rangeCap && rangeCursor <= rangeEndDate) {
+                        var rangeIso = formatISODate(rangeCursor);
+                        additions.push({
+                            id: generateOccurrenceId(rangeIso, rangeStartTime, localOccurrences.length + additions.length),
+                            date: rangeIso,
+                            startTime: rangeStartTime,
+                            endTime: rangeEndTime,
+                            status: 'planned',
+                            reason: '',
+                            source: 'generated',
+                        });
+                        rangeIterations += 1;
+                        rangeCursor = addDays(rangeCursor, 1);
+                    }
+                }
+
+                return { additions: additions, plan: plan };
+            }
 
             if (generatorMode === 'monthly') {
                 var ordinalKey = plan.monthlyOrdinal;
@@ -2879,6 +2939,37 @@
         }
     }
 
+    function capitalizeWordsLabel(label) {
+        if (!label || typeof label !== 'string') {
+            return '';
+        }
+        return label.split(' ').map(function (token) {
+            if (!token) {
+                return token;
+            }
+            return token.charAt(0).toUpperCase() + token.slice(1);
+        }).join(' ');
+    }
+
+    function formatHourForRangePreview(value) {
+        if (typeof value !== 'string') {
+            return '';
+        }
+        var match = value.trim().match(/^(\d{2}):(\d{2})$/);
+        if (!match) {
+            return value;
+        }
+        var hours = parseInt(match[1], 10);
+        var minutes = parseInt(match[2], 10);
+        if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+            return value;
+        }
+        if (minutes === 0) {
+            return String(hours) + 'h';
+        }
+        return String(hours) + 'h' + String(minutes).padStart(2, '0');
+    }
+
     function buildWeeklyPreviewFromPlan(plan, weekdayFullLabels, strings) {
         if (!plan || !Array.isArray(plan.days) || plan.days.length === 0) {
             return '';
@@ -2986,6 +3077,42 @@
             return '';
         }
         return startLabel + ' au ' + endLabel;
+    }
+
+    function buildRangePreviewFromPlan(plan, locale, strings) {
+        if (!plan) {
+            return '';
+        }
+        var startDate = parseISODate(plan.startDateISO || plan.startDate || '');
+        var endDate = parseISODate(plan.endDateISO || plan.endDate || '');
+        if (!startDate) {
+            return '';
+        }
+        if (!endDate || endDate < startDate) {
+            endDate = startDate;
+        }
+
+        var startLabel = formatDateForLocale(startDate, locale, true, false);
+        var endLabel = formatDateForLocale(endDate, locale, true, false);
+        if (!startLabel || !endLabel) {
+            return '';
+        }
+        startLabel = capitalizeWordsLabel(startLabel);
+        endLabel = capitalizeWordsLabel(endLabel);
+
+        var startTime = typeof plan.startTime === 'string' ? plan.startTime : '';
+        var endTime = typeof plan.endTime === 'string' ? plan.endTime : '';
+        if (startTime && endTime) {
+            return getString(strings, 'occurrencePreviewRangePattern', 'Du {{startDay}} à {{endDay}} de {{startTime}} à {{endTime}}')
+                .replace('{{startDay}}', startLabel)
+                .replace('{{endDay}}', endLabel)
+                .replace('{{startTime}}', formatHourForRangePreview(startTime))
+                .replace('{{endTime}}', formatHourForRangePreview(endTime));
+        }
+
+        return getString(strings, 'occurrencePreviewRangeDatesOnly', 'Du {{startDay}} à {{endDay}}')
+            .replace('{{startDay}}', startLabel)
+            .replace('{{endDay}}', endLabel);
     }
 
     function buildWeeklyPreviewFromOccurrences(occurrences, weekdayFullLabels) {
@@ -3099,6 +3226,13 @@
             var monthlyPreview = buildMonthlyPreview(plan, weekdayFullLabels, monthlyOrdinalOptions, strings);
             if (monthlyPreview) {
                 return monthlyPreview;
+            }
+        }
+
+        if (plan && plan.mode === 'range') {
+            var rangePreviewFromPlan = buildRangePreviewFromPlan(plan, locale, strings);
+            if (rangePreviewFromPlan) {
+                return rangePreviewFromPlan;
             }
         }
 

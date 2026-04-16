@@ -745,7 +745,7 @@ $config_json = wp_json_encode(array(
             12 => __('Décembre', 'mj-member'),
         ],
 
-        'addLocation' => __('Ajouter un lieu', 'mj-member'),
+        'addLocation' => __('Créer un lieu', 'mj-member'),
         'editLocation' => __('Modifier le lieu', 'mj-member'),
         'manageLocationHint' => __('Ajoutez ou éditez un lieu sans quitter ce formulaire.', 'mj-member'),
         'locationPermissionError' => __('Vous ne pouvez pas gérer les lieux.', 'mj-member'),
@@ -912,6 +912,7 @@ $config_json = wp_json_encode(array(
         'occurrenceGeneratorTitle' => __('Générer des occurrences', 'mj-member'),
         'occurrenceGeneratorDescription' => __('Planifiez la récurrence automatique de cet événement.', 'mj-member'),
         'occurrenceGeneratorModeLabel' => __('Mode', 'mj-member'),
+        'occurrenceGeneratorModeCustom' => __('Ajoute date unique', 'mj-member'),
         'occurrenceGeneratorModeWeekly' => __('Hebdomadaire', 'mj-member'),
         'occurrenceGeneratorModeMonthly' => __('Mensuel', 'mj-member'),
         'occurrenceGeneratorModeRange' => __('Plage de dates', 'mj-member'),

@@ -93,7 +93,7 @@
         location: 'Lieu',
         locationHint: 'Administrez les lieux depuis la page des lieux du tableau de bord.',
         manageLocationHint: 'Ajoutez ou editez un lieu sans quitter ce formulaire.',
-        addLocation: 'Ajouter un lieu',
+        addLocation: 'Créer un lieu',
         addLocationLink: 'Ajouter un lieu',
         editLocation: 'Modifier le lieu',
         removeLocationLink: 'Retirer',
@@ -3813,7 +3813,7 @@
                     type: 'button',
                     class: 'mj-btn mj-btn--ghost mj-btn--small',
                     onClick: onCreateLocation,
-                }, getString(strings, 'addLocation', 'Ajouter un nouveau lieu')),
+                }, getString(strings, 'addLocation', 'Créer un lieu')),
             ]),
             h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'locationLinksHint', 'Ajoutez plusieurs lieux avec differents roles: depart, activite, retour, etc.')),
         ]);
