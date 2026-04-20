@@ -3333,6 +3333,7 @@
         var onDeletePhoto = typeof props.onDeletePhoto === 'function' ? props.onDeletePhoto : null;
         var onUpdateAvatar = typeof props.onUpdateAvatar === 'function' ? props.onUpdateAvatar : null;
         var onRemoveAvatar = typeof props.onRemoveAvatar === 'function' ? props.onRemoveAvatar : null;
+        var onRemoveAvatarBackground = typeof props.onRemoveAvatarBackground === 'function' ? props.onRemoveAvatarBackground : null;
         var onCaptureAvatar = typeof props.onCaptureAvatar === 'function' ? props.onCaptureAvatar : null;
         var onCreateMessage = typeof props.onCreateMessage === 'function' ? props.onCreateMessage : null;
         var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
@@ -3758,6 +3759,9 @@
         var captureAvatarLabel = getString(strings, 'captureAvatar', 'Capturer');
         var avatarUploadingLabel = getString(strings, 'avatarUploading', 'Téléversement...');
         var changeAvatarLabel = getString(strings, 'changeAvatar', 'Changer');
+        var removeAvatarBgLabel = getString(strings, 'memberAvatarRemoveBg', 'Remove bg');
+        var removeAvatarBgOriginalLabel = getString(strings, 'memberAvatarRemoveBgOriginal', 'Remove bg (originale)');
+        var removeAvatarBgLoadingLabel = getString(strings, 'memberAvatarRemoveBgLoading', 'Traitement...');
 
         var memberRoleRaw = member && typeof member.role === 'string' ? member.role : '';
         var memberRole = memberRoleRaw ? memberRoleRaw.toLowerCase() : '';
@@ -3791,9 +3795,13 @@
         var removeAvatarLabel = getString(strings, 'removeAvatar', 'Supprimer');
         var removeAvatarConfirmLabel = getString(strings, 'removeAvatarConfirm', 'Supprimer l’avatar personnalisé ?');
 
-        var canChangeAvatar = !!(onUpdateAvatar || onRemoveAvatar || onCaptureAvatar);
+        var canChangeAvatar = !!(onUpdateAvatar || onRemoveAvatar || onCaptureAvatar || onRemoveAvatarBackground);
         if (config && typeof config.canManageAvatars !== 'undefined') {
             canChangeAvatar = canChangeAvatar && !!config.canManageAvatars;
+        }
+        var canRemoveAvatarBackground = !!onRemoveAvatarBackground;
+        if (config && typeof config.canRemoveAvatarBackground !== 'undefined') {
+            canRemoveAvatarBackground = canRemoveAvatarBackground && !!config.canRemoveAvatarBackground;
         }
 
         var canDeleteMember = !!(onDeleteMember && config && config.canDeleteMember);
@@ -3812,6 +3820,8 @@
         } else if (memberPhotoId) {
             memberHasCustomAvatar = memberPhotoId !== 0;
         }
+
+        var memberHasOriginalAvatarSource = !!(member && typeof member.avatarOriginalUrl === 'string' && member.avatarOriginalUrl !== '');
 
         var guardian = null;
         if (member.guardian) {
@@ -4135,6 +4145,25 @@
                 });
         };
 
+        var handleAvatarRemoveBackground = function (sourceType) {
+            if (!canChangeAvatar || !member || !member.id || !canRemoveAvatarBackground || !memberHasCustomAvatar || avatarSaving) {
+                return;
+            }
+
+            var normalizedSourceType = sourceType === 'original' ? 'original' : 'avatar';
+
+            setAvatarSaving(true);
+            Promise.resolve(onRemoveAvatarBackground(member.id, normalizedSourceType))
+                .catch(function (error) {
+                    if (error && error.message) {
+                        console.error('[MjRegMgr] Avatar remove bg failed:', error.message);
+                    }
+                })
+                .finally(function () {
+                    setAvatarSaving(false);
+                });
+        };
+
         var renderAvatarActions = function (extraClass) {
             if (!canChangeAvatar) {
                 return null;
@@ -4172,6 +4201,22 @@
                     title: avatarSaving ? avatarUploadingLabel : removeAvatarLabel,
                     'aria-label': avatarSaving ? avatarUploadingLabel : removeAvatarLabel,
                 }, avatarSaving ? avatarUploadingLabel : removeAvatarLabel),
+                memberHasCustomAvatar && canRemoveAvatarBackground && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                    onClick: function () { handleAvatarRemoveBackground('avatar'); },
+                    disabled: avatarSaving,
+                    title: avatarSaving ? removeAvatarBgLoadingLabel : removeAvatarBgLabel,
+                    'aria-label': avatarSaving ? removeAvatarBgLoadingLabel : removeAvatarBgLabel,
+                }, avatarSaving ? removeAvatarBgLoadingLabel : removeAvatarBgLabel),
+                memberHasOriginalAvatarSource && canRemoveAvatarBackground && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                    onClick: function () { handleAvatarRemoveBackground('original'); },
+                    disabled: avatarSaving,
+                    title: avatarSaving ? removeAvatarBgLoadingLabel : removeAvatarBgOriginalLabel,
+                    'aria-label': avatarSaving ? removeAvatarBgLoadingLabel : removeAvatarBgOriginalLabel,
+                }, avatarSaving ? removeAvatarBgLoadingLabel : removeAvatarBgOriginalLabel),
             ]);
         };
 

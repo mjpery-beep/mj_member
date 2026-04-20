@@ -40,6 +40,7 @@ final class Config
         self::defineIfMissing('MJ_MEMBER_DATA_RETENTION_DAYS', 1095);
         self::defineIfMissing('MJ_MEMBER_OPENAI_API_KEY', '');
         self::defineIfMissing('MJ_MEMBER_GOOGLE_MAPS_API_KEY', '');
+        self::defineIfMissing('MJ_MEMBER_REMOVE_BG_API_KEY', '');
         self::defineIfMissing('MJ_MEMBER_VAPID_PUBLIC_KEY', '');
         self::defineIfMissing('MJ_MEMBER_VAPID_PRIVATE_KEY', '');
     }
@@ -127,6 +128,21 @@ final class Config
         }
 
         $option = \get_option('mj_member_google_maps_api_key', '');
+        if (!is_string($option) || $option === '') {
+            return '';
+        }
+
+        return \sanitize_text_field($option);
+    }
+
+    public static function removeBgApiKey(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_REMOVE_BG_API_KEY');
+        if ($defined !== '') {
+            return \sanitize_text_field($defined);
+        }
+
+        $option = \get_option('mj_member_remove_bg_api_key', '');
         if (!is_string($option) || $option === '') {
             return '';
         }

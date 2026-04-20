@@ -26,7 +26,10 @@
 
     var classNames = Utils.classNames;
     var rawGetString = Utils.getString;
-    var Modal = Modals && Modals.Modal ? Modals.Modal : null;
+    function getModalComponent() {
+        var runtimeModals = global.MjRegMgrModals || Modals || null;
+        return runtimeModals && runtimeModals.Modal ? runtimeModals.Modal : null;
+    }
 
     var DEFAULT_STRINGS = {
         accentColor: 'Couleur pastel',
@@ -51,11 +54,29 @@
         contentSectionHint: "Présentez l'événement en détail pour les membres et le public.",
         coverId: 'ID de couverture',
         coverLabel: 'Visuel',
+        coverAiGenerate: 'IA Visual Generator',
         coverSelect: 'Selectionner un fichier',
         coverReplace: 'Remplacer le fichier',
         coverEmpty: 'Aucun visuel selectionne.',
         coverPreviewAlt: 'Apercu du visuel de couverture',
         coverModalTitle: 'Choisir un visuel de couverture',
+        aiVisualModalTitle: 'IA Visual Generator',
+        aiVisualPromptLabel: 'Prompt fusionne',
+        aiVisualBasePromptLabel: 'Prompt de base',
+        aiVisualCustomPromptLabel: 'Prompt custom (event)',
+        aiVisualPromptPreview: 'Apercu du prompt',
+        aiVisualGenerate: 'Generer',
+        aiVisualGenerating: 'Generation en cours...',
+        aiVisualGeneratePrompt: 'Generate prompt',
+        aiVisualGeneratingPrompt: 'Generation du prompt...',
+        aiVisualPromptHint: 'Le prompt final envoye a l image est la fusion du prompt de base et du prompt custom.',
+        aiVisualPromptInstruction: 'Decris moi une scene qui illustre l event avec la description d evenement suivante.',
+        aiVisualPromptGenerateError: 'Impossible de generer le prompt custom.',
+        aiVisualPromptInvalidResponse: 'Reponse IA invalide pour le prompt visuel.',
+        aiVisualUse: 'Utiliser ce visuel',
+        aiVisualRegenerate: 'Regenerer',
+        aiVisualNoResult: 'Aucun visuel genere pour le moment.',
+        aiVisualError: 'Impossible de generer le visuel.',
         description: 'Description detaillee',
         editorEmpty: "Selectionnez un evenement pour commencer la modification.",
         editorTitleFallback: 'Modifier l evenement',
@@ -225,6 +246,36 @@
             result = result.split(token).join(value);
         });
         return result;
+    }
+
+    function stripHtml(value) {
+        if (!value) {
+            return '';
+        }
+        var text = String(value);
+        return text
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function resolveVisualPromptTemplate(template, eventTitle, eventDescription) {
+        var title = (eventTitle || '').trim() || 'Atelier MJ';
+        var titleUpper = title.toUpperCase();
+        var description = stripHtml(eventDescription || '');
+
+        var resolved = String(template || '')
+            .replace(/\[REMPLACE PAR TON THÈME\]/g, title)
+            .replace(/\[REMPLACE PAR TON THEME\]/g, title)
+            .replace(/\[REMPLACE PAR OBJETS LIÉS AU THÈME\]/g, title)
+            .replace(/\[REMPLACE PAR OBJETS LIES AU THEME\]/g, title)
+            .replace(/\[TITRE DE TON ATELIER EN MAJUSCULE\]/g, titleUpper);
+
+        if (description) {
+            resolved += '\n\nDescription de l\'evenement:\n' + description;
+        }
+
+        return resolved;
     }
 
     function splitDateTimeParts(value) {
@@ -3824,6 +3875,7 @@
     // ============================================
 
     function EventEditor(props) {
+        var Modal = getModalComponent();
         var data = props.data;
         var eventSummary = props.eventSummary;
         var loading = props.loading;
@@ -3831,6 +3883,10 @@
         var errors = props.errors || [];
         var onSubmit = props.onSubmit;
         var onReload = props.onReload;
+        var onGenerateVisual = typeof props.onGenerateVisual === 'function' ? props.onGenerateVisual : null;
+        var onGenerateVisualPrompt = typeof props.onGenerateVisualPrompt === 'function' ? props.onGenerateVisualPrompt : null;
+        var aiVisualPromptTemplate = typeof props.aiVisualPromptTemplate === 'string' ? props.aiVisualPromptTemplate : '';
+        var aiVisualPromptInstruction = typeof props.aiVisualPromptInstruction === 'string' ? props.aiVisualPromptInstruction : '';
         var strings = props.strings || {};
 
         var initialValues = data ? data.values : null;
@@ -3880,6 +3936,34 @@
         var _coverPreview = useState(initialCoverUrl);
         var coverPreview = _coverPreview[0];
         var setCoverPreview = _coverPreview[1];
+
+        var _aiVisualModalOpen = useState(false);
+        var aiVisualModalOpen = _aiVisualModalOpen[0];
+        var setAiVisualModalOpen = _aiVisualModalOpen[1];
+
+        var _aiVisualBasePrompt = useState('');
+        var aiVisualBasePrompt = _aiVisualBasePrompt[0];
+        var setAiVisualBasePrompt = _aiVisualBasePrompt[1];
+
+        var _aiVisualCustomPrompt = useState('');
+        var aiVisualCustomPrompt = _aiVisualCustomPrompt[0];
+        var setAiVisualCustomPrompt = _aiVisualCustomPrompt[1];
+
+        var _aiVisualLoading = useState(false);
+        var aiVisualLoading = _aiVisualLoading[0];
+        var setAiVisualLoading = _aiVisualLoading[1];
+
+        var _aiVisualPromptLoading = useState(false);
+        var aiVisualPromptLoading = _aiVisualPromptLoading[0];
+        var setAiVisualPromptLoading = _aiVisualPromptLoading[1];
+
+        var _aiVisualError = useState('');
+        var aiVisualError = _aiVisualError[0];
+        var setAiVisualError = _aiVisualError[1];
+
+        var _aiVisualGenerated = useState(null);
+        var aiVisualGenerated = _aiVisualGenerated[0];
+        var setAiVisualGenerated = _aiVisualGenerated[1];
 
         var _locationLinks = useState(function () {
             if (initialValues && Array.isArray(initialValues.event_location_links)) {
@@ -4556,6 +4640,123 @@
             setCoverPreview('');
         }, [updateFormValue]);
 
+        var resolvedVisualBasePrompt = useMemo(function () {
+            var eventTitle = (formState && formState.event_title) || (eventSummary && eventSummary.title) || '';
+            var eventDescription = '';
+            if (formState) {
+                eventDescription = formState.description || formState.event_description || '';
+            }
+            if (!eventDescription && eventSummary) {
+                eventDescription = eventSummary.description || '';
+            }
+
+            return resolveVisualPromptTemplate(aiVisualPromptTemplate, eventTitle, eventDescription);
+        }, [aiVisualPromptTemplate, formState, eventSummary]);
+
+        var resolvedVisualMergedPrompt = useMemo(function () {
+            var base = typeof aiVisualBasePrompt === 'string' ? aiVisualBasePrompt.trim() : '';
+            var custom = typeof aiVisualCustomPrompt === 'string' ? aiVisualCustomPrompt.trim() : '';
+
+            if (base && custom) {
+                return base + '\n\n' + custom;
+            }
+            return base || custom || '';
+        }, [aiVisualBasePrompt, aiVisualCustomPrompt]);
+
+        var handleOpenAiVisualModal = useCallback(function () {
+            setAiVisualModalOpen(true);
+            setAiVisualError('');
+            setAiVisualGenerated(null);
+            setAiVisualBasePrompt(resolvedVisualBasePrompt);
+            setAiVisualCustomPrompt('');
+        }, [resolvedVisualBasePrompt]);
+
+        var handleCloseAiVisualModal = useCallback(function () {
+            if (aiVisualLoading || aiVisualPromptLoading) {
+                return;
+            }
+            setAiVisualModalOpen(false);
+            setAiVisualError('');
+            setAiVisualGenerated(null);
+        }, [aiVisualLoading, aiVisualPromptLoading]);
+
+        var handleGenerateAiVisualPrompt = useCallback(function () {
+            if (aiVisualPromptLoading || aiVisualLoading || !onGenerateVisualPrompt) {
+                return;
+            }
+
+            var eventTitle = (formState && formState.event_title) || (eventSummary && eventSummary.title) || '';
+            var eventDescription = '';
+            if (formState) {
+                eventDescription = formState.description || formState.event_description || '';
+            }
+            if (!eventDescription && eventSummary) {
+                eventDescription = eventSummary.description || '';
+            }
+
+            var instruction = aiVisualPromptInstruction || getString(strings, 'aiVisualPromptInstruction', 'Decris moi une scene qui illustre l event avec la description d evenement suivante.');
+
+            setAiVisualPromptLoading(true);
+            setAiVisualError('');
+
+            Promise.resolve(onGenerateVisualPrompt({
+                title: eventTitle,
+                description: eventDescription,
+                instruction: instruction,
+            }))
+                .then(function (result) {
+                    setAiVisualPromptLoading(false);
+                    var customPrompt = result && typeof result.prompt === 'string' ? result.prompt : '';
+                    setAiVisualCustomPrompt(customPrompt);
+                })
+                .catch(function (error) {
+                    setAiVisualPromptLoading(false);
+                    var message = error && error.message
+                        ? error.message
+                        : getString(strings, 'aiVisualPromptGenerateError', 'Impossible de generer le prompt custom.');
+                    setAiVisualError(message);
+                });
+        }, [aiVisualPromptLoading, aiVisualLoading, onGenerateVisualPrompt, formState, eventSummary, aiVisualPromptInstruction, strings]);
+
+        var handleGenerateAiVisual = useCallback(function () {
+            if (aiVisualLoading || !onGenerateVisual) {
+                return;
+            }
+
+            setAiVisualLoading(true);
+            setAiVisualError('');
+
+            Promise.resolve(onGenerateVisual({
+                prompt: resolvedVisualMergedPrompt,
+                basePrompt: aiVisualBasePrompt,
+                customPrompt: aiVisualCustomPrompt,
+            }))
+                .then(function (result) {
+                    setAiVisualLoading(false);
+                    setAiVisualGenerated(result || null);
+                })
+                .catch(function (error) {
+                    setAiVisualLoading(false);
+                    var message = error && error.message
+                        ? error.message
+                        : getString(strings, 'aiVisualError', 'Impossible de generer le visuel.');
+                    setAiVisualError(message);
+                });
+        }, [aiVisualLoading, onGenerateVisual, resolvedVisualMergedPrompt, aiVisualBasePrompt, aiVisualCustomPrompt, strings]);
+
+        var handleUseAiVisual = useCallback(function () {
+            if (!aiVisualGenerated || !aiVisualGenerated.attachmentId) {
+                return;
+            }
+            updateFormValue('event_cover_id', aiVisualGenerated.attachmentId);
+            if (aiVisualGenerated.imageUrl) {
+                setCoverPreview(aiVisualGenerated.imageUrl);
+            }
+            setAiVisualModalOpen(false);
+            setAiVisualError('');
+            setAiVisualGenerated(null);
+        }, [aiVisualGenerated, updateFormValue]);
+
         var handleSubmit = useCallback(function (e) {
             e.preventDefault();
             if (!onSubmit) {
@@ -4697,6 +4898,8 @@
         var wpMediaAvailable = !!(global.wp && global.wp.media && typeof global.wp.media === 'function');
 
         var canSubmit = !!onSubmit && !saving && !loading && isDirty;
+        var canGenerateAiVisual = !!onGenerateVisual && !loading && !saving;
+        var canGenerateAiVisualPrompt = !!onGenerateVisualPrompt && !loading && !saving;
         var locationSelectValue = formState.event_location_id ? String(formState.event_location_id) : '0';
         var currentLocationSelected = parseInt(locationSelectValue, 10) || 0;
 
@@ -4827,6 +5030,12 @@
                                 h('div', { class: 'mj-regmgr-media-control__content' }, [
                                     h('p', { class: 'mj-regmgr-media-control__meta' }, formState.event_cover_id ? '#' + formState.event_cover_id : getString(strings, 'coverEmpty', 'Aucun visuel selectionne.')),
                                     h('div', { class: 'mj-regmgr-media-control__actions' }, [
+                                        h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--secondary',
+                                            onClick: handleOpenAiVisualModal,
+                                            disabled: !canGenerateAiVisual,
+                                        }, getString(strings, 'coverAiGenerate', 'IA Visual Generator')),
                                         h('button', {
                                             type: 'button',
                                             class: 'mj-btn mj-btn--ghost',
@@ -5084,6 +5293,94 @@
                             ]),
                             h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'occurrenceModeHint', 'Ce parametre s applique aux evenements recurrents, en serie ou aux stages. En mode automatique, chaque inscription couvre toutes les occurrences disponibles.')),
                         ]),
+                    ]),
+                ]),
+            ]),
+
+            Modal && h(Modal, {
+                isOpen: aiVisualModalOpen,
+                onClose: handleCloseAiVisualModal,
+                title: getString(strings, 'aiVisualModalTitle', 'IA Visual Generator'),
+                size: 'large',
+                footer: h(Fragment, null, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--secondary',
+                        onClick: handleCloseAiVisualModal,
+                        disabled: aiVisualLoading || aiVisualPromptLoading,
+                    }, getString(strings, 'cancel', 'Annuler')),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost',
+                        onClick: handleGenerateAiVisual,
+                        disabled: aiVisualLoading || aiVisualPromptLoading,
+                    }, aiVisualLoading
+                        ? getString(strings, 'aiVisualGenerating', 'Generation en cours...')
+                        : (aiVisualGenerated
+                            ? getString(strings, 'aiVisualRegenerate', 'Regenerer')
+                            : getString(strings, 'aiVisualGenerate', 'Generer'))),
+                    aiVisualGenerated && aiVisualGenerated.attachmentId ? h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary',
+                        onClick: handleUseAiVisual,
+                        disabled: aiVisualLoading || aiVisualPromptLoading,
+                    }, getString(strings, 'aiVisualUse', 'Utiliser ce visuel')) : null,
+                ]),
+            }, [
+                h('div', { class: 'mj-regmgr-generate-ai' }, [
+                    h('div', { class: 'mj-regmgr-generate-ai__note' }, [
+                        h('label', null, getString(strings, 'aiVisualBasePromptLabel', 'Prompt de base')),
+                        h('textarea', {
+                            class: 'mj-regmgr-textarea',
+                            rows: 8,
+                            value: aiVisualBasePrompt,
+                            onInput: function (e) {
+                                setAiVisualBasePrompt(e && e.target ? e.target.value : '');
+                            },
+                            disabled: aiVisualLoading || aiVisualPromptLoading,
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-generate-ai__note' }, [
+                        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' } }, [
+                            h('label', null, getString(strings, 'aiVisualCustomPromptLabel', 'Prompt custom (event)')),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--sm',
+                                onClick: handleGenerateAiVisualPrompt,
+                                disabled: !canGenerateAiVisualPrompt || aiVisualLoading || aiVisualPromptLoading,
+                            }, aiVisualPromptLoading
+                                ? getString(strings, 'aiVisualGeneratingPrompt', 'Generation du prompt...')
+                                : getString(strings, 'aiVisualGeneratePrompt', 'Generate prompt')),
+                        ]),
+                        h('textarea', {
+                            class: 'mj-regmgr-textarea',
+                            rows: 6,
+                            value: aiVisualCustomPrompt,
+                            onInput: function (e) {
+                                setAiVisualCustomPrompt(e && e.target ? e.target.value : '');
+                            },
+                            disabled: aiVisualLoading || aiVisualPromptLoading,
+                        }),
+                        h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'aiVisualPromptHint', 'Le prompt final envoye a l image est la fusion du prompt de base et du prompt custom.')),
+                    ]),
+                    h('div', { class: 'mj-regmgr-generate-ai__prompt-preview' }, [
+                        h('p', { class: 'mj-regmgr-generate-ai__prompt-section-label' }, getString(strings, 'aiVisualPromptLabel', 'Prompt fusionne')),
+                        h('pre', { class: 'mj-regmgr-generate-ai__prompt-pre' }, resolvedVisualMergedPrompt || ''),
+                    ]),
+                    aiVisualError ? h('div', { class: 'mj-regmgr-alert mj-regmgr-alert--error', style: { marginTop: '12px' } }, aiVisualError) : null,
+                    h('div', { style: { marginTop: '16px' } }, [
+                        aiVisualGenerated && aiVisualGenerated.imageUrl
+                            ? h('img', {
+                                src: aiVisualGenerated.imageUrl,
+                                alt: getString(strings, 'coverPreviewAlt', 'Apercu du visuel de couverture'),
+                                style: {
+                                    width: '100%',
+                                    borderRadius: '12px',
+                                    border: '1px solid #dbe4f4',
+                                    display: 'block',
+                                },
+                            })
+                            : h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'aiVisualNoResult', 'Aucun visuel genere pour le moment.')),
                     ]),
                 ]),
             ]),

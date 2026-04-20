@@ -578,17 +578,30 @@ class MjAccountLinks {
                 continue;
             }
 
+            $visibility = isset($config['visibility']) ? $config['visibility'] : 'all';
+            $memberVisibilityAllowsAccess = (
+                $visibility === MjRoles::ANIMATEUR && $isAnimateur
+            ) || (
+                $visibility === MjRoles::COORDINATEUR && $isCoordinateur
+            ) || (
+                $visibility === MjRoles::BENEVOLE && $isBenevole
+            ) || (
+                $visibility === 'staff' && ($isAnimateur || $isCoordinateur)
+            ) || (
+                $visibility === 'hours_team' && ($isAnimateur || $isCoordinateur || $isBenevole)
+            );
+
             $requiredCapability = isset($config['requires_capability']) ? (string) $config['requires_capability'] : '';
             if ($requiredCapability !== '') {
                 $hasCapability = current_user_can($requiredCapability);
                 $ownerOverride = ($key === 'contact_messages' && $allowContactOwnerView);
+                $memberRoleOverride = $memberVisibilityAllowsAccess;
 
-                if (!$previewMode && !$hasCapability && !$ownerOverride) {
+                if (!$previewMode && !$hasCapability && !$ownerOverride && !$memberRoleOverride) {
                     continue;
                 }
             }
 
-            $visibility = isset($config['visibility']) ? $config['visibility'] : 'all';
             // Vérifier la visibilité basée sur les rôles
             if ($visibility === MjRoles::ANIMATEUR && !$isAnimateur) {
                 continue;

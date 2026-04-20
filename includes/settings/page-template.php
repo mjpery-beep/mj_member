@@ -1769,10 +1769,34 @@ if (!defined('ABSPATH')) {
                         </p>
 
                         <p style="margin-bottom:18px;">
+                            <label for="mj-remove-bg-api-key"><strong><?php esc_html_e('Clé API remove.bg', 'mj-member'); ?></strong></label><br>
+                            <input type="password" name="mj_remove_bg_api_key" id="mj-remove-bg-api-key" value="<?php echo esc_attr($remove_bg_api_key_option); ?>" class="regular-text" autocomplete="off" placeholder="xxxxxxxxxxxxxxxxxxxx">
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e('Utilisée pour le bouton « Remove bg » dans la fiche membre du widget Gestionnaire. Laissez vide pour désactiver la fonctionnalité.', 'mj-member'); ?>
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
                             <label for="mj-photo-grimlins-prompt"><strong><?php esc_html_e('Prompt de transformation', 'mj-member'); ?></strong></label><br>
                             <textarea name="mj_photo_grimlins_prompt" id="mj-photo-grimlins-prompt" rows="4" class="large-text" placeholder="<?php echo esc_attr__('Décris le rendu souhaité', 'mj-member'); ?>"><?php echo esc_textarea($photo_grimlins_prompt_option); ?></textarea>
                             <small style="color:#6b7280; display:block; margin-top:4px;">
                                 <?php esc_html_e('Personnalisez l’instruction envoyée à OpenAI. Le portrait initial est transmis en entrée et la sortie est générée au format PNG 1024×1024.', 'mj-member'); ?>
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-ai-event-visual-prompt"><strong><?php esc_html_e('Prompt – Génération image event (Gestionnaire)', 'mj-member'); ?></strong></label><br>
+                            <textarea name="mj_ai_event_visual_prompt" id="mj-ai-event-visual-prompt" rows="12" class="large-text" placeholder="<?php echo esc_attr__('Laissez vide pour utiliser le prompt par défaut.', 'mj-member'); ?>"><?php echo esc_textarea($ai_event_visual_prompt_option); ?></textarea>
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e('Utilisé par le bouton « IA Visual Generator » dans la fiche événement du widget Gestionnaire. Les placeholders thème/titre sont remplacés automatiquement avec les données de l’événement.', 'mj-member'); ?>
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-ai-event-visual-prompt-instruction"><strong><?php esc_html_e('Prompt – Génération du prompt custom event', 'mj-member'); ?></strong></label><br>
+                            <textarea name="mj_ai_event_visual_prompt_instruction" id="mj-ai-event-visual-prompt-instruction" rows="3" class="large-text" placeholder="<?php echo esc_attr__('Décris moi une scène qui illustre l\'event avec la description d\'événement suivante.', 'mj-member'); ?>"><?php echo esc_textarea($ai_event_visual_prompt_instruction_option); ?></textarea>
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e('Instruction utilisée par le bouton « Generate prompt » pour créer le prompt custom de l’événement à partir de sa description.', 'mj-member'); ?>
                             </small>
                         </p>
 

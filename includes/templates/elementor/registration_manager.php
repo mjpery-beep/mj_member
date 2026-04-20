@@ -46,6 +46,7 @@ $allow_delete_registration = !empty($settings['allow_delete_registration']) && $
 $allow_create_member = !empty($settings['allow_create_member']) && $settings['allow_create_member'] === 'yes';
 
 $is_coordinateur = false;
+$is_animateur = false;
 $can_manage_accounts = current_user_can(Config::capability()) && (current_user_can('create_users') || current_user_can('promote_users'));
 $nextcloud_available = MjNextcloud::isAvailable();
 $can_manage_nextcloud = (current_user_can(Config::capability()) || $is_coordinateur) && $nextcloud_available;
@@ -324,10 +325,18 @@ if (!in_array($member_role, $allowed_roles, true) && !current_user_can('manage_o
     return;
 }
 
-$is_coordinateur = $member_role === MjRoles::COORDINATEUR || current_user_can('manage_options');
-$can_manage_children = current_user_can(Config::capability()) || $is_coordinateur;
+$is_coordinateur = MjRoles::isCoordinateur((string) $member_role) || current_user_can('manage_options');
+$is_animateur = MjRoles::isAnimateur((string) $member_role);
+$is_staff_manager = $is_coordinateur || $is_animateur;
+$can_manage_children = $is_staff_manager;
 $allow_attach_child = $can_manage_children;
 $allow_create_child = $allow_create_member && $can_manage_children;
+$can_change_member_avatar = $is_staff_manager;
+$can_create_event = $is_staff_manager;
+$can_delete_event = $is_coordinateur;
+$can_manage_locations = $is_coordinateur;
+$can_delete_member = $is_coordinateur;
+$can_manage_nextcloud = $nextcloud_available && $is_coordinateur;
 
 // Préparer les labels
 $event_types = MjEvents::get_type_labels();
@@ -393,6 +402,63 @@ $url_tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : null;
 $url_member_id = isset($_GET['member']) ? absint(wp_unslash($_GET['member'])) : null;
 $url_main_tab = isset($_GET['main-tab']) ? sanitize_key(wp_unslash($_GET['main-tab'])) : null;
 
+$ai_visual_prompt_template = (string) get_option('mj_member_ai_event_visual_prompt', '');
+if ($ai_visual_prompt_template === '') {
+    $ai_visual_prompt_template = (string) get_option('mj_member_photo_grimlins_prompt', '');
+}
+if ($ai_visual_prompt_template === '') {
+    $ai_visual_prompt_template = "Create a vibrant cartoon illustration in a bold mascot style.\n\n"
+        . "Scene: A youth workshop themed around: [REMPLACE PAR TON THÈME]\n\n"
+        . "Characters:\n"
+        . "Include exactly 3 Grimlin mascots (small fantasy creatures):\n"
+        . "- turquoise-green skin (#009A93)\n"
+        . "- pink accents (#E30053)\n"
+        . "- big triangular ears\n"
+        . "- big expressive eyes\n"
+        . "- friendly mischievous smiles\n"
+        . "- thick black outlines\n"
+        . "- flat colors, no gradients\n"
+        . "- slightly exaggerated proportions (big head, small body)\n\n"
+        . "Character roles:\n"
+        . "- Center character: active leader (holding or doing the main activity)\n"
+        . "- Left character: curious / learning / reacting\n"
+        . "- Right character: different personality (e.g. nerdy, creative, sporty, calm)\n\n"
+        . "Each Grimlin should wear outfits matching the theme (e.g. sportswear, costumes, workshop clothes, etc.)\n\n"
+        . "Composition:\n"
+        . "- Characters grouped in the center\n"
+        . "- Clear readable scene (not cluttered)\n"
+        . "- Foreground action related to the theme\n"
+        . "- Background environment matching the activity (but simplified and stylized)\n\n"
+        . "Environment:\n"
+        . "- Youth-friendly setting (Maison de Jeunes style)\n"
+        . "- Add thematic objects: [REMPLACE PAR OBJETS LIÉS AU THÈME]\n"
+        . "- Keep background slightly detailed but not overwhelming\n\n"
+        . "Mood:\n"
+        . "- Fun, inclusive, energetic, positive\n"
+        . "- No realism, fully cartoon\n\n"
+        . "Text:\n"
+        . "At the bottom, add a bold ribbon banner with the title:\n"
+        . "\"[TITRE DE TON ATELIER EN MAJUSCULE]\"\n"
+        . "- strong, readable typography\n"
+        . "- centered\n\n"
+        . "Color palette:\n"
+        . "- dominant turquoise (#009A93)\n"
+        . "- dominant pink (#E30053)\n"
+        . "- complementary bright colors depending on theme\n\n"
+        . "Style:\n"
+        . "- clean vector illustration\n"
+        . "- thick outlines\n"
+        . "- flat shading\n"
+        . "- high contrast\n"
+        . "- modern mascot design\n"
+        . "- consistent with youth center branding\n\n"
+        . "Avoid:\n"
+        . "- extra limbs\n"
+        . "- distorted hands\n"
+        . "- overly complex backgrounds\n"
+        . "- realistic textures";
+}
+
 $config_json = wp_json_encode(array(
     'widgetId' => $widget_id,
     'ajaxUrl' => $ajax_url,
@@ -413,14 +479,15 @@ $config_json = wp_json_encode(array(
     'canManageAccounts' => $can_manage_accounts,
     'canManageNextcloud' => $can_manage_nextcloud,
     'hasNextcloudIntegration' => $nextcloud_available,
+    'canRemoveAvatarBackground' => $can_change_member_avatar && Config::removeBgApiKey() !== '',
     'nextcloudGroups' => $can_manage_nextcloud ? Config::nextcloudGroups() : [],
     'accountLinkNonce' => $can_manage_accounts ? wp_create_nonce('mj_link_member_user') : '',
     'accountRoles' => $account_roles,
-    'canChangeMemberAvatar' => current_user_can(Config::capability()) || $is_coordinateur,
-    'canCreateEvent' => current_user_can(Config::capability()),
-    'canDeleteEvent' => current_user_can(Config::capability()) || $is_coordinateur,
-    'canManageLocations' => current_user_can(Config::capability()) || $is_coordinateur,
-    'canDeleteMember' => current_user_can(Config::capability()) || $is_coordinateur,
+    'canChangeMemberAvatar' => $can_change_member_avatar,
+    'canCreateEvent' => $can_create_event,
+    'canDeleteEvent' => $can_delete_event,
+    'canManageLocations' => $can_manage_locations,
+    'canDeleteMember' => $can_delete_member,
     'adminEditUrl' => $admin_edit_url,
     'adminAddEventUrl' => $admin_add_url,
     'adminMemberUrl' => $admin_member_url,
@@ -453,6 +520,8 @@ $config_json = wp_json_encode(array(
     'aiDescriptionPrompt' => (string) get_option('mj_member_ai_description_prompt', get_option('mj_ai_description_prompt', '')),
     'aiSocialDescriptionPrompt' => (string) get_option('mj_member_ai_social_description_prompt', get_option('mj_ai_social_description_prompt', '')),
     'aiRegDocPrompt' => (string) get_option('mj_member_ai_regdoc_prompt', get_option('mj_ai_regdoc_prompt', '')),
+    'aiVisualPromptTemplate' => $ai_visual_prompt_template,
+    'aiVisualPromptInstruction' => (string) get_option('mj_member_ai_event_visual_prompt_instruction', 'Décris moi une scène qui illustre l\'event avec la description d\'événement suivante.'),
     'strings' => array(
         // Général
         'loading' => __('Chargement...', 'mj-member'),
@@ -600,6 +669,13 @@ $config_json = wp_json_encode(array(
         'memberAvatarCaptureUnsupported' => __('La capture photo n\'est pas supportée sur ce navigateur.', 'mj-member'),
         'memberAvatarCaptureError' => __('Impossible d\'accéder à la caméra.', 'mj-member'),
         'memberAvatarCaptureInvalid' => __('Le fichier sélectionné n\'est pas une image.', 'mj-member'),
+        'memberAvatarRemoveBg' => __('Remove bg', 'mj-member'),
+        'memberAvatarRemoveBgOriginal' => __('Remove bg (originale)', 'mj-member'),
+        'memberAvatarRemoveBgLoading' => __('Traitement...', 'mj-member'),
+        'memberAvatarRemoveBgSuccess' => __('Arrière-plan de la photo supprimé.', 'mj-member'),
+        'memberAvatarRemoveBgError' => __('Impossible de supprimer l\'arrière-plan de la photo.', 'mj-member'),
+        'memberAvatarRemoveBgOriginalSuccess' => __('Arrière-plan de la photo originale supprimé.', 'mj-member'),
+        'memberAvatarRemoveBgOriginalError' => __('Impossible de supprimer l\'arrière-plan de la photo originale.', 'mj-member'),
         // Gestion des enfants
         'guardianChildSectionTitle' => __('Enfants', 'mj-member'),
         'guardianChildEmpty' => __('Aucun enfant rattaché pour le moment.', 'mj-member'),

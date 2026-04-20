@@ -35,14 +35,10 @@ if ($isPreview) {
         $hasAccess = true;
     }
     
-    // Second check: Try to find member linked to user
-    if (!$hasAccess && class_exists('Mj\\Member\\Classes\\Crud\\MjMembers')) {
-        $members = MjMembers::get_all(array(
-            'filters' => array('wp_user_id' => $currentUserId),
-            'limit' => 1,
-        ));
-        if (!empty($members)) {
-            $currentMember = $members[0];
+    // Second check: resolve member linked to the current WP user.
+    if (!$hasAccess) {
+        $currentMember = MjMembers::getByWpUserId($currentUserId);
+        if ($currentMember) {
             $hasAccess = MjRoles::isStaff($currentMember->role);
             $isCoordinator = MjRoles::isCoordinateur($currentMember->role);
         }

@@ -6438,6 +6438,65 @@
             setPublishDescriptionError,
         ]);
 
+        var handleGenerateVisualForEditor = useCallback(function (payload) {
+            if (!selectedEvent || !selectedEvent.id) {
+                return Promise.reject(new Error('Aucun événement sélectionné'));
+            }
+
+            var prompt = '';
+            var basePrompt = '';
+            var customPrompt = '';
+            if (typeof payload === 'string') {
+                prompt = payload;
+            } else if (payload && typeof payload === 'object') {
+                if (typeof payload.prompt === 'string') {
+                    prompt = payload.prompt;
+                }
+                if (typeof payload.basePrompt === 'string') {
+                    basePrompt = payload.basePrompt;
+                }
+                if (typeof payload.customPrompt === 'string') {
+                    customPrompt = payload.customPrompt;
+                }
+            }
+
+            return api.generateAiVisual(selectedEvent.id, prompt, basePrompt, customPrompt)
+                .then(function (result) {
+                    if (!result || !result.attachmentId || !result.imageUrl) {
+                        throw new Error(getString(strings, 'aiVisualInvalidResponse', 'Réponse IA invalide pour le visuel.'));
+                    }
+                    return result;
+                });
+        }, [selectedEvent, api, strings]);
+
+        var handleGenerateVisualPromptForEditor = useCallback(function (payload) {
+            if (!selectedEvent || !selectedEvent.id) {
+                return Promise.reject(new Error('Aucun événement sélectionné'));
+            }
+
+            var description = '';
+            var instruction = '';
+            if (payload && typeof payload === 'object') {
+                if (typeof payload.description === 'string') {
+                    description = payload.description;
+                }
+                if (typeof payload.instruction === 'string') {
+                    instruction = payload.instruction;
+                }
+            }
+
+            return api.generateAiVisualPrompt(selectedEvent.id, description, instruction)
+                .then(function (result) {
+                    var prompt = result && typeof result.prompt === 'string' ? result.prompt.trim() : '';
+                    if (!prompt) {
+                        throw new Error(getString(strings, 'aiVisualPromptInvalidResponse', 'Réponse IA invalide pour le prompt visuel.'));
+                    }
+                    return {
+                        prompt: prompt,
+                    };
+                });
+        }, [selectedEvent, api, strings]);
+
         var handleDeleteEvent = useCallback(function (target) {
             if (deletingEvent) {
                 return;
@@ -7403,6 +7462,40 @@
                     var message = err && err.message
                         ? err.message
                         : getString(strings, 'memberAvatarUpdateError', 'Impossible de mettre à jour la photo de profil.');
+                    showError(message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
+
+        var handleRemoveMemberAvatarBackground = useCallback(function (memberId, sourceType) {
+            var targetId = parseInt(memberId, 10);
+            if (!targetId || targetId <= 0) {
+                return Promise.resolve();
+            }
+            var normalizedSourceType = typeof sourceType === 'string' && sourceType !== '' ? sourceType : 'avatar';
+            return api.removeMemberAvatarBackground(targetId, normalizedSourceType)
+                .then(function (result) {
+                    var successKey = normalizedSourceType === 'original'
+                        ? 'memberAvatarRemoveBgOriginalSuccess'
+                        : 'memberAvatarRemoveBgSuccess';
+                    var successFallback = normalizedSourceType === 'original'
+                        ? 'Arrière-plan de la photo originale supprimé.'
+                        : 'Arrière-plan de la photo supprimé.';
+                    showSuccess(getString(strings, successKey, successFallback));
+                    loadMemberDetails(targetId);
+                    loadMembers(membersPagination.page);
+                    return result;
+                })
+                .catch(function (err) {
+                    var errorKey = normalizedSourceType === 'original'
+                        ? 'memberAvatarRemoveBgOriginalError'
+                        : 'memberAvatarRemoveBgError';
+                    var errorFallback = normalizedSourceType === 'original'
+                        ? 'Impossible de supprimer l\'arrière-plan de la photo originale.'
+                        : 'Impossible de supprimer l\'arrière-plan de la photo.';
+                    var message = err && err.message
+                        ? err.message
+                        : getString(strings, errorKey, errorFallback);
                     showError(message);
                     throw err;
                 });
@@ -9758,9 +9851,13 @@
                                 errors: eventEditorErrors,
                                 onSubmit: handleSubmitEventEditor,
                                 onReload: handleReloadEventEditor,
+                                onGenerateVisual: handleGenerateVisualForEditor,
+                                onGenerateVisualPrompt: handleGenerateVisualPromptForEditor,
                                 strings: strings,
                                 canManageLocations: !!config.canManageLocations,
                                 onManageLocation: handleRequestLocationModal,
+                                aiVisualPromptTemplate: config.aiVisualPromptTemplate || '',
+                                aiVisualPromptInstruction: config.aiVisualPromptInstruction || '',
                             }),
 
                             // Nextcloud media panels
@@ -9808,6 +9905,7 @@
                             onCaptureAvatar: handleCaptureMemberAvatar,
                             onUpdateAvatar: handleUpdateMemberAvatar,
                             onRemoveAvatar: handleRemoveMemberAvatar,
+                            onRemoveAvatarBackground: handleRemoveMemberAvatarBackground,
                             onDeleteRegistration: handleDeleteMemberRegistration,
                             onUpdateRegistrationOccurrences: handleUpdateRegistrationOccurrences,
                             onOpenMember: handleViewMemberFromRegistration,

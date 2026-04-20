@@ -341,7 +341,10 @@ function mj_settings_page() {
         $cards_double_sided = isset($_POST['mj_cards_pdf_double_sided']) ? '1' : '0';
         $registration_page = isset($_POST['mj_login_registration_page']) ? intval($_POST['mj_login_registration_page']) : 0;
         $openai_api_key = isset($_POST['mj_openai_api_key']) ? sanitize_text_field(wp_unslash($_POST['mj_openai_api_key'])) : '';
+        $remove_bg_api_key = isset($_POST['mj_remove_bg_api_key']) ? sanitize_text_field(wp_unslash($_POST['mj_remove_bg_api_key'])) : '';
         $photo_grimlins_prompt = isset($_POST['mj_photo_grimlins_prompt']) ? sanitize_textarea_field(wp_unslash($_POST['mj_photo_grimlins_prompt'])) : '';
+        $ai_event_visual_prompt = isset($_POST['mj_ai_event_visual_prompt']) ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_event_visual_prompt'])) : '';
+        $ai_event_visual_prompt_instruction = isset($_POST['mj_ai_event_visual_prompt_instruction']) ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_event_visual_prompt_instruction'])) : '';
             $ai_description_prompt = isset($_POST['mj_ai_description_prompt']) ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_description_prompt'])) : '';
             $ai_social_description_prompt = isset($_POST['mj_ai_social_description_prompt']) ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_social_description_prompt'])) : '';
             $ai_regdoc_prompt      = isset($_POST['mj_ai_regdoc_prompt'])      ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_regdoc_prompt']))      : '';
@@ -391,7 +394,10 @@ function mj_settings_page() {
         update_option('mj_cards_pdf_double_sided', $cards_double_sided);
         update_option('mj_login_registration_page', $registration_page > 0 ? $registration_page : 0);
         update_option('mj_member_openai_api_key', $openai_api_key);
+        update_option('mj_member_remove_bg_api_key', $remove_bg_api_key);
         update_option('mj_member_photo_grimlins_prompt', $photo_grimlins_prompt);
+            update_option('mj_member_ai_event_visual_prompt', $ai_event_visual_prompt);
+            update_option('mj_member_ai_event_visual_prompt_instruction', $ai_event_visual_prompt_instruction);
             update_option('mj_member_ai_description_prompt', $ai_description_prompt);
             update_option('mj_member_ai_social_description_prompt', $ai_social_description_prompt);
             update_option('mj_member_ai_regdoc_prompt',      $ai_regdoc_prompt);
@@ -883,7 +889,10 @@ function mj_settings_page() {
     }
 
     $openai_api_key_option = get_option('mj_member_openai_api_key', '');
+    $remove_bg_api_key_option = get_option('mj_member_remove_bg_api_key', '');
     $photo_grimlins_prompt_option = get_option('mj_member_photo_grimlins_prompt', '');
+        $ai_event_visual_prompt_option = get_option('mj_member_ai_event_visual_prompt', '');
+        $ai_event_visual_prompt_instruction_option = get_option('mj_member_ai_event_visual_prompt_instruction', '');
         $ai_description_prompt_option = get_option('mj_member_ai_description_prompt', '');
         $ai_social_description_prompt_option = get_option('mj_member_ai_social_description_prompt', '');
         $ai_regdoc_prompt_option      = get_option('mj_member_ai_regdoc_prompt', '');
@@ -905,7 +914,64 @@ function mj_settings_page() {
     }
 
     if (!is_string($photo_grimlins_prompt_option) || $photo_grimlins_prompt_option === '') {
-        $photo_grimlins_prompt_option = __('Transforme cette personne en version "Grimlins" fun et stylisée, avec un rendu illustratif détaillé, sans éléments effrayants.', 'mj-member');
+        $photo_grimlins_prompt_option = "Create a vibrant cartoon illustration in a bold mascot style.\n\n"
+            . "Scene: A youth workshop themed around: [REMPLACE PAR TON THÈME]\n\n"
+            . "Characters:\n"
+            . "Include exactly 3 Grimlin mascots (small fantasy creatures):\n"
+            . "- turquoise-green skin (#009A93)\n"
+            . "- pink accents (#E30053)\n"
+            . "- big triangular ears\n"
+            . "- big expressive eyes\n"
+            . "- friendly mischievous smiles\n"
+            . "- thick black outlines\n"
+            . "- flat colors, no gradients\n"
+            . "- slightly exaggerated proportions (big head, small body)\n\n"
+            . "Character roles:\n"
+            . "- Center character: active leader (holding or doing the main activity)\n"
+            . "- Left character: curious / learning / reacting\n"
+            . "- Right character: different personality (e.g. nerdy, creative, sporty, calm)\n\n"
+            . "Each Grimlin should wear outfits matching the theme (e.g. sportswear, costumes, workshop clothes, etc.)\n\n"
+            . "Composition:\n"
+            . "- Characters grouped in the center\n"
+            . "- Clear readable scene (not cluttered)\n"
+            . "- Foreground action related to the theme\n"
+            . "- Background environment matching the activity (but simplified and stylized)\n\n"
+            . "Environment:\n"
+            . "- Youth-friendly setting (Maison de Jeunes style)\n"
+            . "- Add thematic objects: [REMPLACE PAR OBJETS LIÉS AU THÈME]\n"
+            . "- Keep background slightly detailed but not overwhelming\n\n"
+            . "Mood:\n"
+            . "- Fun, inclusive, energetic, positive\n"
+            . "- No realism, fully cartoon\n\n"
+            . "Text:\n"
+            . "At the bottom, add a bold ribbon banner with the title:\n"
+            . "\"[TITRE DE TON ATELIER EN MAJUSCULE]\"\n"
+            . "- strong, readable typography\n"
+            . "- centered\n\n"
+            . "Color palette:\n"
+            . "- dominant turquoise (#009A93)\n"
+            . "- dominant pink (#E30053)\n"
+            . "- complementary bright colors depending on theme\n\n"
+            . "Style:\n"
+            . "- clean vector illustration\n"
+            . "- thick outlines\n"
+            . "- flat shading\n"
+            . "- high contrast\n"
+            . "- modern mascot design\n"
+            . "- consistent with youth center branding\n\n"
+            . "Avoid:\n"
+            . "- extra limbs\n"
+            . "- distorted hands\n"
+            . "- overly complex backgrounds\n"
+            . "- realistic textures";
+    }
+
+    if (!is_string($ai_event_visual_prompt_option) || $ai_event_visual_prompt_option === '') {
+        $ai_event_visual_prompt_option = $photo_grimlins_prompt_option;
+    }
+
+    if (!is_string($ai_event_visual_prompt_instruction_option) || $ai_event_visual_prompt_instruction_option === '') {
+        $ai_event_visual_prompt_instruction_option = 'Décris moi une scène qui illustre l\'event avec la description d\'événement suivante.';
     }
 
     // Nextcloud options

@@ -139,6 +139,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_update_member_photo', [$this, 'updateMemberPhoto']);
         add_action('wp_ajax_mj_regmgr_delete_member_photo', [$this, 'deleteMemberPhoto']);
         add_action('wp_ajax_mj_regmgr_capture_member_photo', [$this, 'captureMemberPhoto']);
+        add_action('wp_ajax_mj_regmgr_remove_member_avatar_background', [$this, 'removeMemberAvatarBackground']);
         add_action('wp_ajax_mj_regmgr_create_member_message', [$this, 'createMemberMessage']);
         add_action('wp_ajax_mj_regmgr_delete_member_message', [$this, 'deleteMemberMessage']);
         add_action('wp_ajax_mj_regmgr_update_member_notification', [$this, 'updateMemberNotification']);
@@ -181,6 +182,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
         // AI text generation
         add_action('wp_ajax_mj_regmgr_generate_ai_text', [$this, 'generateAiText']);
+        add_action('wp_ajax_mj_regmgr_generate_ai_visual', [$this, 'generateAiVisual']);
+        add_action('wp_ajax_mj_regmgr_generate_ai_visual_prompt', [$this, 'generateAiVisualPrompt']);
 
         // Social media publishing
         add_action('wp_ajax_mj_regmgr_publish_event', [$this, 'publishEvent']);
@@ -230,7 +233,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'member' => $member,
             'member_id' => isset($member->id) ? (int) $member->id : 0,
             'role' => $member_role,
-            'is_coordinateur' => $member_role === MjRoles::COORDINATEUR || current_user_can('manage_options'),
+            'is_animateur' => MjRoles::isAnimateur((string) $member_role),
+            'is_coordinateur' => MjRoles::isCoordinateur((string) $member_role) || current_user_can('manage_options'),
         );
     }
 
@@ -277,6 +281,22 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     }
 
     /**
+     * Add a random cache buster query arg to force browser/CDN refresh.
+     *
+     * @param string $url Image URL
+     * @return string
+     */
+    private function addImageCacheBuster(string $url): string {
+        $normalized = trim($url);
+        if ($normalized === '') {
+            return '';
+        }
+
+        $without_buster = remove_query_arg('r', $normalized);
+        return (string) add_query_arg('r', (string) wp_rand(100000, 999999), $without_buster);
+    }
+
+    /**
      * Get original source image URL when the current avatar is a Grimlins generation.
      *
      * @param int $member_id Member ID
@@ -290,7 +310,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
         $stored_original = isset($member->avatar_original_url) ? trim((string) $member->avatar_original_url) : '';
         if ($stored_original !== '') {
-            return esc_url_raw($stored_original);
+            return $this->addImageCacheBuster(esc_url_raw($stored_original));
         }
 
         $photo_id = isset($member->photo_id) ? (int) $member->photo_id : 0;
@@ -365,7 +385,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         })));
 
         if (!$is_grimlins && $original_file === '' && empty($candidate_sessions)) {
-            return $this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id);
+            return $this->addImageCacheBuster($this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id));
         }
 
         // Gallery-like fallback: scan session folder for photo-original.* when meta is missing.
@@ -411,7 +431,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         if ($original_file === '') {
-            return $this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id);
+            return $this->addImageCacheBuster($this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id));
         }
 
         if (strpos($original_file, '/') !== false || strpos($original_file, '\\') !== false) {
@@ -426,24 +446,24 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         if ($relative_original === '') {
-            return $this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id);
+            return $this->addImageCacheBuster($this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id));
         }
 
         if (function_exists('mj_member_photo_grimlins_build_file_url')) {
             $url = (string) mj_member_photo_grimlins_build_file_url($attachment_id, $relative_original);
             if ($url !== '') {
-                return $url;
+                return $this->addImageCacheBuster($url);
             }
         }
 
         if (function_exists('mj_member_photo_grimlins_get_storage_context')) {
             $context = mj_member_photo_grimlins_get_storage_context();
             if (is_array($context) && !empty($context['url']) && is_string($context['url'])) {
-                return trailingslashit($context['url']) . ltrim($relative_original, '/');
+                return $this->addImageCacheBuster(trailingslashit($context['url']) . ltrim($relative_original, '/'));
             }
         }
 
-        return $this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id);
+        return $this->addImageCacheBuster($this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id));
     }
 
     /**
@@ -2689,7 +2709,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return;
         }
 
-        if (!current_user_can(Config::capability())) {
+        if (empty($auth['is_animateur']) && empty($auth['is_coordinateur']) && !current_user_can(Config::capability())) {
             wp_send_json_error(array('message' => __('Permissions insuffisantes pour créer un événement.', 'mj-member')), 403);
             return;
         }
@@ -11186,6 +11206,354 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     }
 
     /**
+     * Remove avatar background using remove.bg API and assign the processed image.
+     */
+    public function removeMemberAvatarBackground() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => __('Vous ne pouvez pas gérer la médiathèque.', 'mj-member')));
+            return;
+        }
+
+        $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
+        if ($member_id <= 0) {
+            wp_send_json_error(array('message' => __('Identifiant de membre invalide.', 'mj-member')));
+            return;
+        }
+
+        $member = MjMembers::getById($member_id);
+        if (!$member) {
+            wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+            return;
+        }
+
+        $can_change = !empty($auth['is_coordinateur']) || current_user_can(Config::capability());
+        if (!$can_change) {
+            wp_send_json_error(array('message' => __('Accès refusé pour mettre à jour cette photo.', 'mj-member')), 403);
+            return;
+        }
+
+        $api_key = Config::removeBgApiKey();
+        if ($api_key === '') {
+            wp_send_json_error(array('message' => __('La clé API remove.bg n\'est pas configurée.', 'mj-member')));
+            return;
+        }
+
+        $source_type_raw = isset($_POST['sourceType']) ? sanitize_key((string) $_POST['sourceType']) : 'avatar';
+        $allowed_source_types = array('avatar', 'original', 'auto');
+        $source_type = in_array($source_type_raw, $allowed_source_types, true) ? $source_type_raw : 'avatar';
+
+        $photo_id = isset($member->photo_id) ? (int) $member->photo_id : 0;
+        $avatar_id = isset($member->avatar_id) ? (int) $member->avatar_id : 0;
+        $source_attachment_id = $photo_id > 0 ? $photo_id : $avatar_id;
+        if ($source_attachment_id <= 0 && $source_type !== 'original') {
+            wp_send_json_error(array('message' => __('Ce membre n\'a pas de photo de profil personnalisée.', 'mj-member')));
+            return;
+        }
+
+        $source_contents = '';
+        $resolved_source_local_path = '';
+        $resolved_source_url = '';
+        if ($source_attachment_id > 0 && $source_type !== 'original') {
+            $source_file = get_attached_file($source_attachment_id);
+            if (is_string($source_file) && $source_file !== '' && file_exists($source_file) && is_readable($source_file)) {
+                $local_contents = @file_get_contents($source_file);
+                if (is_string($local_contents) && $local_contents !== '' && @getimagesize($source_file)) {
+                    $source_contents = $local_contents;
+                    $resolved_source_local_path = (string) $source_file;
+                    $resolved_source_url = (string) wp_get_attachment_url($source_attachment_id);
+                }
+            }
+        }
+
+        if ($source_contents === '') {
+            $candidate_urls = array();
+
+            $original_url = (string) $this->getMemberAvatarOriginalUrl($member_id);
+            $avatar_url = (string) $this->getMemberAvatarUrl($member_id);
+            $attachment_url = $source_attachment_id > 0 ? (string) wp_get_attachment_url($source_attachment_id) : '';
+
+            if ($source_type === 'original') {
+                if ($original_url !== '') {
+                    $candidate_urls[] = $original_url;
+                }
+                if ($attachment_url !== '') {
+                    $candidate_urls[] = $attachment_url;
+                }
+                if ($avatar_url !== '') {
+                    $candidate_urls[] = $avatar_url;
+                }
+            } elseif ($source_type === 'auto') {
+                if ($avatar_url !== '') {
+                    $candidate_urls[] = $avatar_url;
+                }
+                if ($attachment_url !== '') {
+                    $candidate_urls[] = $attachment_url;
+                }
+                if ($original_url !== '') {
+                    $candidate_urls[] = $original_url;
+                }
+            } else {
+                if ($attachment_url !== '') {
+                    $candidate_urls[] = $attachment_url;
+                }
+                if ($avatar_url !== '') {
+                    $candidate_urls[] = $avatar_url;
+                }
+                if ($original_url !== '') {
+                    $candidate_urls[] = $original_url;
+                }
+            }
+
+            $candidate_urls = array_values(array_unique(array_filter($candidate_urls, static function ($url) {
+                return is_string($url) && trim($url) !== '';
+            })));
+
+            foreach ($candidate_urls as $candidate_url) {
+                $normalized = trim((string) $candidate_url);
+                if ($normalized === '') {
+                    continue;
+                }
+
+                if (strpos($normalized, '//') === 0) {
+                    $normalized = 'https:' . $normalized;
+                } elseif (strpos($normalized, '/') === 0) {
+                    $normalized = home_url($normalized);
+                } elseif (!preg_match('#^https?://#i', $normalized)) {
+                    $normalized = home_url('/' . ltrim($normalized, './'));
+                }
+
+                $path = wp_parse_url($normalized, PHP_URL_PATH);
+                if (is_string($path) && $path !== '') {
+                    $abspath_candidate = wp_normalize_path(untrailingslashit(ABSPATH) . $path);
+                    if (file_exists($abspath_candidate) && is_readable($abspath_candidate)) {
+                        $local_contents = @file_get_contents($abspath_candidate);
+                        if (is_string($local_contents) && $local_contents !== '' && @getimagesize($abspath_candidate)) {
+                            $source_contents = $local_contents;
+                            $resolved_source_local_path = (string) $abspath_candidate;
+                            $resolved_source_url = (string) $normalized;
+                            break;
+                        }
+                    }
+
+                    $uploads = wp_get_upload_dir();
+                    $baseurl = isset($uploads['baseurl']) ? (string) $uploads['baseurl'] : '';
+                    $basedir = isset($uploads['basedir']) ? (string) $uploads['basedir'] : '';
+                    if ($baseurl !== '' && $basedir !== '' && strpos($normalized, $baseurl) === 0) {
+                        $relative = ltrim(substr($normalized, strlen($baseurl)), '/');
+                        $uploads_candidate = wp_normalize_path(trailingslashit($basedir) . $relative);
+                        if (file_exists($uploads_candidate) && is_readable($uploads_candidate)) {
+                            $local_contents = @file_get_contents($uploads_candidate);
+                            if (is_string($local_contents) && $local_contents !== '' && @getimagesize($uploads_candidate)) {
+                                $source_contents = $local_contents;
+                                $resolved_source_local_path = (string) $uploads_candidate;
+                                $resolved_source_url = (string) $normalized;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                $remote = wp_safe_remote_get($normalized, array(
+                    'timeout' => 20,
+                    'redirection' => 3,
+                ));
+                if (is_wp_error($remote)) {
+                    continue;
+                }
+
+                $remote_code = (int) wp_remote_retrieve_response_code($remote);
+                if ($remote_code < 200 || $remote_code >= 300) {
+                    continue;
+                }
+
+                $remote_body = (string) wp_remote_retrieve_body($remote);
+                if ($remote_body === '') {
+                    continue;
+                }
+
+                if (@getimagesizefromstring($remote_body) === false) {
+                    continue;
+                }
+
+                $source_contents = $remote_body;
+                $resolved_source_local_path = '';
+                $resolved_source_url = (string) $normalized;
+                break;
+            }
+        }
+
+        if ($source_contents === '') {
+            wp_send_json_error(array('message' => __('Le fichier source de la photo est introuvable.', 'mj-member')));
+            return;
+        }
+
+        $response = wp_remote_post('https://api.remove.bg/v1.0/removebg', array(
+            'timeout' => 90,
+            'headers' => array(
+                'X-Api-Key' => $api_key,
+                'Accept' => 'image/png',
+            ),
+            'body' => array(
+                'image_file_b64' => base64_encode($source_contents),
+                'size' => 'auto',
+                'format' => 'png',
+            ),
+        ));
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => __('Erreur de connexion au service remove.bg.', 'mj-member')));
+            return;
+        }
+
+        $status_code = (int) wp_remote_retrieve_response_code($response);
+        $response_body = (string) wp_remote_retrieve_body($response);
+
+        if ($status_code < 200 || $status_code >= 300 || $response_body === '') {
+            $error_message = __('remove.bg a refusé la requête.', 'mj-member');
+            $decoded = json_decode($response_body, true);
+            if (is_array($decoded) && isset($decoded['errors']) && is_array($decoded['errors']) && !empty($decoded['errors'][0]['title'])) {
+                $error_message = sanitize_text_field((string) $decoded['errors'][0]['title']);
+            }
+            wp_send_json_error(array('message' => $error_message));
+            return;
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        if ($source_type === 'original') {
+            $updated_original_url = '';
+            $created_fallback_file = '';
+
+            if ($resolved_source_local_path !== '' && file_exists($resolved_source_local_path) && is_writable($resolved_source_local_path)) {
+                $write_result = @file_put_contents($resolved_source_local_path, $response_body);
+                if ($write_result !== false) {
+                    $updated_original_url = (string) $resolved_source_url;
+                    if ($updated_original_url === '') {
+                        $uploads = wp_get_upload_dir();
+                        $basedir = isset($uploads['basedir']) ? wp_normalize_path((string) $uploads['basedir']) : '';
+                        $baseurl = isset($uploads['baseurl']) ? (string) $uploads['baseurl'] : '';
+                        $normalized_file = wp_normalize_path($resolved_source_local_path);
+                        if ($basedir !== '' && $baseurl !== '' && strpos($normalized_file, trailingslashit($basedir)) === 0) {
+                            $relative = ltrim(substr($normalized_file, strlen(trailingslashit($basedir))), '/');
+                            if ($relative !== '') {
+                                $updated_original_url = trailingslashit($baseurl) . str_replace(' ', '%20', $relative);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ($updated_original_url === '') {
+                $target_name = sprintf('member-%d-avatar-original-removebg-%s.png', $member_id, gmdate('YmdHis'));
+                $uploaded_original = wp_upload_bits($target_name, null, $response_body);
+                if (!empty($uploaded_original['error'])) {
+                    wp_send_json_error(array('message' => $uploaded_original['error']));
+                    return;
+                }
+
+                $uploaded_original_file = isset($uploaded_original['file']) ? (string) $uploaded_original['file'] : '';
+                if ($uploaded_original_file === '' || !file_exists($uploaded_original_file)) {
+                    wp_send_json_error(array('message' => __('Impossible d\'enregistrer l\'image originale traitée.', 'mj-member')));
+                    return;
+                }
+
+                $created_fallback_file = $uploaded_original_file;
+                $updated_original_url = isset($uploaded_original['url']) ? (string) $uploaded_original['url'] : '';
+            }
+
+            if ($updated_original_url === '') {
+                if ($created_fallback_file !== '' && file_exists($created_fallback_file)) {
+                    wp_delete_file($created_fallback_file);
+                }
+                wp_send_json_error(array('message' => __('Impossible de mettre à jour la source originale.', 'mj-member')));
+                return;
+            }
+
+            $update_original = MjMembers::update($member_id, array('avatar_original_url' => $updated_original_url));
+            if (is_wp_error($update_original)) {
+                if ($created_fallback_file !== '' && file_exists($created_fallback_file)) {
+                    wp_delete_file($created_fallback_file);
+                }
+                wp_send_json_error(array('message' => $update_original->get_error_message()));
+                return;
+            }
+
+            if ($source_attachment_id > 0) {
+                $source_path = (string) parse_url($updated_original_url, PHP_URL_PATH);
+                $source_filename = basename($source_path);
+                if (is_string($source_filename) && $source_filename !== '' && $source_filename !== '.') {
+                    update_post_meta($source_attachment_id, '_mj_member_photo_grimlins_original', $source_filename);
+                }
+            }
+
+            wp_send_json_success(array(
+                'message' => __('Arrière-plan de la photo originale supprimé.', 'mj-member'),
+                'photoId' => $photo_id > 0 ? (int) $photo_id : (int) $avatar_id,
+                'avatarUrl' => $this->getMemberAvatarUrl($member_id),
+                'avatarOriginalUrl' => $this->addImageCacheBuster($updated_original_url),
+            ));
+            return;
+        }
+
+        $target_name = sprintf('member-%d-avatar-removebg-%s.png', $member_id, gmdate('YmdHis'));
+        $uploaded = wp_upload_bits($target_name, null, $response_body);
+        if (!empty($uploaded['error'])) {
+            wp_send_json_error(array('message' => $uploaded['error']));
+            return;
+        }
+
+        $uploaded_file = (string) $uploaded['file'];
+        if ($uploaded_file === '' || !file_exists($uploaded_file)) {
+            wp_send_json_error(array('message' => __('Impossible d\'enregistrer l\'image traitée.', 'mj-member')));
+            return;
+        }
+
+        $attachment = array(
+            'guid' => (string) $uploaded['url'],
+            'post_mime_type' => 'image/png',
+            'post_title' => sanitize_text_field(pathinfo($uploaded_file, PATHINFO_FILENAME)),
+            'post_content' => '',
+            'post_status' => 'inherit',
+        );
+
+        $attachment_id = wp_insert_attachment($attachment, $uploaded_file);
+        if (is_wp_error($attachment_id)) {
+            wp_delete_file($uploaded_file);
+            wp_send_json_error(array('message' => $attachment_id->get_error_message()));
+            return;
+        }
+
+        $metadata = wp_generate_attachment_metadata($attachment_id, $uploaded_file);
+        if (!is_wp_error($metadata)) {
+            wp_update_attachment_metadata($attachment_id, $metadata);
+        }
+
+        update_post_meta($attachment_id, '_mj_member_remove_bg_source_attachment_id', $source_attachment_id);
+
+        $update = MjMembers::update($member_id, array('photo_id' => $attachment_id, 'avatar_original_url' => null));
+        if (is_wp_error($update)) {
+            wp_delete_attachment($attachment_id, true);
+            wp_send_json_error(array('message' => $update->get_error_message()));
+            return;
+        }
+
+        $avatar_url = $this->getMemberAvatarUrl($member_id);
+
+        wp_send_json_success(array(
+            'message' => __('Arrière-plan de l\'avatar supprimé.', 'mj-member'),
+            'photoId' => (int) $attachment_id,
+            'avatarUrl' => $avatar_url,
+        ));
+    }
+
+    /**
      * Update a member photo (caption or status)
      */
     public function updateMemberPhoto() {
@@ -12970,6 +13338,357 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     /* ================================================================== *
      * AI Text Generation                                                  *
      * ================================================================== */
+
+    /**
+     * Generate a custom visual prompt for an event using OpenAI text.
+     *
+     * POST params:
+     *   eventId (int)        - ID of the event.
+     *   description (string) - Optional description override.
+     *   instruction (string) - Optional generation instruction.
+     */
+    public function generateAiVisualPrompt() {
+        $auth = mj_regmgr_verify_request();
+        if (!$auth) return;
+
+        if (!$auth['is_coordinateur']) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes pour utiliser la génération IA.', 'mj-member')), 403);
+            return;
+        }
+
+        $client = new MjOpenAIClient();
+        if (!$client->isEnabled()) {
+            wp_send_json_error(array('message' => __('La clé API OpenAI est manquante.', 'mj-member')), 503);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? absint($_POST['eventId']) : 0;
+        if ($event_id <= 0) {
+            wp_send_json_error(array('message' => __('Identifiant événement invalide.', 'mj-member')), 400);
+            return;
+        }
+
+        $event = MjEvents::find($event_id);
+        if (!$event) {
+            wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $event_title = isset($event->title) ? sanitize_text_field((string) $event->title) : '';
+        if ($event_title === '') {
+            $event_title = __('Atelier MJ', 'mj-member');
+        }
+
+        $description_raw = isset($_POST['description']) ? wp_unslash((string) $_POST['description']) : '';
+        if ($description_raw === '') {
+            $description_raw = isset($event->description) ? (string) $event->description : '';
+        }
+
+        $description = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($description_raw)));
+        if ($description !== '') {
+            $description = function_exists('mb_substr')
+                ? mb_substr($description, 0, 1200)
+                : substr($description, 0, 1200);
+        }
+
+        if ($description === '') {
+            wp_send_json_error(array('message' => __('Ajoutez une description à l\'événement avant de générer un prompt custom.', 'mj-member')), 400);
+            return;
+        }
+
+        $instruction_raw = isset($_POST['instruction']) ? wp_unslash((string) $_POST['instruction']) : '';
+        $instruction = sanitize_textarea_field($instruction_raw);
+        if ($instruction === '') {
+            $instruction = (string) get_option('mj_member_ai_event_visual_prompt_instruction', '');
+        }
+        if ($instruction === '') {
+            $instruction = 'Décris moi une scène qui illustre l\'event avec la description d\'événement suivante.';
+        }
+
+        $system_prompt = 'Tu es un expert en prompt engineering pour la génération d\'images. '
+            . 'Tu dois écrire un prompt CUSTOM qui complète un prompt de base existant. '
+            . 'Réponds uniquement avec le prompt final en texte brut, sans markdown, sans guillemets, sans préfixe.';
+
+        $user_prompt = sprintf(
+            "%s\n\nTitre de l'événement: %s\n\nDescription de l'événement:\n%s\n\nContraintes:\n- Ecris au present.\n- Decris une seule scene visuelle claire.\n- Inclus des details concrets (actions, ambiance, decor, objets).\n- N'inclus pas d'instructions techniques de camera.",
+            $instruction,
+            $event_title,
+            $description
+        );
+
+        $result = $client->generateText($system_prompt, $user_prompt, array('max_tokens' => 350));
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()), 503);
+            return;
+        }
+
+        $generated_prompt = isset($result['text']) ? trim((string) $result['text']) : '';
+        if (preg_match('/^```(?:text)?\s*([\s\S]*?)\s*```$/i', $generated_prompt, $matches)) {
+            $generated_prompt = trim((string) $matches[1]);
+        }
+        $generated_prompt = trim($generated_prompt, " \t\n\r\0\x0B\"");
+
+        if ($generated_prompt === '') {
+            wp_send_json_error(array('message' => __('Impossible de générer un prompt custom valide.', 'mj-member')), 503);
+            return;
+        }
+
+        wp_send_json_success(array(
+            'prompt' => $generated_prompt,
+            'eventId' => $event_id,
+        ));
+    }
+
+    /**
+     * Generate an event visual using OpenAI images from merged prompts.
+     *
+     * POST params:
+     *   eventId (int)       - ID of the event.
+     *   prompt (string)     - Legacy final prompt override.
+     *   basePrompt (string) - Base prompt template.
+     *   customPrompt(string)- Event custom prompt.
+     */
+    public function generateAiVisual() {
+        $auth = mj_regmgr_verify_request();
+        if (!$auth) return;
+
+        if (!$auth['is_coordinateur']) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes pour utiliser la génération IA.', 'mj-member')), 403);
+            return;
+        }
+
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => __('Vous ne pouvez pas gérer la médiathèque.', 'mj-member')), 403);
+            return;
+        }
+
+        $client = new MjOpenAIClient();
+        if (!$client->isEnabled()) {
+            wp_send_json_error(array('message' => __('La clé API OpenAI est manquante.', 'mj-member')), 503);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? absint($_POST['eventId']) : 0;
+        if ($event_id <= 0) {
+            wp_send_json_error(array('message' => __('Identifiant événement invalide.', 'mj-member')), 400);
+            return;
+        }
+
+        $event = MjEvents::find($event_id);
+        if (!$event) {
+            wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $default_prompt = (string) get_option('mj_member_ai_event_visual_prompt', '');
+        if ($default_prompt === '') {
+            $default_prompt = (string) get_option('mj_member_photo_grimlins_prompt', '');
+        }
+        if ($default_prompt === '') {
+            $default_prompt = "Create a vibrant cartoon illustration in a bold mascot style.\n\n"
+                . "Scene: A youth workshop themed around: [REMPLACE PAR TON THÈME]\n\n"
+                . "Characters:\n"
+                . "Include exactly 3 Grimlin mascots (small fantasy creatures):\n"
+                . "- turquoise-green skin (#009A93)\n"
+                . "- pink accents (#E30053)\n"
+                . "- big triangular ears\n"
+                . "- big expressive eyes\n"
+                . "- friendly mischievous smiles\n"
+                . "- thick black outlines\n"
+                . "- flat colors, no gradients\n"
+                . "- slightly exaggerated proportions (big head, small body)\n\n"
+                . "Character roles:\n"
+                . "- Center character: active leader (holding or doing the main activity)\n"
+                . "- Left character: curious / learning / reacting\n"
+                . "- Right character: different personality (e.g. nerdy, creative, sporty, calm)\n\n"
+                . "Each Grimlin should wear outfits matching the theme (e.g. sportswear, costumes, workshop clothes, etc.)\n\n"
+                . "Composition:\n"
+                . "- Characters grouped in the center\n"
+                . "- Clear readable scene (not cluttered)\n"
+                . "- Foreground action related to the theme\n"
+                . "- Background environment matching the activity (but simplified and stylized)\n\n"
+                . "Environment:\n"
+                . "- Youth-friendly setting (Maison de Jeunes style)\n"
+                . "- Add thematic objects: [REMPLACE PAR OBJETS LIÉS AU THÈME]\n"
+                . "- Keep background slightly detailed but not overwhelming\n\n"
+                . "Mood:\n"
+                . "- Fun, inclusive, energetic, positive\n"
+                . "- No realism, fully cartoon\n\n"
+                . "Text:\n"
+                . "At the bottom, add a bold ribbon banner with the title:\n"
+                . "\"[TITRE DE TON ATELIER EN MAJUSCULE]\"\n"
+                . "- strong, readable typography\n"
+                . "- centered\n\n"
+                . "Color palette:\n"
+                . "- dominant turquoise (#009A93)\n"
+                . "- dominant pink (#E30053)\n"
+                . "- complementary bright colors depending on theme\n\n"
+                . "Style:\n"
+                . "- clean vector illustration\n"
+                . "- thick outlines\n"
+                . "- flat shading\n"
+                . "- high contrast\n"
+                . "- modern mascot design\n"
+                . "- consistent with youth center branding\n\n"
+                . "Avoid:\n"
+                . "- extra limbs\n"
+                . "- distorted hands\n"
+                . "- overly complex backgrounds\n"
+                . "- realistic textures";
+        }
+
+        $raw_prompt = isset($_POST['prompt']) ? wp_unslash((string) $_POST['prompt']) : '';
+        $raw_base_prompt = isset($_POST['basePrompt']) ? wp_unslash((string) $_POST['basePrompt']) : '';
+        $raw_custom_prompt = isset($_POST['customPrompt']) ? wp_unslash((string) $_POST['customPrompt']) : '';
+
+        $base_prompt_template = $raw_base_prompt !== '' ? sanitize_textarea_field($raw_base_prompt) : $default_prompt;
+        $custom_prompt = $raw_custom_prompt !== '' ? sanitize_textarea_field($raw_custom_prompt) : '';
+        $legacy_prompt_template = $raw_prompt !== '' ? sanitize_textarea_field($raw_prompt) : '';
+
+        $event_title = isset($event->title) ? sanitize_text_field((string) $event->title) : '';
+        if ($event_title === '') {
+            $event_title = __('Atelier MJ', 'mj-member');
+        }
+
+        $event_description_raw = isset($event->description) ? (string) $event->description : '';
+        $event_description = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($event_description_raw)));
+        if ($event_description !== '') {
+            $event_description = function_exists('mb_substr')
+                ? mb_substr($event_description, 0, 600)
+                : substr($event_description, 0, 600);
+        }
+
+        $title_upper = function_exists('mb_strtoupper')
+            ? mb_strtoupper($event_title, 'UTF-8')
+            : strtoupper($event_title);
+
+        $resolved_base_prompt = str_replace(
+            array(
+                '[REMPLACE PAR TON THÈME]',
+                '[REMPLACE PAR TON THEME]',
+                '[REMPLACE PAR OBJETS LIÉS AU THÈME]',
+                '[REMPLACE PAR OBJETS LIES AU THEME]',
+                '[TITRE DE TON ATELIER EN MAJUSCULE]',
+            ),
+            array(
+                $event_title,
+                $event_title,
+                $event_title,
+                $event_title,
+                $title_upper,
+            ),
+            $base_prompt_template
+        );
+
+        if ($event_description !== '') {
+            $resolved_base_prompt .= "\n\nDescription de l'événement:\n" . $event_description;
+        }
+
+        $prompt = $resolved_base_prompt;
+        if ($custom_prompt !== '') {
+            $prompt .= "\n\n" . $custom_prompt;
+        }
+
+        // Backward compatibility: if old clients only send prompt, keep that behavior.
+        if ($raw_base_prompt === '' && $raw_custom_prompt === '' && $legacy_prompt_template !== '') {
+            $prompt = str_replace(
+                array(
+                    '[REMPLACE PAR TON THÈME]',
+                    '[REMPLACE PAR TON THEME]',
+                    '[REMPLACE PAR OBJETS LIÉS AU THÈME]',
+                    '[REMPLACE PAR OBJETS LIES AU THEME]',
+                    '[TITRE DE TON ATELIER EN MAJUSCULE]',
+                ),
+                array(
+                    $event_title,
+                    $event_title,
+                    $event_title,
+                    $event_title,
+                    $title_upper,
+                ),
+                $legacy_prompt_template
+            );
+            if ($event_description !== '') {
+                $prompt .= "\n\nDescription de l'événement:\n" . $event_description;
+            }
+        }
+
+        $prompt = trim($prompt);
+
+        $result = $client->generateImageFromPrompt($prompt, array(
+            'size' => '1024x1024',
+        ));
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()), 503);
+            return;
+        }
+
+        $base64 = isset($result['base64']) ? (string) $result['base64'] : '';
+        if ($base64 === '') {
+            wp_send_json_error(array('message' => __('Image générée invalide.', 'mj-member')), 500);
+            return;
+        }
+
+        $binary = base64_decode($base64);
+        if ($binary === false) {
+            wp_send_json_error(array('message' => __('Impossible de décoder l\'image générée.', 'mj-member')), 500);
+            return;
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        $filename = sanitize_file_name('event-visual-' . $event_id . '-' . gmdate('Ymd-His') . '.png');
+        $uploaded = wp_upload_bits($filename, null, $binary);
+        if (!is_array($uploaded) || !empty($uploaded['error'])) {
+            $message = is_array($uploaded) && isset($uploaded['error'])
+                ? (string) $uploaded['error']
+                : __('Impossible de sauvegarder le visuel généré.', 'mj-member');
+            wp_send_json_error(array('message' => $message), 500);
+            return;
+        }
+
+        $attachment = array(
+            'guid' => isset($uploaded['url']) ? esc_url_raw((string) $uploaded['url']) : '',
+            'post_mime_type' => 'image/png',
+            'post_title' => sanitize_text_field(sprintf(__('Visuel IA - %s', 'mj-member'), $event_title)),
+            'post_content' => '',
+            'post_status' => 'inherit',
+            'post_author' => get_current_user_id(),
+        );
+
+        $attachment_id = wp_insert_attachment($attachment, $uploaded['file']);
+        if (is_wp_error($attachment_id)) {
+            if (!empty($uploaded['file']) && file_exists($uploaded['file'])) {
+                wp_delete_file($uploaded['file']);
+            }
+            wp_send_json_error(array('message' => $attachment_id->get_error_message()), 500);
+            return;
+        }
+
+        $metadata = wp_generate_attachment_metadata($attachment_id, $uploaded['file']);
+        if (!is_wp_error($metadata) && !empty($metadata)) {
+            wp_update_attachment_metadata($attachment_id, $metadata);
+        }
+
+        update_post_meta($attachment_id, '_mj_member_ai_event_visual', 1);
+        update_post_meta($attachment_id, '_mj_member_ai_event_visual_event_id', $event_id);
+
+        $image_url = wp_get_attachment_image_url($attachment_id, 'medium_large');
+        if (!$image_url) {
+            $image_url = wp_get_attachment_url($attachment_id);
+        }
+
+        wp_send_json_success(array(
+            'message' => __('Visuel IA généré.', 'mj-member'),
+            'attachmentId' => (int) $attachment_id,
+            'imageUrl' => $image_url ? (string) $image_url : '',
+            'prompt' => $prompt,
+            'model' => isset($result['model']) ? (string) $result['model'] : '',
+        ));
+    }
 
     /**
      * Generate text (event description or registration document) using OpenAI.

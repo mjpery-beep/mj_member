@@ -31,12 +31,8 @@ if ($isPreview) {
     $hasAccess     = true;
     $memberId      = 1;
 } elseif ($currentUserId > 0) {
-    $found = MjMembers::get_all(array(
-        'filters' => array('wp_user_id' => $currentUserId),
-        'limit'   => 1,
-    ));
-    if (!empty($found)) {
-        $currentMember = $found[0];
+    $currentMember = MjMembers::getByWpUserId($currentUserId);
+    if ($currentMember) {
         $memberId      = (int) $currentMember->id;
         $hasAccess     = MjRoles::isStaff($currentMember->role);
     }

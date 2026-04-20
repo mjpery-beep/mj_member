@@ -235,6 +235,36 @@
             },
 
             /**
+             * Génère un visuel IA pour un événement
+             * @param {number} eventId - ID de l'événement
+             * @param {string} prompt - Prompt final (legacy)
+             * @param {string} basePrompt - Prompt de base global
+             * @param {string} customPrompt - Prompt custom événement
+             */
+            generateAiVisual: function (eventId, prompt, basePrompt, customPrompt) {
+                return post('mj_regmgr_generate_ai_visual', {
+                    eventId: eventId,
+                    prompt: typeof prompt === 'string' ? prompt : '',
+                    basePrompt: typeof basePrompt === 'string' ? basePrompt : '',
+                    customPrompt: typeof customPrompt === 'string' ? customPrompt : '',
+                });
+            },
+
+            /**
+             * Génère un prompt custom visuel IA pour un événement
+             * @param {number} eventId - ID de l'événement
+             * @param {string} description - Description de l'événement
+             * @param {string} instruction - Instruction de génération du prompt custom
+             */
+            generateAiVisualPrompt: function (eventId, description, instruction) {
+                return post('mj_regmgr_generate_ai_visual_prompt', {
+                    eventId: eventId,
+                    description: typeof description === 'string' ? description : '',
+                    instruction: typeof instruction === 'string' ? instruction : '',
+                });
+            },
+
+            /**
              * Sauvegarde les occurrences d'un événement
              */
             saveEventOccurrences: function (eventId, occurrences, scheduleSummary, generatorPlan, options) {
@@ -502,6 +532,18 @@
                     photo: file,
                 }, {
                     abortKey: 'member-avatar-' + memberId,
+                });
+            },
+
+            removeMemberAvatarBackground: function (memberId, sourceType) {
+                if (!memberId) {
+                    return Promise.reject(new Error('memberId is required'));
+                }
+                return post('mj_regmgr_remove_member_avatar_background', {
+                    memberId: memberId,
+                    sourceType: typeof sourceType === 'string' && sourceType !== '' ? sourceType : 'avatar',
+                }, {
+                    abortKey: 'member-avatar-remove-bg-' + memberId,
                 });
             },
 
