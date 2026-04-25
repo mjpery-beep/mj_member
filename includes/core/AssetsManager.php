@@ -808,6 +808,10 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-mileage');
                 if (function_exists('mj_member_mileage_localize')) {
                     mj_member_mileage_localize();
+                } elseif (function_exists('\\Mj\\Member\\Core\\Ajax\\Front\\mj_member_mileage_localize')) {
+                    \Mj\Member\Core\Ajax\Front\mj_member_mileage_localize();
+                } elseif (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\MileageController')) {
+                    \Mj\Member\Core\Ajax\Front\MileageController::localize();
                 }
                 break;
 
