@@ -7467,40 +7467,6 @@
                 });
         }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
 
-        var handleRemoveMemberAvatarBackground = useCallback(function (memberId, sourceType) {
-            var targetId = parseInt(memberId, 10);
-            if (!targetId || targetId <= 0) {
-                return Promise.resolve();
-            }
-            var normalizedSourceType = typeof sourceType === 'string' && sourceType !== '' ? sourceType : 'avatar';
-            return api.removeMemberAvatarBackground(targetId, normalizedSourceType)
-                .then(function (result) {
-                    var successKey = normalizedSourceType === 'original'
-                        ? 'memberAvatarRemoveBgOriginalSuccess'
-                        : 'memberAvatarRemoveBgSuccess';
-                    var successFallback = normalizedSourceType === 'original'
-                        ? 'Arrière-plan de la photo originale supprimé.'
-                        : 'Arrière-plan de la photo supprimé.';
-                    showSuccess(getString(strings, successKey, successFallback));
-                    loadMemberDetails(targetId);
-                    loadMembers(membersPagination.page);
-                    return result;
-                })
-                .catch(function (err) {
-                    var errorKey = normalizedSourceType === 'original'
-                        ? 'memberAvatarRemoveBgOriginalError'
-                        : 'memberAvatarRemoveBgError';
-                    var errorFallback = normalizedSourceType === 'original'
-                        ? 'Impossible de supprimer l\'arrière-plan de la photo originale.'
-                        : 'Impossible de supprimer l\'arrière-plan de la photo.';
-                    var message = err && err.message
-                        ? err.message
-                        : getString(strings, errorKey, errorFallback);
-                    showError(message);
-                    throw err;
-                });
-        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
-
         var handleDeleteMemberRegistration = useCallback(function (registration) {
             if (!registration || !registration.id) {
                 return;
@@ -9905,7 +9871,6 @@
                             onCaptureAvatar: handleCaptureMemberAvatar,
                             onUpdateAvatar: handleUpdateMemberAvatar,
                             onRemoveAvatar: handleRemoveMemberAvatar,
-                            onRemoveAvatarBackground: handleRemoveMemberAvatarBackground,
                             onDeleteRegistration: handleDeleteMemberRegistration,
                             onUpdateRegistrationOccurrences: handleUpdateRegistrationOccurrences,
                             onOpenMember: handleViewMemberFromRegistration,

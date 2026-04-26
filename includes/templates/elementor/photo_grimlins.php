@@ -24,6 +24,7 @@ $show_history = false;
 $cta_register_enabled = !empty($template_data['cta_register_enabled']);
 $cta_register_label = isset($template_data['cta_register_label']) ? (string) $template_data['cta_register_label'] : __('Utiliser cet avatar pour devenir membre', 'mj-member');
 $cta_register_url = isset($template_data['cta_register_url']) ? (string) $template_data['cta_register_url'] : '/mon-compte/inscription';
+$show_cta_register = $cta_register_enabled && ($is_preview || !is_user_logged_in());
 
 $access_scope = $members_only ? 'members' : 'public';
 $access_nonce = wp_create_nonce('mj_member_photo_grimlins_scope_' . $access_scope);
@@ -293,36 +294,43 @@ if ($fullscreen) {
         </div>
     </form>
 
-    <div class="mj-photo-grimlins__preview" data-photo-grimlins="preview-box" <?php echo $is_preview && $placeholder_preview ? '' : 'hidden'; ?> data-placeholder="1">
-        <h3 class="screen-reader-text"><?php esc_html_e('Aperçu de la photo sélectionnée', 'mj-member'); ?></h3>
-        <div class="mj-photo-grimlins__preview-stage" data-photo-grimlins="preview-stage">
-            <img src="<?php echo esc_url($placeholder_preview ?: ''); ?>" alt="" data-photo-grimlins="preview">
-            <div class="mj-photo-grimlins__preview-loader" data-photo-grimlins="preview-loader" aria-hidden="true" hidden>
-                <div class="mj-photo-grimlins__loader-sphere">
-                    <span class="mj-photo-grimlins__loader-orbit"></span>
-                    <span class="mj-photo-grimlins__loader-orbit mj-photo-grimlins__loader-orbit--delayed"></span>
-                    <span class="mj-photo-grimlins__loader-core"></span>
+    <div class="mj-photo-grimlins__compare" data-photo-grimlins="compare">
+        <div class="mj-photo-grimlins__preview" data-photo-grimlins="preview-box" <?php echo $is_preview && $placeholder_preview ? '' : 'hidden'; ?> data-placeholder="1">
+            <p class="mj-photo-grimlins__panel-label" aria-hidden="true"><?php esc_html_e('Avant', 'mj-member'); ?></p>
+            <h3 class="screen-reader-text"><?php esc_html_e('Aperçu de la photo sélectionnée', 'mj-member'); ?></h3>
+            <div class="mj-photo-grimlins__preview-stage" data-photo-grimlins="preview-stage">
+                <img src="<?php echo esc_url($placeholder_preview ?: ''); ?>" alt="" data-photo-grimlins="preview">
+                <div class="mj-photo-grimlins__preview-loader" data-photo-grimlins="preview-loader" aria-hidden="true" hidden>
+                    <div class="mj-photo-grimlins__loader-sphere">
+                        <span class="mj-photo-grimlins__loader-orbit"></span>
+                        <span class="mj-photo-grimlins__loader-orbit mj-photo-grimlins__loader-orbit--delayed"></span>
+                        <span class="mj-photo-grimlins__loader-core"></span>
+                    </div>
+                    <span class="mj-photo-grimlins__loader-label"><?php esc_html_e('Transformation en cours', 'mj-member'); ?></span>
                 </div>
-                <span class="mj-photo-grimlins__loader-label"><?php esc_html_e('Transformation en cours', 'mj-member'); ?></span>
             </div>
+        </div>
+
+        <div class="mj-photo-grimlins__result" data-photo-grimlins="result-box" <?php echo $is_preview && $placeholder_result ? '' : 'hidden'; ?>>
+            <p class="mj-photo-grimlins__panel-label" aria-hidden="true"><?php esc_html_e('Après', 'mj-member'); ?></p>
+            <h3 class="screen-reader-text"><?php esc_html_e('Avatar Grimlins généré', 'mj-member'); ?></h3>
+            <img src="<?php echo esc_url($placeholder_result ?: ''); ?>" alt="" data-photo-grimlins="result">
+            <a href="#" class="mj-photo-grimlins__download is-hidden" data-photo-grimlins="download">
+                <?php esc_html_e('Télécharger', 'mj-member'); ?>
+            </a>
+            <button type="button" class="mj-photo-grimlins__apply-avatar is-hidden" data-photo-grimlins="apply-avatar">
+                <?php esc_html_e('Utiliser comme avatar', 'mj-member'); ?>
+            </button>
         </div>
     </div>
 
-    <div class="mj-photo-grimlins__result" data-photo-grimlins="result-box" <?php echo $is_preview && $placeholder_result ? '' : 'hidden'; ?>>
-        <h3 class="screen-reader-text"><?php esc_html_e('Avatar Grimlins généré', 'mj-member'); ?></h3>
-        <img src="<?php echo esc_url($placeholder_result ?: ''); ?>" alt="" data-photo-grimlins="result">
-        <a href="#" class="mj-photo-grimlins__download is-hidden" data-photo-grimlins="download">
-            <?php esc_html_e('Télécharger', 'mj-member'); ?>
-        </a>
-        <button type="button" class="mj-photo-grimlins__apply-avatar is-hidden" data-photo-grimlins="apply-avatar">
-            <?php esc_html_e('Utiliser comme avatar', 'mj-member'); ?>
-        </button>
-        <?php if ($cta_register_enabled) : ?>
+    <?php if ($show_cta_register) : ?>
+        <div class="mj-photo-grimlins__cta-register-row">
             <a href="<?php echo esc_url($cta_register_url); ?>" class="mj-photo-grimlins__cta-register is-hidden" data-photo-grimlins="cta-register">
                 <?php echo esc_html($cta_register_label); ?>
             </a>
-        <?php endif; ?>
-    </div>
+        </div>
+    <?php endif; ?>
 
     <div class="mj-photo-grimlins__status" id="<?php echo esc_attr($status_id); ?>" data-photo-grimlins="status" aria-live="polite"></div>
 

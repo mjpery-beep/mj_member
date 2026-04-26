@@ -576,6 +576,20 @@
         this.dom.previewImg.src = this.previewUrl;
         this.dom.previewImg.alt = this.file.name;
         this.dom.previewBox.hidden = false;
+        this.animatePanelEntry(this.dom.previewBox);
+    };
+
+    PhotoGrimlins.prototype.animatePanelEntry = function(panel) {
+        if (!panel || !panel.classList) {
+            return;
+        }
+        panel.classList.remove('is-entering');
+        // Force a reflow so restarting the same animation is reliable on repeated uploads.
+        panel.offsetWidth;
+        panel.classList.add('is-entering');
+        window.setTimeout(function() {
+            panel.classList.remove('is-entering');
+        }, 500);
     };
 
     PhotoGrimlins.prototype.setPreviewLoading = function(active) {
@@ -2110,6 +2124,9 @@
         }
         if (this.dom.resultBox) {
             this.dom.resultBox.hidden = !result.imageUrl;
+            if (result.imageUrl) {
+                this.animatePanelEntry(this.dom.resultBox);
+            }
         }
         if (this.dom.downloadLink) {
             if (result.imageUrl) {
