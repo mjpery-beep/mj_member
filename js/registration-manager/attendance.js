@@ -799,6 +799,12 @@
 
         var totalValid = filteredRegistrations.valid.length;
         var totalIrregular = filteredRegistrations.unpaid.length + filteredRegistrations.notRegistered.length;
+        var stickySearchStyle = {
+            position: 'sticky',
+            top: '0',
+            zIndex: 12,
+            background: 'var(--mj-surface, #fff)',
+        };
 
         return h('div', { class: 'mj-att' }, [
             // Header
@@ -830,7 +836,7 @@
                 }),
 
                 // Champ de recherche
-                h('div', { class: 'mj-att__search-container' }, [
+                h('div', { class: 'mj-att__search-container', style: stickySearchStyle }, [
                     h('div', { class: 'mj-att__search-wrapper' }, [
                         h('svg', {
                             class: 'mj-att__search-icon',

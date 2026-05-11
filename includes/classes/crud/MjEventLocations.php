@@ -273,24 +273,27 @@ class MjEventLocations implements CrudRepositoryInterface {
         $location = self::normalize_location_array($location);
         $query = '';
 
-        if (!empty($location['map_query'])) {
-            $query = $location['map_query'];
+        if (isset($location['map_query'])) {
+            $query = trim((string) $location['map_query']);
         } elseif (!empty($location['latitude']) && !empty($location['longitude'])) {
-            $query = trim($location['latitude']) . ',' . trim($location['longitude']);
+            $query = trim((string) $location['latitude']) . ',' . trim((string) $location['longitude']);
         } else {
             $parts = array();
             if (!empty($location['address_line'])) {
-                $parts[] = $location['address_line'];
+                $parts[] = trim((string) $location['address_line']);
             }
             if (!empty($location['postal_code'])) {
-                $parts[] = $location['postal_code'];
+                $parts[] = trim((string) $location['postal_code']);
             }
             if (!empty($location['city'])) {
-                $parts[] = $location['city'];
+                $parts[] = trim((string) $location['city']);
             }
             if (!empty($location['country'])) {
-                $parts[] = $location['country'];
+                $parts[] = trim((string) $location['country']);
             }
+            $parts = array_values(array_filter($parts, static function ($part) {
+                return $part !== '';
+            }));
             if (!empty($parts)) {
                 $query = implode(', ', $parts);
             }

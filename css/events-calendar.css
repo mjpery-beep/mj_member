@@ -391,7 +391,7 @@ button.mj-member-events-calendar__today-button:disabled {
 }
 
 button.mj-member-events-calendar__day-add {
-    display: inline-flex;
+    display: none;
     align-items: center;
     justify-content: center;
     gap: 4px;
@@ -407,9 +407,7 @@ button.mj-member-events-calendar__day-add {
     padding: 4px 8px;
     margin: 6px 0 2px;
     cursor: pointer;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .mj-member-events-calendar__day-add svg {
@@ -425,7 +423,7 @@ button.mj-member-events-calendar__day-add {
 
 .mj-member-events-calendar__day:hover .mj-member-events-calendar__day-add,
 .mj-member-events-calendar__day:focus-within .mj-member-events-calendar__day-add {
-    opacity: 1;
+    display: inline-flex;
     pointer-events: auto;
 }
 
@@ -438,7 +436,7 @@ button.mj-member-events-calendar__day-add {
 .mj-member-events-calendar__day-add:focus-visible {
     outline: 2px solid var(--mj-events-calendar-accent, #6366f1);
     outline-offset: -2px;
-    opacity: 1;
+    display: inline-flex;
     pointer-events: auto;
 }
 
@@ -1488,6 +1486,102 @@ button.mj-member-events-calendar__day-add {
     color: #ffffff;
 }
 
+/* ---------- EventPage modal ---------- */
+
+.mj-cal-eventpage-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100010;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.mj-cal-eventpage-modal[hidden] {
+    display: none !important;
+}
+
+.mj-cal-eventpage-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: rgba(2, 6, 23, 0.62);
+    cursor: pointer;
+}
+
+.mj-cal-eventpage-modal__panel {
+    position: relative;
+    width: min(1180px, 100%);
+    height: min(88vh, 920px);
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 28px 80px rgba(2, 6, 23, 0.35);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.mj-cal-eventpage-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #ffffff;
+}
+
+.mj-cal-eventpage-modal__title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mj-cal-eventpage-modal__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    cursor: pointer;
+}
+
+.mj-cal-eventpage-modal__close:hover {
+    background: #e2e8f0;
+}
+
+.mj-cal-eventpage-modal__frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    flex: 1;
+    background: #ffffff;
+}
+
+@media (max-width: 768px) {
+    .mj-cal-eventpage-modal {
+        padding: 0;
+        align-items: stretch;
+    }
+
+    .mj-cal-eventpage-modal__panel {
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        box-shadow: none;
+    }
+}
+
 .mj-member-events-calendar--force-mobile {
     gap: 12px;
 }
@@ -1711,6 +1805,60 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
 }
 
 /* ==========================================================================
+   Desktop Compact Mode
+   ========================================================================== */
+
+@media (min-width: 901px) {
+    .mj-member-events-calendar {
+        gap: 14px;
+    }
+
+    .mj-member-events-calendar__months {
+        gap: 16px;
+    }
+
+    .mj-member-events-calendar__month {
+        gap: 10px;
+    }
+
+    .mj-member-events-calendar__toolbar-left,
+    .mj-member-events-calendar__toolbar-actions {
+        padding: 8px 12px;
+    }
+
+    .mj-member-events-calendar__weekday {
+        padding: 8px;
+    }
+
+    .mj-member-events-calendar__day-cell,
+    .mj-member-events-calendar__day {
+        min-height: 88px;
+    }
+
+    .mj-member-events-calendar__day {
+        gap: 6px;
+        padding: 4px;
+    }
+
+    .mj-member-events-calendar__events {
+        gap: 6px;
+    }
+
+    .mj-member-events-calendar__event-trigger {
+        gap: 10px;
+        padding: 8px 10px;
+    }
+
+    .mj-member-events-calendar__event-copy {
+        gap: 4px;
+    }
+
+    button.mj-member-events-calendar__day-add {
+        margin: 4px 0 0;
+    }
+}
+
+/* ==========================================================================
    Button Reset
    ========================================================================== */
 
@@ -1737,6 +1885,7 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
 
     /* Always show action buttons on touch devices */
     button.mj-member-events-calendar__day-add {
+        display: inline-flex;
         opacity: 1;
         pointer-events: auto;
     }

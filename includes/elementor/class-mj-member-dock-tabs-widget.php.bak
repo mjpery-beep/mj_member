@@ -1,0 +1,475 @@
+<?php
+
+use Elementor\Controls_Manager;
+use Elementor\Modules\NestedElements\Base\Widget_Nested_Base;
+use Elementor\Plugin;
+use Elementor\Repeater;
+use Mj\Member\Core\AssetsManager;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
+{
+    use Mj_Member_Elementor_Widget_Visibility;
+
+    private $tab_item_settings = array();
+
+    public function get_name()
+    {
+        return 'mj-member-dock-tabs';
+    }
+
+    public function get_title()
+    {
+        return __('MJ - Dock Tabs', 'mj-member');
+    }
+
+    public function get_icon()
+    {
+        return 'eicon-tabs';
+    }
+
+    public function get_categories()
+    {
+        return array('mj-member');
+    }
+
+    public function get_keywords()
+    {
+        return array('dock', 'tabs', 'onglets', 'fullscreen', 'mj');
+    }
+
+    public function get_style_depends()
+    {
+        return array('mj-member-dock-tabs');
+    }
+
+    public function get_script_depends()
+    {
+        return array('mj-member-dock-tabs');
+    }
+
+    public function show_in_panel(): bool
+    {
+        return true;
+    }
+
+    protected function get_default_children_elements()
+    {
+        return array(
+            $this->tab_content_container(1),
+            $this->tab_content_container(2),
+            $this->tab_content_container(3),
+        );
+    }
+
+    protected function get_default_repeater_title_setting_key()
+    {
+        return 'tab_title';
+    }
+
+    protected function get_default_children_title()
+    {
+        return esc_html__('Onglet #%d', 'mj-member');
+    }
+
+    protected function get_default_children_placeholder_selector()
+    {
+        return '.mj-dock-tabs__panels';
+    }
+
+    protected function tab_content_container(int $index)
+    {
+        return array(
+            'elType' => 'container',
+            'settings' => array(
+                '_title' => sprintf(__('Onglet #%d', 'mj-member'), $index),
+                'content_width' => 'full',
+            ),
+        );
+    }
+
+    protected function register_controls()
+    {
+        $this->start_controls_section(
+            'section_content',
+            array(
+                'label' => __('Contenu', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'dock_position',
+            array(
+                'label' => __('Position du dock', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'bottom',
+                'options' => array(
+                    'top' => __('Haut', 'mj-member'),
+                    'right' => __('Droite', 'mj-member'),
+                    'bottom' => __('Bas', 'mj-member'),
+                    'left' => __('Gauche', 'mj-member'),
+                ),
+            )
+        );
+
+        $this->add_control(
+            'default_tab_index',
+            array(
+                'label' => __('Onglet actif au chargement', 'mj-member'),
+                'type' => Controls_Manager::NUMBER,
+                'min' => 1,
+                'step' => 1,
+                'default' => 1,
+            )
+        );
+
+        $this->add_control(
+            'dock_offset',
+            array(
+                'label' => __('Distance du bord (px)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array(
+                        'min' => 0,
+                        'max' => 80,
+                    ),
+                ),
+                'default' => array(
+                    'size' => 24,
+                    'unit' => 'px',
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs' => '--mj-dock-tabs-offset: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'transition_duration',
+            array(
+                'label' => __('Durée de transition (ms)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('ms'),
+                'range' => array(
+                    'ms' => array(
+                        'min' => 120,
+                        'max' => 1200,
+                    ),
+                ),
+                'default' => array(
+                    'size' => 360,
+                    'unit' => 'ms',
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs' => '--mj-dock-tabs-transition: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $repeater = new Repeater();
+
+        $repeater->add_control(
+            'tab_title',
+            array(
+                'label' => __('Titre', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'default' => __('Onglet', 'mj-member'),
+                'label_block' => true,
+            )
+        );
+
+        $repeater->add_control(
+            'tab_icon',
+            array(
+                'label' => __('Icone (image)', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'media_types' => array('image'),
+            )
+        );
+
+        $this->add_control(
+            'tabs',
+            array(
+                'label' => __('Onglets', 'mj-member'),
+                'type' => Controls_Manager::REPEATER,
+                'fields' => $repeater->get_controls(),
+                'default' => array(
+                    array(
+                        'tab_title' => __('Accueil', 'mj-member'),
+                    ),
+                    array(
+                        'tab_title' => __('Services', 'mj-member'),
+                    ),
+                    array(
+                        'tab_title' => __('Contact', 'mj-member'),
+                    ),
+                ),
+                'title_field' => '{{{ tab_title }}}',
+                'button_text' => __('Ajouter un onglet', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'tabs_help',
+            array(
+                'type' => Controls_Manager::RAW_HTML,
+                'raw' => __('Chaque onglet possede son propre container dans le Navigator Elementor. Deposez vos widgets directement dans ce container.', 'mj-member'),
+                'content_classes' => 'elementor-panel-alert elementor-panel-alert-info',
+            )
+        );
+
+        $this->end_controls_section();
+
+        $this->register_visibility_controls();
+
+        $this->start_controls_section(
+            'section_style',
+            array(
+                'label' => __('Style', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_control(
+            'panel_background',
+            array(
+                'label' => __('Fond des ecrans', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__panel' => 'background: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'dock_background',
+            array(
+                'label' => __('Fond du dock', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__dock' => 'background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'tab_active_background',
+            array(
+                'label' => __('Fond onglet actif', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active' => 'background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'tab_active_outline',
+            array(
+                'label' => __('Halo onglet actif', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active' => 'box-shadow: 0 0 0 1px {{VALUE}}, 0 14px 30px rgba(15, 23, 42, 0.35);',
+                ),
+            )
+        );
+
+        $this->end_controls_section();
+    }
+
+    protected function render()
+    {
+        AssetsManager::requirePackage('dock-tabs');
+
+        $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-dock-tabs-widget');
+
+        $tabs = isset($settings['tabs']) && is_array($settings['tabs']) ? $settings['tabs'] : array();
+        if (empty($tabs)) {
+            return;
+        }
+
+        $default_tab_index = isset($settings['default_tab_index']) ? (int) $settings['default_tab_index'] : 1;
+        if ($default_tab_index < 1) {
+            $default_tab_index = 1;
+        }
+
+        $default_tab_index = min($default_tab_index, count($tabs));
+
+        $dock_position = isset($settings['dock_position']) ? sanitize_key((string) $settings['dock_position']) : 'bottom';
+        if (!in_array($dock_position, array('top', 'right', 'bottom', 'left'), true)) {
+            $dock_position = 'bottom';
+        }
+
+        $widget_number = $this->get_id_int();
+        $this->tab_item_settings = array();
+
+        $root_classes = array(
+            'mj-dock-tabs',
+            'mj-dock-tabs--' . $dock_position,
+        );
+
+        echo '<div class="' . esc_attr(implode(' ', array_map('sanitize_html_class', $root_classes))) . '" data-mj-dock-tabs="1" data-default-index="' . esc_attr((string) $default_tab_index) . '" data-dock-position="' . esc_attr($dock_position) . '">';
+        echo '<div class="mj-dock-tabs__panels">';
+
+        foreach ($tabs as $index => $item) {
+            $tab_count = $index + 1;
+            $tab_key = 'mj-dock-tab-' . $widget_number . '-' . $tab_count;
+            $this->tab_item_settings[$index] = array(
+                'index' => $index,
+                'tab_count' => $tab_count,
+                'tab_id' => 'mj-dock-tab-btn-' . $tab_key,
+                'container_id' => 'mj-dock-tab-panel-' . $tab_key,
+            );
+        }
+
+        // Render children
+        $children = $this->get_children();
+        foreach ($children as $index => $child) {
+            if (isset($this->tab_item_settings[$index])) {
+                $item_settings = $this->tab_item_settings[$index];
+                $this->print_child($index, $item_settings);
+            }
+        }
+
+        echo '</div>';
+        echo '<div class="mj-dock-tabs__dock" role="tablist" aria-label="' . esc_attr__('Navigation dock', 'mj-member') . '">';
+
+        foreach ($tabs as $index => $item) {
+            if (!isset($this->tab_item_settings[$index])) {
+                continue;
+            }
+
+            $item_settings = $this->tab_item_settings[$index];
+            $is_active = $item_settings['tab_count'] === $default_tab_index;
+            $title = isset($item['tab_title']) ? sanitize_text_field((string) $item['tab_title']) : sprintf(__('Onglet %d', 'mj-member'), $item_settings['tab_count']);
+            if ($title === '') {
+                $title = sprintf(__('Onglet %d', 'mj-member'), $item_settings['tab_count']);
+            }
+
+            $icon_url = '';
+            $icon_alt = $title;
+            if (isset($item['tab_icon']) && is_array($item['tab_icon']) && !empty($item['tab_icon']['url'])) {
+                $icon_url = esc_url((string) $item['tab_icon']['url']);
+                if (!empty($item['tab_icon']['id'])) {
+                    $attachment_alt = get_post_meta((int) $item['tab_icon']['id'], '_wp_attachment_image_alt', true);
+                    if (is_string($attachment_alt) && $attachment_alt !== '') {
+                        $icon_alt = sanitize_text_field($attachment_alt);
+                    }
+                }
+            }
+
+            echo '<button type="button" id="' . esc_attr($item_settings['tab_id']) . '" class="mj-dock-tabs__tab' . ($is_active ? ' is-active' : '') . '" data-tab-target="' . esc_attr((string) $item_settings['tab_count']) . '" role="tab" aria-controls="' . esc_attr($item_settings['container_id']) . '" aria-selected="' . ($is_active ? 'true' : 'false') . '" tabindex="' . ($is_active ? '0' : '-1') . '">';
+            echo '<span class="mj-dock-tabs__icon" aria-hidden="true">';
+            if ($icon_url !== '') {
+                echo '<img src="' . $icon_url . '" alt="' . esc_attr($icon_alt) . '" loading="lazy" />';
+            } else {
+                $initial = function_exists('mb_substr') ? mb_substr($title, 0, 1, 'UTF-8') : substr($title, 0, 1);
+                echo '<span class="mj-dock-tabs__icon-fallback">' . esc_html($initial) . '</span>';
+            }
+            echo '</span>';
+            echo '<span class="mj-dock-tabs__label">' . esc_html($title) . '</span>';
+            echo '</button>';
+        }
+
+        echo '</div>';
+        echo '</div>';
+    }
+
+    public function print_child($index, $item_settings = array())
+    {
+        $children = $this->get_children();
+        $child_ids = array();
+
+        foreach ($children as $child) {
+            $child_ids[] = $child->get_id();
+        }
+
+        $add_attribute_to_container = function ($should_render, $container) use ($item_settings, $child_ids) {
+            if (in_array($container->get_id(), $child_ids, true)) {
+                $this->add_attributes_to_container($container, $item_settings);
+            }
+
+            return $should_render;
+        };
+
+        add_filter('elementor/frontend/container/should_render', $add_attribute_to_container, 10, 3);
+        if (isset($children[$index])) {
+            $children[$index]->print_element();
+        }
+        remove_filter('elementor/frontend/container/should_render', $add_attribute_to_container);
+    }
+
+    protected function add_attributes_to_container($container, $item_settings)
+    {
+        $attributes = array(
+            'id' => $item_settings['container_id'],
+            'role' => 'tabpanel',
+            'aria-labelledby' => $item_settings['tab_id'],
+            'class' => array('mj-dock-tabs__panel', 'mj-dock-tabs__panel-content'),
+            'data-tab-panel' => $item_settings['tab_count'],
+        );
+
+        if ((int) $item_settings['index'] === 0) {
+            $attributes['class'][] = 'is-active';
+        } else {
+            $attributes['hidden'] = 'hidden';
+        }
+
+        $container->add_render_attribute('_wrapper', $attributes);
+    }
+
+    protected function get_initial_config(): array
+    {
+        return array_merge(parent::get_initial_config(), array(
+            'support_improved_repeaters' => true,
+            'support_nesting' => true,
+            'target_container' => array('.mj-dock-tabs__panels'),
+        ));
+        }
+
+        /**
+         * Synchronise les enfants containers avec le repeater des onglets.
+         * Crée ou supprime automatiquement les enfants si nécessaire.
+         */
+        public function on_before_render()
+        {
+            parent::on_before_render();
+        
+            // Synchroniser les enfants avec le repeater
+            $this->synchronize_children_with_repeater();
+        }
+
+        protected function synchronize_children_with_repeater()
+        {
+            // Récupérer les paramètres du widget (avant traitement)
+            $widget_data = $this->get_data();
+        
+            if (!isset($widget_data['settings']) || !isset($widget_data['settings']['tabs'])) {
+                return;
+            }
+        
+            $tabs = $widget_data['settings']['tabs'];
+            $tabs_count = count($tabs);
+            $current_children = $this->get_children();
+            $children_count = count($current_children);
+        
+            // Si le nombre de tabs a changé, on doit mettre à jour les enfants
+            if ($tabs_count !== $children_count) {
+                // Reconstruire la liste des enfants pour correspondre au nombre de tabs
+                $children_elements = array();
+                for ($i = 1; $i <= $tabs_count; $i++) {
+                    $children_elements[] = $this->tab_content_container($i);
+                }
+            
+                // Mettre à jour l'élément avec les nouveaux enfants
+                $widget_data['elements'] = $children_elements;
+                $this->set_data($widget_data);
+            }
+        }
+    // Suppression de l'accolade supplémentaire
+}

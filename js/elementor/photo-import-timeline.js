@@ -1,6 +1,307 @@
 (function () {
     'use strict';
 
+    function initSlideshow(root) {
+        var stage = root.querySelector('[data-mj-photo-slideshow-image]');
+        var caption = root.querySelector('[data-mj-photo-slideshow-caption]');
+        var counter = root.querySelector('[data-mj-photo-slideshow-counter]');
+        var prev = root.querySelector('[data-mj-photo-slideshow-prev]');
+        var next = root.querySelector('[data-mj-photo-slideshow-next]');
+        var items = Array.prototype.slice.call(root.querySelectorAll('[data-mj-photo-slideshow-item]'));
+        var intervalMs = parseInt(root.getAttribute('data-slideshow-interval-ms') || '4000', 10) || 0;
+
+        if (!stage || !items.length) {
+            return;
+        }
+
+        var currentIndex = 0;
+        var autoplayId = 0;
+        var playOrder = [];
+        var orderPosition = 0;
+        var idleTimerId = 0;
+        var preloadedImages = Object.create(null);
+        var pendingPreloads = Object.create(null);
+        var idleDelayMs = 1800;
+
+        function preloadImage(url, callback) {
+            if (!url) {
+                if (typeof callback === 'function') {
+                    callback(false);
+                }
+                return;
+            }
+
+            if (preloadedImages[url]) {
+                if (typeof callback === 'function') {
+                    callback(true);
+                }
+                return;
+            }
+
+            if (pendingPreloads[url]) {
+                if (typeof callback === 'function') {
+                    pendingPreloads[url].push(callback);
+                }
+                return;
+            }
+
+            pendingPreloads[url] = [];
+            if (typeof callback === 'function') {
+                pendingPreloads[url].push(callback);
+            }
+
+            var imageLoader = new Image();
+            imageLoader.decoding = 'async';
+            imageLoader.loading = 'eager';
+
+            imageLoader.onload = function () {
+                preloadedImages[url] = imageLoader;
+                var callbacks = pendingPreloads[url] || [];
+                delete pendingPreloads[url];
+                callbacks.forEach(function (queuedCallback) {
+                    queuedCallback(true);
+                });
+            };
+
+            imageLoader.onerror = function () {
+                var callbacks = pendingPreloads[url] || [];
+                delete pendingPreloads[url];
+                callbacks.forEach(function (queuedCallback) {
+                    queuedCallback(false);
+                });
+            };
+
+            imageLoader.src = url;
+        }
+
+        function warmupSlides(startIndex) {
+            var queue = items.map(function (item, index) {
+                return {
+                    index: index,
+                    url: item.getAttribute('data-full') || '',
+                };
+            }).filter(function (entry) {
+                return entry.url !== '';
+            });
+
+            if (typeof startIndex === 'number' && startIndex >= 0 && startIndex < items.length) {
+                queue.sort(function (left, right) {
+                    if (left.index === startIndex) {
+                        return -1;
+                    }
+                    if (right.index === startIndex) {
+                        return 1;
+                    }
+                    return left.index - right.index;
+                });
+            }
+
+            function pump() {
+                if (!queue.length) {
+                    return;
+                }
+
+                var nextEntry = queue.shift();
+                preloadImage(nextEntry.url, function () {
+                    window.setTimeout(pump, 60);
+                });
+            }
+
+            pump();
+        }
+
+        function shuffle(list) {
+            var shuffled = list.slice();
+            for (var index = shuffled.length - 1; index > 0; index -= 1) {
+                var swapIndex = Math.floor(Math.random() * (index + 1));
+                var temp = shuffled[index];
+                shuffled[index] = shuffled[swapIndex];
+                shuffled[swapIndex] = temp;
+            }
+            return shuffled;
+        }
+
+        function buildRandomOrder(anchorIndex) {
+            var base = items.map(function (_, index) {
+                return index;
+            });
+
+            if (typeof anchorIndex === 'number' && anchorIndex >= 0 && anchorIndex < items.length) {
+                base.splice(anchorIndex, 1);
+                playOrder = [anchorIndex].concat(shuffle(base));
+                orderPosition = 0;
+                return;
+            }
+
+            playOrder = shuffle(base);
+            orderPosition = 0;
+        }
+
+        function syncOrderPosition(index) {
+            var nextPosition = playOrder.indexOf(index);
+            if (nextPosition >= 0) {
+                orderPosition = nextPosition;
+                return;
+            }
+
+            buildRandomOrder(index);
+        }
+
+        function stopAutoplay() {
+            if (!autoplayId) {
+                return;
+            }
+
+            window.clearInterval(autoplayId);
+            autoplayId = 0;
+        }
+
+        function startAutoplay() {
+            stopAutoplay();
+
+            if (intervalMs <= 0 || items.length < 2) {
+                return;
+            }
+
+            autoplayId = window.setInterval(function () {
+                move(1, true);
+            }, intervalMs);
+        }
+
+        function setNavigationIdle(isIdle) {
+            root.classList.toggle('is-nav-idle', isIdle);
+        }
+
+        function scheduleIdleState() {
+            if (idleTimerId) {
+                window.clearTimeout(idleTimerId);
+            }
+
+            setNavigationIdle(false);
+
+            idleTimerId = window.setTimeout(function () {
+                setNavigationIdle(true);
+            }, idleDelayMs);
+        }
+
+        function update(index) {
+            if (!items[index]) {
+                return;
+            }
+
+            currentIndex = index;
+            var item = items[index];
+            var full = item.getAttribute('data-full') || '';
+            var title = item.getAttribute('data-title') || '';
+            var date = item.getAttribute('data-date') || '';
+            var fullForCss = full.replace(/'/g, "\\'");
+
+            stage.alt = title;
+            if (full) {
+                preloadImage(full, function (loaded) {
+                    if (!loaded || currentIndex !== index) {
+                        return;
+                    }
+
+                    stage.src = full;
+                    root.style.setProperty('--mj-photo-slideshow-bg', "url('" + fullForCss + "')");
+                });
+            }
+            if (caption) {
+                caption.textContent = title + (date ? ' - ' + date : '');
+            }
+            if (counter) {
+                counter.textContent = String(index + 1) + ' / ' + String(items.length);
+            }
+
+            items.forEach(function (button, buttonIndex) {
+                button.classList.toggle('is-active', buttonIndex === index);
+                if (buttonIndex === index) {
+                    button.setAttribute('aria-current', 'true');
+                } else {
+                    button.removeAttribute('aria-current');
+                }
+            });
+
+            syncOrderPosition(index);
+        }
+
+        function move(step, useRandomOrder) {
+            var target = currentIndex;
+
+            if (useRandomOrder) {
+                if (!playOrder.length) {
+                    buildRandomOrder(currentIndex);
+                }
+
+                orderPosition += step;
+                if (orderPosition < 0) {
+                    buildRandomOrder();
+                    orderPosition = playOrder.length - 1;
+                } else if (orderPosition >= playOrder.length) {
+                    buildRandomOrder();
+                }
+
+                target = playOrder[orderPosition];
+            } else {
+                target = currentIndex + step;
+                if (target < 0) {
+                    target = items.length - 1;
+                }
+                if (target >= items.length) {
+                    target = 0;
+                }
+            }
+
+            update(target);
+            startAutoplay();
+        }
+
+        items.forEach(function (item, index) {
+            item.addEventListener('click', function () {
+                buildRandomOrder(index);
+                update(index);
+                startAutoplay();
+            });
+        });
+
+        if (prev) {
+            prev.addEventListener('click', function () {
+                move(-1, false);
+            });
+        }
+
+        if (next) {
+            next.addEventListener('click', function () {
+                move(1, false);
+            });
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'ArrowLeft') {
+                move(-1, false);
+                return;
+            }
+            if (event.key === 'ArrowRight') {
+                move(1, false);
+            }
+        });
+
+        root.addEventListener('mouseenter', stopAutoplay);
+        root.addEventListener('mouseleave', startAutoplay);
+        root.addEventListener('mousemove', scheduleIdleState);
+        root.addEventListener('pointermove', scheduleIdleState);
+        root.addEventListener('touchstart', function () {
+            setNavigationIdle(false);
+        }, { passive: true });
+
+        buildRandomOrder();
+        update(playOrder[0] || 0);
+        warmupSlides(playOrder[0] || 0);
+        scheduleIdleState();
+        startAutoplay();
+    }
+
     function initTimeline(root) {
         var yearSections = Array.prototype.slice.call(root.querySelectorAll('[data-mj-photo-year-section]'));
         if (!yearSections.length) {
@@ -493,7 +794,14 @@
 
     function bootstrap() {
         var roots = document.querySelectorAll('[data-mj-photo-timeline]');
-        Array.prototype.forEach.call(roots, initTimeline);
+        Array.prototype.forEach.call(roots, function (root) {
+            var mode = root.getAttribute('data-render-mode') || 'timeline';
+            if (mode === 'slideshow_fullscreen') {
+                initSlideshow(root);
+                return;
+            }
+            initTimeline(root);
+        });
     }
 
     if (document.readyState === 'loading') {

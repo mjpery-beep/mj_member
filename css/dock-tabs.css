@@ -1,0 +1,643 @@
+.mj-dock-tabs {
+    --mj-dock-tabs-offset: 24px;
+    --mj-dock-tabs-transition: 360ms;
+    --mj-dock-active-scale: 1.08;
+    --mj-dock-active-lift: 6px;
+    position: relative;
+    width: 100%;
+    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
+    background: linear-gradient(145deg, #0f172a 0%, #1e293b 45%, #0b1220 100%);
+    color: #e2e8f0;
+    border-radius: 0;
+}
+
+/* Empêcher le wrapper Elementor d'ajouter de l'espace vertical autour du widget */
+.elementor-widget-mj-member-dock-tabs {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Bloquer le scroll de la page quand un dock-tabs est présent */
+body.mj-dock-tabs--has-widget,
+body.mj-dock-tabs--has-fullscreen {
+    overflow: hidden !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+}
+
+html.mj-dock-tabs--has-widget,
+html.mj-dock-tabs--has-fullscreen {
+    overflow: hidden !important;
+    height: 100vh !important;
+}
+
+/* Neutraliser les sections/containers Elementor parents du widget */
+body.mj-dock-tabs--has-widget .elementor-widget-mj-member-dock-tabs,
+body.mj-dock-tabs--has-fullscreen .elementor-widget-mj-member-dock-tabs {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+body.mj-dock-tabs--has-widget .elementor-widget-mj-member-dock-tabs .elementor-widget-container,
+body.mj-dock-tabs--has-fullscreen .elementor-widget-mj-member-dock-tabs .elementor-widget-container {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+body.mj-dock-tabs--has-fullscreen #site-header {
+    display: none !important;
+}
+
+.mj-dock-tabs__panels {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.mj-dock-tabs__panel {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: scale(1.02);
+    transition: opacity var(--mj-dock-tabs-transition) ease, transform var(--mj-dock-tabs-transition) ease;
+    --mj-dock-panel-background: radial-gradient(circle at 18% 20%, rgba(56, 189, 248, 0.22), transparent 40%), radial-gradient(circle at 82% 80%, rgba(14, 165, 233, 0.2), transparent 38%), linear-gradient(150deg, #0b1220 0%, #111827 55%, #1f2937 100%);
+    background: var(--mj-dock-panel-background);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.mj-dock-tabs__panel.is-active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: scale(1);
+}
+
+.mj-dock-tabs__panel-content {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    padding: clamp(28px, 4vw, 56px);
+    color: #e2e8f0;
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+/* Tous les containers Elementor à l'intérieur d'un panel : fit complet, pas d'ascenseur */
+.mj-dock-tabs__panel .e-con,
+.mj-dock-tabs__panel .e-con-full,
+.mj-dock-tabs__panel .e-child,
+.mj-dock-tabs__panel .elementor-container,
+.mj-dock-tabs__panel .elementor-element {
+    overflow: hidden !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+}
+
+/* Enfants directs du panel : remplissent toute la hauteur disponible */
+.mj-dock-tabs__panel-content > .e-con,
+.mj-dock-tabs__panel-content > .e-con-full,
+.mj-dock-tabs__panel-content > .elementor-container,
+.mj-dock-tabs__panel-content > .elementor-element {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    width: 100% !important;
+}
+
+.mj-dock-tabs__panel--mosaic {
+    position: relative;
+    overflow: hidden;
+    background: var(--mj-dock-panel-background, transparent);
+}
+
+.mj-dock-tabs__mosaic {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    align-content: start;
+    gap: 0;
+    z-index: 0;
+    overflow: hidden;
+}
+
+.mj-dock-tabs__mosaic-tile {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    line-height: 0;
+}
+
+.mj-dock-tabs__mosaic-before,
+.mj-dock-tabs__mosaic-after {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+}
+
+.mj-dock-tabs__mosaic-tile--flip {
+    perspective: 600px;
+}
+
+.mj-dock-tabs__mosaic-tile--flip .mj-dock-tabs__mosaic-before,
+.mj-dock-tabs__mosaic-tile--flip .mj-dock-tabs__mosaic-after {
+    backface-visibility: hidden;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: both;
+    animation-iteration-count: infinite;
+}
+
+.mj-dock-tabs__mosaic-tile--flip .mj-dock-tabs__mosaic-before {
+    animation-name: mj-dock-mosaic-flip-before;
+    animation-duration: var(--tile-duration, 5s);
+    animation-delay: var(--tile-delay, 0s);
+}
+
+.mj-dock-tabs__mosaic-tile--flip .mj-dock-tabs__mosaic-after {
+    animation-name: mj-dock-mosaic-flip-after;
+    animation-duration: var(--tile-duration, 5s);
+    animation-delay: var(--tile-delay, 0s);
+}
+
+@keyframes mj-dock-mosaic-flip-before {
+    0%, 42% {
+        transform: rotateY(0deg);
+    }
+    50%, 92% {
+        transform: rotateY(180deg);
+    }
+    100% {
+        transform: rotateY(360deg);
+    }
+}
+
+@keyframes mj-dock-mosaic-flip-after {
+    0%, 42% {
+        transform: rotateY(-180deg);
+    }
+    50%, 92% {
+        transform: rotateY(0deg);
+    }
+    100% {
+        transform: rotateY(180deg);
+    }
+}
+
+.mj-dock-tabs__mosaic-tile--fade .mj-dock-tabs__mosaic-before,
+.mj-dock-tabs__mosaic-tile--fade .mj-dock-tabs__mosaic-after {
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: both;
+    animation-iteration-count: infinite;
+}
+
+.mj-dock-tabs__mosaic-tile--fade .mj-dock-tabs__mosaic-before {
+    animation-name: mj-dock-mosaic-fade-before;
+    animation-duration: var(--tile-duration, 5s);
+    animation-delay: var(--tile-delay, 0s);
+}
+
+.mj-dock-tabs__mosaic-tile--fade .mj-dock-tabs__mosaic-after {
+    animation-name: mj-dock-mosaic-fade-after;
+    animation-duration: var(--tile-duration, 5s);
+    animation-delay: var(--tile-delay, 0s);
+}
+
+@keyframes mj-dock-mosaic-fade-before {
+    0%, 40% {
+        opacity: 1;
+    }
+    50%, 90% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+@keyframes mj-dock-mosaic-fade-after {
+    0%, 40% {
+        opacity: 0;
+    }
+    50%, 90% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+.mj-dock-tabs__mosaic-tile--hover {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.mj-dock-tabs__mosaic-tile--hover .mj-dock-tabs__mosaic-before {
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    z-index: 2;
+}
+
+.mj-dock-tabs__mosaic-tile--hover .mj-dock-tabs__mosaic-after {
+    opacity: 1;
+    transition: opacity 0.35s ease;
+    z-index: 1;
+}
+
+.mj-dock-tabs__mosaic-tile--hover:hover .mj-dock-tabs__mosaic-before {
+    opacity: 1;
+}
+
+.mj-dock-tabs__mosaic-tile--hover:hover .mj-dock-tabs__mosaic-after {
+    opacity: 0;
+}
+
+.mj-dock-tabs__panel--mosaic > .elementor-container,
+.mj-dock-tabs__panel--mosaic > .e-con,
+.mj-dock-tabs__panel--mosaic > .mj-dock-tabs__panel-content {
+    position: relative;
+    z-index: 1;
+    background: transparent;
+}
+
+.mj-dock-tabs--fullscreen {
+    width: 100vw;
+    min-height: 100vh;
+    height: 100vh;
+    max-width: none;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+}
+
+/* En fullscreen, les panels remplissent déjà 100vw×100vh via inset:0 sur le parent 100vw×100vh.
+   On retire seulement le padding et on reset les CSS vars Elementor. */
+.mj-dock-tabs--fullscreen .mj-dock-tabs__panel-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    box-sizing: border-box;
+    --padding-top: 0px;
+    --padding-right: 0px;
+    --padding-bottom: 0px;
+    --padding-left: 0px;
+}
+
+/* Les enfants directs du panel doivent remplir toute la hauteur en fullscreen */
+.mj-dock-tabs--fullscreen .mj-dock-tabs__panel-content > .e-con,
+.mj-dock-tabs--fullscreen .mj-dock-tabs__panel-content > .e-con-full,
+.mj-dock-tabs--fullscreen .mj-dock-tabs__panel-content > .elementor-container,
+.mj-dock-tabs--fullscreen .mj-dock-tabs__panel-content > .elementor-element {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-sizing: border-box;
+}
+
+.mj-dock-tabs--fullscreen .mj-photo-grimlins--has-mosaic {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    max-width: none;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+}
+
+.mj-dock-tabs__panel-content h1,
+.mj-dock-tabs__panel-content h2,
+.mj-dock-tabs__panel-content h3,
+.mj-dock-tabs__panel-content h4 {
+    color: #f8fafc;
+}
+
+.mj-dock-tabs__dock {
+    position: absolute;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    height: 60px;
+    width: auto;
+    border-radius: 16px;
+    padding: 3px;
+    background: rgba(83, 83, 83, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(13px);
+    -webkit-backdrop-filter: blur(13px);
+}
+
+.mj-dock-tabs--top .mj-dock-tabs__dock,
+.mj-dock-tabs--bottom .mj-dock-tabs__dock {
+    flex-direction: row;
+}
+
+.mj-dock-tabs--left .mj-dock-tabs__dock,
+.mj-dock-tabs--right .mj-dock-tabs__dock {
+    height: auto;
+    flex-direction: column;
+}
+
+.mj-dock-tabs--top .mj-dock-tabs__dock {
+    top: var(--mj-dock-tabs-offset);
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.mj-dock-tabs--bottom .mj-dock-tabs__dock {
+    bottom: var(--mj-dock-tabs-offset);
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.mj-dock-tabs--left .mj-dock-tabs__dock {
+    left: var(--mj-dock-tabs-offset);
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.mj-dock-tabs--right .mj-dock-tabs__dock {
+    right: var(--mj-dock-tabs-offset);
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.mj-dock-tabs__tab {
+    appearance: none;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    min-width: 50px;
+    height: 50px;
+    min-height: 50px;
+    padding: 0;
+    cursor: pointer;
+    position: relative;
+    transform-origin: 50% 100%;
+    transition: 0.2s;
+    vertical-align: bottom;
+    overflow: visible;
+}
+
+.mj-dock-tabs__tab:hover {
+    margin: 0 13px;
+}
+
+.mj-dock-tabs--left .mj-dock-tabs__tab:hover,
+.mj-dock-tabs--right .mj-dock-tabs__tab:hover {
+    margin: 13px 0;
+}
+
+.mj-dock-tabs__tab:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.75);
+    outline-offset: 4px;
+}
+
+.mj-dock-tabs__tab.is-active {
+    color: #fff;
+}
+
+.mj-dock-tabs__tab.is-active::after {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    content: '';
+    bottom: 2px;
+}
+
+.mj-dock-tabs__icon {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    display: inline-block;
+    background: transparent;
+    object-fit: cover;
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+}
+
+.mj-dock-tabs__icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mj-dock-tabs__icon-fallback {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.mj-dock-tabs__label {
+    position: absolute;
+    top: -70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    color: rgba(255, 255, 255, 0.9);
+    height: 10px;
+    padding: 10px 15px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    visibility: hidden;
+    opacity: 0;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    letter-spacing: 0;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+}
+
+.mj-dock-tabs__label::after {
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid rgba(0, 0, 0, 0.5);
+}
+
+.mj-dock-tabs__tab:hover .mj-dock-tabs__label,
+.mj-dock-tabs__tab:focus-visible .mj-dock-tabs__label {
+    visibility: visible;
+    opacity: 1;
+}
+
+.mj-dock-tabs--hide-label .mj-dock-tabs__label {
+    display: none;
+}
+
+@media (max-width: 920px) {
+    .mj-dock-tabs {
+        min-height: 85vh;
+        height: 85vh;
+    }
+
+    .mj-dock-tabs__panel-content {
+        padding: clamp(20px, 5vw, 34px);
+    }
+
+    .mj-dock-tabs__dock {
+        height: 54px;
+        padding: 2px;
+    }
+
+    .mj-dock-tabs__tab {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+    }
+
+    .mj-dock-tabs__icon {
+        width: 100%;
+        height: 100%;
+    }
+
+    .mj-dock-tabs__label {
+        font-size: 12px;
+        top: -58px;
+    }
+
+    .mj-dock-tabs--left .mj-dock-tabs__dock,
+    .mj-dock-tabs--right .mj-dock-tabs__dock {
+        top: auto;
+        bottom: 16px;
+        transform: none;
+        flex-direction: row;
+        border-radius: 999px;
+    }
+
+    .mj-dock-tabs--left .mj-dock-tabs__dock {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+    }
+
+    .mj-dock-tabs--right .mj-dock-tabs__dock {
+        right: 50%;
+        left: auto;
+        transform: translateX(50%);
+    }
+
+    .mj-dock-tabs--left .mj-dock-tabs__tab:hover,
+    .mj-dock-tabs--right .mj-dock-tabs__tab:hover,
+    .mj-dock-tabs--left .mj-dock-tabs__tab.is-active,
+    .mj-dock-tabs--right .mj-dock-tabs__tab.is-active {
+        margin: 0 10px;
+    }
+}
+
+/* Mode strict pour garantir le meme rendu en frontend et dans l'editeur Elementor */
+.mj-dock-tabs--codepen .mj-dock-tabs__dock {
+    background: var(--mj-dock-cp-bg, rgba(83, 83, 83, 0.25)) !important;
+    border: var(--mj-dock-cp-border-width, 1px) solid var(--mj-dock-cp-border-color, rgba(255, 255, 255, 0.18)) !important;
+    backdrop-filter: blur(var(--mj-dock-cp-blur, 13px)) !important;
+    -webkit-backdrop-filter: blur(var(--mj-dock-cp-blur, 13px)) !important;
+    border-radius: var(--mj-dock-cp-radius, 16px) !important;
+    height: var(--mj-dock-cp-height, 60px) !important;
+    width: auto !important;
+    padding: var(--mj-dock-cp-padding, 3px) !important;
+    gap: 0 !important;
+    box-shadow: none !important;
+}
+
+/* En vertical, le fond doit couvrir toute la colonne d'icônes */
+.mj-dock-tabs--codepen.mj-dock-tabs--left .mj-dock-tabs__dock,
+.mj-dock-tabs--codepen.mj-dock-tabs--right .mj-dock-tabs__dock {
+    height: auto !important;
+    min-height: 0 !important;
+    width: calc(var(--mj-dock-cp-item-size, 50px) + (var(--mj-dock-cp-padding, 3px) * 2)) !important;
+}
+
+.mj-dock-tabs--codepen .mj-dock-tabs__tab {
+    width: var(--mj-dock-cp-item-size, 50px) !important;
+    min-width: var(--mj-dock-cp-item-size, 50px) !important;
+    height: var(--mj-dock-cp-item-size, 50px) !important;
+    min-height: var(--mj-dock-cp-item-size, 50px) !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.mj-dock-tabs--codepen .mj-dock-tabs__tab:hover {
+    margin: 0 var(--mj-dock-cp-hover-gap, 13px) !important;
+}
+
+.mj-dock-tabs--codepen.mj-dock-tabs--left .mj-dock-tabs__tab:hover,
+.mj-dock-tabs--codepen.mj-dock-tabs--right .mj-dock-tabs__tab:hover {
+    margin: var(--mj-dock-cp-hover-gap, 13px) 0 !important;
+}
+
+.mj-dock-tabs--codepen .mj-dock-tabs__icon {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+}
+
+.mj-dock-tabs--codepen .mj-dock-tabs__icon img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+}
+
+.mj-dock-tabs--codepen .mj-dock-tabs__label {
+    top: -70px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    background: var(--mj-dock-cp-tooltip-bg, rgba(0, 0, 0, 0.5)) !important;
+    color: var(--mj-dock-cp-tooltip-text, rgba(255, 255, 255, 0.9)) !important;
+    border-radius: var(--mj-dock-cp-tooltip-radius, 5px) !important;
+    padding: 10px 15px !important;
+    font-size: 13px !important;
+}
+
+.mj-dock-tabs--codepen .mj-dock-tabs__label::after {
+    border-top-color: var(--mj-dock-cp-tooltip-bg, rgba(0, 0, 0, 0.5)) !important;
+}
+
+.mj-dock-tabs--codepen .mj-dock-tabs__tab.is-active::after {
+    width: var(--mj-dock-cp-dot-size, 5px) !important;
+    height: var(--mj-dock-cp-dot-size, 5px) !important;
+    border-radius: 50% !important;
+    background: var(--mj-dock-cp-dot-color, rgba(255, 255, 255, 0.5)) !important;
+    bottom: 2px !important;
+}

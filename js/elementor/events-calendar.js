@@ -47,6 +47,140 @@
             return;
         }
 
+        // Optional EventPage modal opened from event links.
+        var eventPageModal = null;
+        var eventPageModalFrame = null;
+        var eventPageModalTitle = null;
+        var previousBodyOverflow = '';
+
+        function ensureEventPageModal() {
+            if (eventPageModal) {
+                return true;
+            }
+
+            if (!document || !document.body) {
+                return false;
+            }
+
+            eventPageModal = document.createElement('div');
+            eventPageModal.className = 'mj-cal-eventpage-modal';
+            eventPageModal.hidden = true;
+
+            var backdrop = document.createElement('button');
+            backdrop.type = 'button';
+            backdrop.className = 'mj-cal-eventpage-modal__backdrop';
+            backdrop.setAttribute('aria-label', 'Fermer');
+
+            var panel = document.createElement('div');
+            panel.className = 'mj-cal-eventpage-modal__panel';
+            panel.setAttribute('role', 'dialog');
+            panel.setAttribute('aria-modal', 'true');
+            panel.setAttribute('aria-label', 'Page événement');
+
+            var header = document.createElement('div');
+            header.className = 'mj-cal-eventpage-modal__header';
+
+            eventPageModalTitle = document.createElement('span');
+            eventPageModalTitle.className = 'mj-cal-eventpage-modal__title';
+            eventPageModalTitle.textContent = 'Page événement';
+
+            var closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'mj-cal-eventpage-modal__close';
+            closeBtn.setAttribute('aria-label', 'Fermer');
+            closeBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+
+            eventPageModalFrame = document.createElement('iframe');
+            eventPageModalFrame.className = 'mj-cal-eventpage-modal__frame';
+            eventPageModalFrame.setAttribute('title', 'EventPage');
+            eventPageModalFrame.setAttribute('loading', 'eager');
+            eventPageModalFrame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+            eventPageModalFrame.addEventListener('load', function() {
+                // Same-origin iframe: hide site chrome so only EventPage content is visible.
+                try {
+                    if (!eventPageModalFrame || !eventPageModalFrame.contentDocument) {
+                        return;
+                    }
+                    var iframeDoc = eventPageModalFrame.contentDocument;
+                    var head = iframeDoc.head || iframeDoc.getElementsByTagName('head')[0];
+                    if (!head) {
+                        return;
+                    }
+                    if (iframeDoc.getElementById('mj-cal-eventpage-modal-style')) {
+                        return;
+                    }
+                    var style = iframeDoc.createElement('style');
+                    style.id = 'mj-cal-eventpage-modal-style';
+                    style.textContent = [
+                        '#site-header,',
+                        '#site-footer,',
+                        '.site-header,',
+                        '.site-footer,',
+                        '#masthead,',
+                        '#colophon,',
+                        'header[role="banner"],',
+                        'footer[role="contentinfo"] { display: none !important; }',
+                        'html, body { margin: 0 !important; padding: 0 !important; }'
+                    ].join(' ');
+                    head.appendChild(style);
+                } catch (error) {
+                    // Ignore when iframe document cannot be accessed.
+                }
+            });
+
+            header.appendChild(eventPageModalTitle);
+            header.appendChild(closeBtn);
+            panel.appendChild(header);
+            panel.appendChild(eventPageModalFrame);
+            eventPageModal.appendChild(backdrop);
+            eventPageModal.appendChild(panel);
+            document.body.appendChild(eventPageModal);
+
+            function closeEventPageModal() {
+                if (!eventPageModal || eventPageModal.hidden) {
+                    return;
+                }
+                eventPageModal.hidden = true;
+                if (eventPageModalFrame) {
+                    eventPageModalFrame.setAttribute('src', 'about:blank');
+                }
+                document.body.style.overflow = previousBodyOverflow;
+            }
+
+            backdrop.addEventListener('click', closeEventPageModal);
+            closeBtn.addEventListener('click', closeEventPageModal);
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeEventPageModal();
+                }
+            });
+
+            eventPageModal._close = closeEventPageModal;
+
+            return true;
+        }
+
+        function openEventPageModal(href, titleText) {
+            if (!href) {
+                return;
+            }
+            if (!ensureEventPageModal()) {
+                window.location.href = href;
+                return;
+            }
+
+            if (eventPageModalTitle) {
+                eventPageModalTitle.textContent = titleText || 'Page événement';
+            }
+            if (eventPageModalFrame) {
+                eventPageModalFrame.setAttribute('src', href);
+            }
+
+            previousBodyOverflow = document.body.style.overflow || '';
+            document.body.style.overflow = 'hidden';
+            eventPageModal.hidden = false;
+        }
+
         // ---- Create modal (delegated to shared module) ----
         var ccmInstance = null;
         if (window.MjCreateEventModal && root.querySelector('[data-ccm-modal]')) {
@@ -55,6 +189,35 @@
         if (!ccmInstance && root.querySelector('[data-ccm-modal]')) {
             console.warn('[Calendar] CCM modal markup found but MjCreateEventModal.init() returned null.',
                 'MjCreateEventModal available:', !!window.MjCreateEventModal);
+        }
+
+        if (config && config.openEventPageModal) {
+            root.addEventListener('click', function(e) {
+                var eventLink = e.target.closest('a.mj-member-events-calendar__event-trigger, a.mj-member-events-calendar__mobile-link');
+                if (!eventLink || !root.contains(eventLink)) {
+                    return;
+                }
+
+                var href = (eventLink.getAttribute('href') || '').trim();
+                if (!href || href.charAt(0) === '#') {
+                    return;
+                }
+
+                if (/^(javascript:|mailto:|tel:)/i.test(href)) {
+                    return;
+                }
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (mobileModal && !mobileModal.hidden && eventLink.closest('[data-calendar-mobile-modal]')) {
+                    closeMobileModal();
+                }
+
+                var titleNode = eventLink.querySelector('.mj-member-events-calendar__event-title-text, .mj-member-events-calendar__mobile-title-text');
+                var titleText = titleNode && titleNode.textContent ? titleNode.textContent.trim() : '';
+                openEventPageModal(href, titleText);
+            });
         }
 
         // ---- Delete occurrence handler & add-event day buttons ----

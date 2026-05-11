@@ -1922,6 +1922,25 @@
             var generatorPayload = clearGenerator === true ? {} : serializeGeneratorPlan(planResult, generatorState);
             return Promise.resolve(onPersistOccurrences(nextList, summaryPayload, generatorPayload))
                 .then(function (result) {
+                    var responseEvent = result && result.event && typeof result.event === 'object'
+                        ? result.event
+                        : null;
+                    if (responseEvent) {
+                        if (Array.isArray(responseEvent.occurrenceGenerationBatches)) {
+                            setLocalBatches(responseEvent.occurrenceGenerationBatches.filter(function (batch) {
+                                return batch && batch.status !== 'deleted';
+                            }));
+                        }
+
+                        if (responseEvent.occurrenceGenerator && typeof responseEvent.occurrenceGenerator === 'object') {
+                            setGeneratorState(createGeneratorStateFromPlan(responseEvent.occurrenceGenerator, initialPivotDate));
+                        }
+
+                        if (typeof responseEvent.inlineScheduleHtml === 'string') {
+                            setSchedulePreviewHtml(responseEvent.inlineScheduleHtml);
+                        }
+                    }
+
                     setIsPersisting(false);
                     return result;
                 })
@@ -1932,7 +1951,7 @@
                     }
                     return Promise.reject(error);
                 });
-        }, [onPersistOccurrences, schedulePreview, buildGeneratorPlan, generatorState]);
+        }, [onPersistOccurrences, schedulePreview, buildGeneratorPlan, generatorState, initialPivotDate]);
 
         var handleSelectDay = useCallback(function (day) {
             if (day.hasOccurrences && day.occurrences.length > 0) {
@@ -5068,7 +5087,13 @@
 
         // Sidebar mode state (events or members)
         // Priority: urlMainTab > urlMemberId > default (events)
+        var hideSidebar = !!(config && config.hideSidebar);
+        var hideEventTabs = !!(config && config.hideEventTabs);
+
         var initialSidebarMode = useMemo(function () {
+            if (hideSidebar) {
+                return 'events';
+            }
             if (urlMainTab === 'member') {
                 return 'members';
             }
@@ -5076,7 +5101,7 @@
                 return 'events';
             }
             return urlMemberId ? 'members' : 'events';
-        }, [urlMainTab, urlMemberId]);
+        }, [hideSidebar, urlMainTab, urlMemberId]);
         var _sidebarMode = useState(initialSidebarMode);
         var sidebarMode = _sidebarMode[0];
         var setSidebarMode = _sidebarMode[1];
@@ -9176,7 +9201,10 @@
         // Classes pour la navigation mobile
         var layoutClasses = classNames('mj-regmgr__layout', {
             'mj-regmgr__layout--mobile-details': mobileShowDetails && (selectedEvent || selectedMember),
+            'mj-regmgr__layout--sidebar-hidden': hideSidebar,
         });
+
+        var effectiveActiveTab = hideEventTabs ? 'attendance' : activeTab;
 
         // Afficher un loading global au premier chargement
         if (eventsLoading && !initialEventLoaded && events.length === 0 && sidebarMode === 'events') {
@@ -9191,7 +9219,7 @@
         return h('div', { class: 'mj-regmgr' }, [
             h('div', { class: layoutClasses }, [
                 // Sidebar
-                h(EventsSidebar, {
+                !hideSidebar && h(EventsSidebar, {
                     // Mode
                     sidebarMode: sidebarMode,
                     onModeChange: handleSidebarModeChange,
@@ -9252,7 +9280,7 @@
                 // Zone principale
                 h('main', { class: 'mj-regmgr__main' }, [
                     // Bouton retour mobile (événements)
-                    sidebarMode === 'events' && selectedEvent && h('button', {
+                    !hideSidebar && sidebarMode === 'events' && selectedEvent && h('button', {
                         type: 'button',
                         class: 'mj-regmgr__back-btn',
                         style: mobileBackBtnStyle,
@@ -9265,7 +9293,7 @@
                     ]),
 
                     // Bouton retour mobile (membres)
-                    sidebarMode === 'members' && selectedMember && h('button', {
+                    !hideSidebar && sidebarMode === 'members' && selectedMember && h('button', {
                         type: 'button',
                         class: 'mj-regmgr__back-btn',
                         style: mobileBackBtnStyle,
@@ -9310,7 +9338,7 @@
                         editorHeadingTitle && h('div', { class: 'mj-regmgr__event-heading' }, [
                             h('div', { class: 'mj-regmgr__event-heading-main' }, [
                                 h('h2', { class: 'mj-regmgr__event-heading-title' }, editorHeadingTitle),
-                                editorHeadingUrl && h('a', {
+                                !hideEventTabs && editorHeadingUrl && h('a', {
                                     href: editorHeadingUrl,
                                     target: '_blank',
                                     rel: 'noopener noreferrer',
@@ -9322,7 +9350,7 @@
                             editorHeadingMeta && h('p', { class: 'mj-regmgr__event-heading-meta' }, editorHeadingMeta),
                         ]),
                         // Onglets
-                        TabsComponent && h(TabsComponent, {
+                        !hideEventTabs && TabsComponent && h(TabsComponent, {
                             className: 'mj-regmgr-tabs--event',
                             tabs: tabs,
                             fallbackRegistrationsTab: {
@@ -9331,13 +9359,13 @@
                                 badge: registrationsCount,
                             },
                             ensureRegistrationsTab: !eventHasFreeParticipation,
-                            activeTab: activeTab,
+                            activeTab: effectiveActiveTab,
                             onChange: setActiveTab,
                         }),
 
                         // Contenu de l'onglet
                         h('div', { class: 'mj-regmgr__tab-content' }, [
-                            activeTab === 'registrations' && h(RegistrationsList, {
+                            effectiveActiveTab === 'registrations' && h(RegistrationsList, {
                                 registrations: registrations,
                                 loading: registrationsLoading,
                                 event: eventDetails || selectedEvent,
@@ -9361,7 +9389,7 @@
                                 eventRequiresValidation: eventRequiresValidation,
                             }),
 
-                            activeTab === 'attendance' && h(AttendanceSheet, {
+                            effectiveActiveTab === 'attendance' && h(AttendanceSheet, {
                                 event: eventDetails,
                                 registrations: registrations,
                                 attendanceMembers: attendanceMembers,
@@ -9381,7 +9409,7 @@
                                 eventRequiresValidation: eventRequiresValidation,
                             }),
 
-                            activeTab === 'description' && h('div', { class: 'mj-regmgr-description-tab' }, [
+                            effectiveActiveTab === 'description' && h('div', { class: 'mj-regmgr-description-tab' }, [
                                 (!eventDetails || registrationsLoading)
                                     ? h('div', { class: 'mj-regmgr-loading' }, [
                                         h('div', { class: 'mj-regmgr-loading__spinner' }),

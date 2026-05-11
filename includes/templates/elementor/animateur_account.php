@@ -1557,6 +1557,8 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
             'title' => __('Mes participants', 'mj-member'),
             'description' => '',
             'wrapper_class' => '',
+            'default_event_id' => 0,
+            'minimal_event_selector' => false,
             'show_event_filter' => true,
             'show_occurrence_filter' => true,
             'show_attendance_actions' => true,
@@ -1587,10 +1589,15 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
         }
 
         $show_event_filter = !empty($settings['show_event_filter']);
+        $minimal_event_selector = !empty($settings['minimal_event_selector']);
         $show_occurrence_filter = !empty($settings['show_occurrence_filter']);
         $show_attendance_actions = !empty($settings['show_attendance_actions']);
         $show_sms_block = !empty($settings['show_sms_block']);
         $show_individual_messages = array_key_exists('show_individual_messages', $settings) ? !empty($settings['show_individual_messages']) : true;
+        $default_event_id = isset($settings['default_event_id']) ? (int) $settings['default_event_id'] : 0;
+        if ($default_event_id <= 0 && isset($_GET['event'])) {
+            $default_event_id = absint(wp_unslash($_GET['event']));
+        }
         $cover_fallback = isset($settings['cover_fallback']) ? sanitize_key($settings['cover_fallback']) : 'article';
         if ($cover_fallback !== 'article') {
             $cover_fallback = 'none';
@@ -2094,6 +2101,7 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
             ),
             'assignedEventIds' => array_map('intval', wp_list_pluck($events, 'id')),
             'allEvents' => $all_events,
+            'defaultEvent' => $default_event_id > 0 ? $default_event_id : null,
         );
 
         $config_bundle = mj_member_prepare_animateur_dashboard_config($component_config_input);
@@ -2382,31 +2390,33 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
                             );
                             ?>
                             <div class="mj-animateur-dashboard__filter mj-animateur-dashboard__filter--event">
-                                <div class="mj-animateur-dashboard__tabs" data-role="event-tabs" data-default-filter="<?php echo esc_attr($default_filter); ?>">
-                                    <?php foreach ($tab_labels as $tab_key => $tab_label) : ?>
-                                        <?php $is_active_tab = $default_filter === $tab_key; ?>
-                                        <button type="button" class="mj-animateur-dashboard__tab<?php echo $is_active_tab ? ' is-active' : ''; ?>" data-filter="<?php echo esc_attr($tab_key); ?>" aria-pressed="<?php echo $is_active_tab ? 'true' : 'false'; ?>">
-                                            <span class="mj-animateur-dashboard__tab-label"><?php echo esc_html($tab_label); ?></span>
-                                            <span class="mj-animateur-dashboard__tab-count" data-role="tab-count">0</span>
-                                        </button>
-                                    <?php endforeach; ?>
-                                </div>
-
-                                <div class="mj-animateur-dashboard__event-picker" data-role="event-picker">
-                                    <div class="mj-animateur-dashboard__event-picker-bar">
-                                        <span class="mj-animateur-dashboard__event-picker-current" data-role="event-current" hidden></span>
-                                        <button type="button" class="mj-animateur-dashboard__toggle" data-role="event-toggle" aria-expanded="true">
-                                            <span data-role="event-toggle-text"><?php echo esc_html($component_config['i18n']['eventListHide']); ?></span>
-                                        </button>
+                                <?php if (!$minimal_event_selector) : ?>
+                                    <div class="mj-animateur-dashboard__tabs" data-role="event-tabs" data-default-filter="<?php echo esc_attr($default_filter); ?>">
+                                        <?php foreach ($tab_labels as $tab_key => $tab_label) : ?>
+                                            <?php $is_active_tab = $default_filter === $tab_key; ?>
+                                            <button type="button" class="mj-animateur-dashboard__tab<?php echo $is_active_tab ? ' is-active' : ''; ?>" data-filter="<?php echo esc_attr($tab_key); ?>" aria-pressed="<?php echo $is_active_tab ? 'true' : 'false'; ?>">
+                                                <span class="mj-animateur-dashboard__tab-label"><?php echo esc_html($tab_label); ?></span>
+                                                <span class="mj-animateur-dashboard__tab-count" data-role="tab-count">0</span>
+                                            </button>
+                                        <?php endforeach; ?>
                                     </div>
-                                    <div class="mj-animateur-dashboard__event-list" data-role="event-list" aria-live="polite">
-                                        <div class="mj-animateur-dashboard__event-empty" data-role="event-empty">
-                                            <?php echo esc_html($component_config['i18n']['eventEmpty']); ?>
+
+                                    <div class="mj-animateur-dashboard__event-picker" data-role="event-picker">
+                                        <div class="mj-animateur-dashboard__event-picker-bar">
+                                            <span class="mj-animateur-dashboard__event-picker-current" data-role="event-current" hidden></span>
+                                            <button type="button" class="mj-animateur-dashboard__toggle" data-role="event-toggle" aria-expanded="true">
+                                                <span data-role="event-toggle-text"><?php echo esc_html($component_config['i18n']['eventListHide']); ?></span>
+                                            </button>
+                                        </div>
+                                        <div class="mj-animateur-dashboard__event-list" data-role="event-list" aria-live="polite">
+                                            <div class="mj-animateur-dashboard__event-empty" data-role="event-empty">
+                                                <?php echo esc_html($component_config['i18n']['eventEmpty']); ?>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                <?php endif; ?>
 
-                                <select class="mj-animateur-dashboard__select mj-animateur-dashboard__select--event mj-animateur-dashboard__select--ghost" aria-label="<?php esc_attr_e('Événement', 'mj-member'); ?>">
+                                <select class="mj-animateur-dashboard__select mj-animateur-dashboard__select--event<?php echo $minimal_event_selector ? '' : ' mj-animateur-dashboard__select--ghost'; ?>" aria-label="<?php esc_attr_e('Événement', 'mj-member'); ?>">
                                     <?php if (!empty($events)) : ?>
                                         <option value=""<?php echo $default_event_id === null ? ' selected' : ''; ?>>
                                             <?php esc_html_e('Sélectionnez un événement', 'mj-member'); ?>

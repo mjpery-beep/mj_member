@@ -1469,8 +1469,9 @@ final class EventPageModel
 
         $mapEmbed = MjEventLocations::build_map_embed_src($locationArray);
         $mapLink = '';
-        if (!empty($locationArray['map_query'])) {
-            $mapLink = 'https://maps.google.com/?q=' . rawurlencode((string) $locationArray['map_query']);
+        $mapQuery = isset($locationArray['map_query']) ? trim((string) $locationArray['map_query']) : '';
+        if ($mapQuery !== '') {
+            $mapLink = 'https://maps.google.com/?q=' . rawurlencode($mapQuery);
         } elseif ($address !== '') {
             $mapLink = 'https://maps.google.com/?q=' . rawurlencode($address);
         }

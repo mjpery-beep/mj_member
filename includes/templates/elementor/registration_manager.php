@@ -44,6 +44,8 @@ $default_filter = !empty($settings['default_filter']) ? $settings['default_filte
 $allow_manual_payment = !empty($settings['allow_manual_payment']) && $settings['allow_manual_payment'] === 'yes';
 $allow_delete_registration = !empty($settings['allow_delete_registration']) && $settings['allow_delete_registration'] === 'yes';
 $allow_create_member = !empty($settings['allow_create_member']) && $settings['allow_create_member'] === 'yes';
+$attendance_widget_mode = !empty($settings['default_event_id']) || ($this instanceof \Mj_Member_Elementor_Event_Attendance_Widget);
+$widget_default_event_id = !empty($settings['default_event_id']) ? absint($settings['default_event_id']) : 0;
 
 $is_coordinateur = false;
 $is_animateur = false;
@@ -396,11 +398,18 @@ if (isset($_GET['event'])) {
     $prefill_event_id = absint(wp_unslash($_GET['event']));
 } elseif (isset($_GET['event_id'])) {
     $prefill_event_id = absint(wp_unslash($_GET['event_id']));
+} elseif ($widget_default_event_id > 0) {
+    $prefill_event_id = $widget_default_event_id;
 }
 $url_event_id = $prefill_event_id > 0 ? $prefill_event_id : null;
 $url_tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : null;
 $url_member_id = isset($_GET['member']) ? absint(wp_unslash($_GET['member'])) : null;
 $url_main_tab = isset($_GET['main-tab']) ? sanitize_key(wp_unslash($_GET['main-tab'])) : null;
+if ($attendance_widget_mode) {
+    $url_tab = 'attendance';
+    $url_main_tab = 'event';
+    $url_member_id = null;
+}
 
 $ai_visual_prompt_template = (string) get_option('mj_member_ai_event_visual_prompt', '');
 if ($ai_visual_prompt_template === '') {
@@ -508,6 +517,8 @@ $config_json = wp_json_encode(array(
     'urlMemberId' => $url_member_id > 0 ? $url_member_id : null,
     'urlTab' => $url_tab !== '' ? $url_tab : null,
     'urlMainTab' => $url_main_tab !== '' ? $url_main_tab : null,
+    'hideSidebar' => $attendance_widget_mode,
+    'hideEventTabs' => $attendance_widget_mode,
     'regDocHeader' => wpautop(get_option('mj_regdoc_header', '')),
     'regDocFooter' => wpautop(get_option('mj_regdoc_footer', '')),
     'socialPublish' => array(
@@ -1041,7 +1052,7 @@ $config_json = wp_json_encode(array(
 ) + CreateEventModalRenderer::buildConfig());
 ?>
 
-<div class="mj-registration-manager mj-registration-manager--booting" 
+<div class="mj-registration-manager mj-registration-manager--booting<?php echo $attendance_widget_mode ? ' mj-registration-manager--attendance-widget' : ''; ?>" 
      id="<?php echo esc_attr($widget_id); ?>"
      data-widget-id="<?php echo esc_attr($widget_id); ?>" 
      data-mj-registration-manager 

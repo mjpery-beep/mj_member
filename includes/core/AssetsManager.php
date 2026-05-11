@@ -32,6 +32,7 @@ final class AssetsManager
         if (defined('ELEMENTOR_PLUGIN_BASE')) {
             add_action('elementor/frontend/after_register_styles', array(__CLASS__, 'ensureElementorFrontendStyleRegistered'), 5);
             add_action('elementor/editor/after_enqueue_styles', array(__CLASS__, 'ensureElementorFrontendStyleRegistered'), 5);
+            add_action('elementor/editor/before_enqueue_scripts', array(__CLASS__, 'enqueueElementorEditorAssets'));
         }
 
         self::$booted = true;
@@ -348,6 +349,8 @@ final class AssetsManager
         self::registerScript('mj-member-documents-manager', 'js/elementor/documents-manager.js', array('mj-member-utils'));
         self::registerScript('mj-member-payments-overview', 'js/elementor/payments-overview.js', array('mj-member-utils'));
         self::registerStyle('mj-member-payments-overview', 'css/payments-overview.css', array('mj-member-components'));
+        self::registerScript('mj-member-dock-tabs', 'js/elementor/dock-tabs.js', array('mj-member-utils'));
+        self::registerStyle('mj-member-dock-tabs', 'css/dock-tabs.css', array('mj-member-components'));
         self::registerScript('mj-member-events-manager', 'js/elementor/events-manager.js', array('mj-member-utils', 'mj-member-create-event-modal'));
         self::registerStyle('mj-member-event-form', 'css/event-form.css');
         self::registerStyle('mj-member-events-manager', 'css/events-manager.css', array('mj-member-components', 'mj-member-event-form', 'mj-member-create-event-modal'));
@@ -623,6 +626,12 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-payments-overview');
                 break;
 
+            case 'dock-tabs':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-dock-tabs');
+                wp_enqueue_script('mj-member-dock-tabs');
+                break;
+
             case 'events-manager':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-events-manager');
@@ -835,6 +844,29 @@ final class AssetsManager
      *
      * @return void
      */
+    /**
+     * Enqueue les scripts JS nécessaires dans l'éditeur Elementor.
+     *
+     * Le script dock-tabs-editor.js enregistre le type d'élément
+     * « mj-member-dock-tabs » via elementor.elementsManager.registerElementType()
+     * en attendant l'événement elementor/nested-element-type-loaded.
+     * Sans ce type, NestedModelBase n'est pas utilisé et aucun container
+     * enfant n'est créé lors du dépôt du widget sur le canvas.
+     */
+    public static function enqueueElementorEditorAssets(): void
+    {
+        $path = Config::path() . 'js/elementor/dock-tabs-editor.js';
+        $version = file_exists($path) ? filemtime($path) : Config::version();
+
+        wp_enqueue_script(
+            'mj-member-dock-tabs-editor',
+            Config::url() . 'js/elementor/dock-tabs-editor.js',
+            array('nested-elements'),
+            $version,
+            true
+        );
+    }
+
     public static function ensureElementorFrontendStyleRegistered(): void
     {
         if (!did_action('elementor/loaded')) {

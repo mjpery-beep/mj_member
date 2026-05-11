@@ -5981,12 +5981,35 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
             if (!empty($rows_needing_batch)) {
                 $created_generation_batch_id = $this->createOccurrenceGenerationBatchId();
+                $batch_start = '';
+                $batch_end = '';
                 foreach ($rows_needing_batch as $index) {
                     $normalized['rows'][$index]['generation_batch_id'] = $created_generation_batch_id;
+                    if ($batch_start === '' && !empty($normalized['rows'][$index]['start'])) {
+                        $batch_start = (string) $normalized['rows'][$index]['start'];
+                    }
+                    if (!empty($normalized['rows'][$index]['end'])) {
+                        $batch_end = (string) $normalized['rows'][$index]['end'];
+                    }
                 }
+
+                $batch_config_snapshot = $sanitized_generator_plan;
+                if ($batch_start !== '') {
+                    if (empty($batch_config_snapshot['startDate'])) {
+                        $batch_config_snapshot['startDate'] = substr($batch_start, 0, 10);
+                    }
+                    $batch_config_snapshot['start'] = $batch_start;
+                }
+                if ($batch_end !== '') {
+                    if (empty($batch_config_snapshot['endDate'])) {
+                        $batch_config_snapshot['endDate'] = substr($batch_end, 0, 10);
+                    }
+                    $batch_config_snapshot['end'] = $batch_end;
+                }
+
                 $created_batches[] = array(
                     'batch_id' => $created_generation_batch_id,
-                    'config_snapshot' => $sanitized_generator_plan,
+                    'config_snapshot' => $batch_config_snapshot,
                     'summary' => array(
                         'schedule_summary' => $submitted_schedule_summary,
                         'schedule_mode' => isset($event->schedule_mode) && $event->schedule_mode !== ''

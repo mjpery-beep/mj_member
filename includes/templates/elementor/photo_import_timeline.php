@@ -20,6 +20,11 @@ $nonce = isset($template_data['nonce']) ? (string) $template_data['nonce'] : '';
 $yearSummary = isset($template_data['year_summary']) && is_array($template_data['year_summary']) ? $template_data['year_summary'] : array();
 $initialLoadedYear = isset($template_data['initial_loaded_year']) ? (int) $template_data['initial_loaded_year'] : 0;
 $isPreview = !empty($template_data['is_preview']);
+$displayMode = isset($template_data['display_mode']) ? (string) $template_data['display_mode'] : 'timeline';
+$slideshowIntervalMs = isset($template_data['slideshow_interval_ms']) ? max(0, (int) $template_data['slideshow_interval_ms']) : 4000;
+if ($displayMode !== 'slideshow_fullscreen') {
+    $displayMode = 'timeline';
+}
 
 $componentId = 'mj-photo-timeline-' . wp_generate_uuid4();
 
@@ -65,15 +70,17 @@ $estimatedCols = 4;
 ?>
 
 <section
-    class="mj-photo-timeline"
+    class="mj-photo-timeline<?php echo $displayMode === 'slideshow_fullscreen' ? ' is-slideshow-mode' : ''; ?>"
     id="<?php echo esc_attr($componentId); ?>"
     data-mj-photo-timeline
+    data-render-mode="<?php echo esc_attr($displayMode); ?>"
     data-ajax-url="<?php echo esc_url($ajaxUrl); ?>"
     data-nonce="<?php echo esc_attr($nonce); ?>"
     data-offset="<?php echo esc_attr((string) count($items)); ?>"
     data-total-limit="<?php echo esc_attr((string) $totalLimit); ?>"
     data-batch-size="<?php echo esc_attr((string) $batchSize); ?>"
     data-initial-year="<?php echo esc_attr((string) $initialLoadedYear); ?>"
+    data-slideshow-interval-ms="<?php echo esc_attr((string) $slideshowIntervalMs); ?>"
     data-preview="<?php echo $isPreview ? '1' : '0'; ?>"
 >
     <?php if ($title !== '' || $subtitle !== '') : ?>
@@ -87,7 +94,72 @@ $estimatedCols = 4;
         </div>
     <?php endif; ?>
 
-    <?php if (empty($yearCountsMap) && empty($grouped)) : ?>
+    <?php if ($displayMode === 'slideshow_fullscreen') : ?>
+        <?php
+        $slideshowItems = array_values(array_filter($items, static function ($item): bool {
+            return is_array($item)
+                && !empty($item['thumb_url'])
+                && !empty($item['display_url']);
+        }));
+        ?>
+        <?php if (empty($slideshowItems)) : ?>
+            <div class="mj-photo-timeline__empty"><?php echo esc_html($emptyMessage); ?></div>
+        <?php else : ?>
+            <div class="mj-photo-slideshow" data-mj-photo-slideshow>
+                <figure class="mj-photo-slideshow__stage">
+                    <img
+                        src="<?php echo esc_url((string) $slideshowItems[0]['display_url']); ?>"
+                        alt="<?php echo esc_attr((string) ($slideshowItems[0]['title'] ?? $slideshowItems[0]['source_name'] ?? __('Photo importée', 'mj-member'))); ?>"
+                        data-mj-photo-slideshow-image
+                    />
+                    <figcaption class="mj-photo-slideshow__caption" data-mj-photo-slideshow-caption>
+                        <?php
+                        $initialTitle = (string) ($slideshowItems[0]['title'] ?? $slideshowItems[0]['source_name'] ?? __('Photo importée', 'mj-member'));
+                        $initialDate = (string) ($slideshowItems[0]['taken_at_label'] ?? '');
+                        echo esc_html($initialTitle . ($initialDate !== '' ? ' - ' . $initialDate : ''));
+                        ?>
+                    </figcaption>
+                </figure>
+
+                <div class="mj-photo-slideshow__controls">
+                    <button type="button" class="mj-photo-slideshow__button" data-mj-photo-slideshow-prev>
+                        <?php esc_html_e('Précédente', 'mj-member'); ?>
+                    </button>
+                    <span class="mj-photo-slideshow__counter" data-mj-photo-slideshow-counter>
+                        1 / <?php echo esc_html((string) count($slideshowItems)); ?>
+                    </span>
+                    <button type="button" class="mj-photo-slideshow__button" data-mj-photo-slideshow-next>
+                        <?php esc_html_e('Suivante', 'mj-member'); ?>
+                    </button>
+                </div>
+
+                <div class="mj-photo-slideshow__thumbs" data-mj-photo-slideshow-thumbs>
+                    <?php foreach ($slideshowItems as $index => $item) :
+                        $thumb = esc_url((string) ($item['thumb_url'] ?? ''));
+                        $display = esc_url((string) ($item['display_url'] ?? ''));
+                        $titleItem = (string) ($item['title'] ?? $item['source_name'] ?? __('Photo importée', 'mj-member'));
+                        $dateLabel = (string) ($item['taken_at_label'] ?? '');
+                        if ($thumb === '' || $display === '') {
+                            continue;
+                        }
+                        ?>
+                        <button
+                            type="button"
+                            class="mj-photo-slideshow__thumb<?php echo $index === 0 ? ' is-active' : ''; ?>"
+                            data-mj-photo-slideshow-item
+                            data-index="<?php echo esc_attr((string) $index); ?>"
+                            data-full="<?php echo esc_url($display); ?>"
+                            data-title="<?php echo esc_attr($titleItem); ?>"
+                            data-date="<?php echo esc_attr($dateLabel); ?>"
+                            aria-label="<?php echo esc_attr($titleItem); ?>"
+                        >
+                            <img src="<?php echo esc_url($thumb); ?>" alt="<?php echo esc_attr($titleItem); ?>" loading="lazy" decoding="async" />
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+    <?php elseif (empty($yearCountsMap) && empty($grouped)) : ?>
         <div class="mj-photo-timeline__empty"><?php echo esc_html($emptyMessage); ?></div>
     <?php else : ?>
         <div class="mj-photo-timeline__layout">
@@ -185,15 +257,17 @@ $estimatedCols = 4;
         </div>
     <?php endif; ?>
 
-    <div class="mj-photo-timeline__modal" data-mj-photo-modal hidden>
-        <div class="mj-photo-timeline__overlay" data-mj-photo-close></div>
-        <div class="mj-photo-timeline__dialog" role="dialog" aria-modal="true" aria-label="<?php esc_attr_e('Aperçu photo', 'mj-member'); ?>">
-            <button type="button" class="mj-photo-timeline__close" data-mj-photo-close aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>">×</button>
-            <button type="button" class="mj-photo-timeline__nav mj-photo-timeline__nav--prev" data-mj-photo-prev aria-label="<?php esc_attr_e('Photo précédente', 'mj-member'); ?>">‹</button>
-            <figure class="mj-photo-timeline__figure">
-                <img src="" alt="" data-mj-photo-modal-image />
-            </figure>
-            <button type="button" class="mj-photo-timeline__nav mj-photo-timeline__nav--next" data-mj-photo-next aria-label="<?php esc_attr_e('Photo suivante', 'mj-member'); ?>">›</button>
+    <?php if ($displayMode !== 'slideshow_fullscreen') : ?>
+        <div class="mj-photo-timeline__modal" data-mj-photo-modal hidden>
+            <div class="mj-photo-timeline__overlay" data-mj-photo-close></div>
+            <div class="mj-photo-timeline__dialog" role="dialog" aria-modal="true" aria-label="<?php esc_attr_e('Aperçu photo', 'mj-member'); ?>">
+                <button type="button" class="mj-photo-timeline__close" data-mj-photo-close aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>">×</button>
+                <button type="button" class="mj-photo-timeline__nav mj-photo-timeline__nav--prev" data-mj-photo-prev aria-label="<?php esc_attr_e('Photo précédente', 'mj-member'); ?>">‹</button>
+                <figure class="mj-photo-timeline__figure">
+                    <img src="" alt="" data-mj-photo-modal-image />
+                </figure>
+                <button type="button" class="mj-photo-timeline__nav mj-photo-timeline__nav--next" data-mj-photo-next aria-label="<?php esc_attr_e('Photo suivante', 'mj-member'); ?>">›</button>
+            </div>
         </div>
-    </div>
+    <?php endif; ?>
 </section>

@@ -24,6 +24,14 @@ use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
 class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     use Mj_Member_Elementor_Widget_Visibility;
 
+    /**
+     * Pre-fetched animateurs indexed by event_id.
+     * null = not yet prefetched; array = already prefetched (events without animateurs simply absent).
+     *
+     * @var array<int,list<array<string,mixed>>>|null
+     */
+    private static $animateurs_prefetch_cache = null;
+
     public function get_name() {
         return 'mj-member-events-calendar';
     }
@@ -329,6 +337,32 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'show_badge_details',
+            array(
+                'label' => __('Afficher le nom et statut des badges', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Affiche le nom du membre et son statut (payé, à payer, attente) dans les badges d\'inscription.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'open_event_page_modal',
+            array(
+                'label' => __('Ouvrir EventPage dans une modal', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'description' => __('Quand activé, le clic sur un événement ouvre la page événement dans une fenêtre modale.', 'mj-member'),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->register_visibility_controls();
@@ -398,6 +432,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     }
 
     public static function render_widget(array $settings = array(), array $options = array()) {
+        if (self::is_elementor_save_request()) {
+            // Keep Elementor save requests lightweight to prevent AJAX "response 0" failures.
+            echo '<div class="mj-member-events-calendar mj-member-events-calendar--saving" aria-hidden="true"></div>';
+            return;
+        }
+
+        // Reset per-render cache so repeated calls (e.g. in tests) don't reuse stale data.
+        self::$animateurs_prefetch_cache = null;
+
         $settings = wp_parse_args($settings, self::get_default_render_settings());
         $options = wp_parse_args(
             $options,
@@ -479,6 +522,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $hide_closure_occurrences = !isset($settings['hide_closure_occurrences']) || $settings['hide_closure_occurrences'] === 'yes';
         $show_toolbar_left = !isset($settings['show_toolbar_left']) || $settings['show_toolbar_left'] === 'yes';
         $show_toolbar_actions = !isset($settings['show_toolbar_actions']) || $settings['show_toolbar_actions'] === 'yes';
+        $open_event_page_modal = isset($settings['open_event_page_modal']) && $settings['open_event_page_modal'] === 'yes';
 
         $cover_width_settings = self::normalize_cover_width_settings($settings);
 
@@ -512,6 +556,20 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'include_past' => true,
                 )
             );
+        }
+
+        // Pre-load all animateurs in 2 queries instead of 1 per event to avoid memory exhaustion.
+        if (!empty($events)) {
+            $all_event_ids_for_prefetch = array();
+            foreach ($events as $_ev) {
+                $eid = isset($_ev['id']) ? (int) $_ev['id'] : 0;
+                if ($eid > 0) {
+                    $all_event_ids_for_prefetch[] = $eid;
+                }
+            }
+            if (!empty($all_event_ids_for_prefetch)) {
+                self::prefetch_animateurs_for_events($all_event_ids_for_prefetch);
+            }
         }
 
         $type_colors_map = method_exists('MjEvents', 'get_type_colors') ? MjEvents::get_type_colors() : array();
@@ -573,6 +631,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         // Fetch leave requests if enabled and user is coordinator/animator
         $leave_requests_data = array();
         $show_leave_requests = isset($settings['show_leave_requests']) && $settings['show_leave_requests'] === 'yes';
+        $show_badge_details = !isset($settings['show_badge_details']) || $settings['show_badge_details'] === 'yes';
 
         if ($show_leave_requests && !$is_elementor_preview && $can_edit_events && class_exists(MjLeaveRequests::class)) {
                     // Get approved leave requests + auto-approved ones (e.g., sick leave)
@@ -2131,7 +2190,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 echo '<a' . $trigger_attributes . ' href="' . esc_url($event_href) . '">';
                             }
                             $has_type_label = !empty($event_entry['type_label']);
-                            $event_badges_markup = self::build_event_badges_markup($event_entry, 'grid');
+                            $event_badges_markup = self::build_event_badges_markup($event_entry, 'grid', $show_badge_details);
                             $event_emoji = '';
                             if (isset($event_entry['emoji']) && $event_entry['emoji'] !== '') {
                                 $event_emoji = (string) $event_entry['emoji'];
@@ -2633,7 +2692,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     } elseif (!empty($mobile_event['time'])) {
                         $mobile_meta = (string) $mobile_event['time'];
                     }
-                    $mobile_badges_markup = self::build_event_badges_markup($mobile_event, 'mobile');
+                    $mobile_badges_markup = self::build_event_badges_markup($mobile_event, 'mobile', $show_badge_details);
                     if ($mobile_meta !== '') {
                         echo '<span class="mj-member-events-calendar__mobile-meta">' . esc_html($mobile_meta) . '</span>';
                     }
@@ -2723,6 +2782,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $instance_config = array(
             'preferredIndex' => $preferred_index,
             'todayMonth' => $today_month_key,
+            'openEventPageModal' => $open_event_page_modal,
         );
 
         if ($can_edit_events) {
@@ -2754,6 +2814,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             'empty_message' => __('Aucun événement à afficher pour le moment.', 'mj-member'),
             'show_leave_requests' => 'yes',
             'show_todos' => 'yes',
+            'open_event_page_modal' => '',
         );
     }
 
@@ -2832,7 +2893,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     /**
      * Build badge markup for calendar event entries.
      */
-    private static function build_event_badges_markup($event_entry, $context = 'grid') {
+    private static function build_event_badges_markup($event_entry, $context = 'grid', $show_details = true) {
         if (!is_array($event_entry)) {
             return '';
         }
@@ -2874,14 +2935,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             );
         }
 
-        if (!empty($event_entry['is_free_participation'])) {
+        if ($show_details && !empty($event_entry['is_free_participation'])) {
             $badges[] = array(
                 'label' => __('Participation libre', 'mj-member'),
                 'modifier' => 'free',
             );
         }
 
-        if (!empty($event_entry['requires_validation'])) {
+        if ($show_details && !empty($event_entry['requires_validation'])) {
             $badges[] = array(
                 'label' => __('Validation requise', 'mj-member'),
                 'modifier' => 'validation',
@@ -2928,11 +2989,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 } elseif (!empty($badge['is_paid'])) {
                     $badge_classes[] = 'mj-member-events-calendar__badge--paid';
                 } else {
+                    if (!$show_details) {
+                        // Hide unpaid registration badge when badge details are disabled.
+                        continue;
+                    }
                     $badge_classes[] = 'mj-member-events-calendar__badge--unpaid';
                 }
                 $icon_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
-                $label_html = $label !== '' ? '<span class="mj-member-events-calendar__badge-name">' . esc_html($label) . '</span>' : '';
-                $sublabel_html = $sublabel !== '' ? '<span class="mj-member-events-calendar__badge-status">' . esc_html($sublabel) . '</span>' : '';
+                $label_html = ($show_details && $label !== '') ? '<span class="mj-member-events-calendar__badge-name">' . esc_html($label) . '</span>' : '';
+                $sublabel_html = ($show_details && $sublabel !== '') ? '<span class="mj-member-events-calendar__badge-status">' . esc_html($sublabel) . '</span>' : '';
                 $badge_markup_parts[] = '<span class="' . esc_attr(implode(' ', $badge_classes)) . '">' . $icon_svg . $label_html . $sublabel_html . '</span>';
             } else {
                 $badge_markup_parts[] = '<span class="' . esc_attr(implode(' ', $badge_classes)) . '">' . esc_html($label) . '</span>';
@@ -2958,6 +3023,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             return array();
         }
 
+        // Use class-level prefetch cache when available (populated by prefetch_animateurs_for_events).
+        if (self::$animateurs_prefetch_cache !== null) {
+            return self::$animateurs_prefetch_cache[$event_id] ?? array();
+        }
+
+        // Fallback: per-event query (legacy path, no prefetch).
         static $cache = array();
         if (isset($cache[$event_id])) {
             return $cache[$event_id];
@@ -3049,6 +3120,139 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     }
 
     /**
+     * Pre-fetch animateurs for all given event IDs in 2 DB queries and populate $animateurs_prefetch_cache.
+     *
+     * This avoids N individual queries (one per event) during render_widget, which with 200 events
+     * was causing PHP memory exhaustion (512 MB limit exceeded).
+     *
+     * @param int[] $event_ids
+     */
+    private static function prefetch_animateurs_for_events(array $event_ids): void {
+        if (self::$animateurs_prefetch_cache !== null) {
+            return; // Already prefetched for this render cycle.
+        }
+
+        self::$animateurs_prefetch_cache = array();
+
+        $event_ids = array_values(array_unique(array_filter(array_map('intval', $event_ids))));
+        if (empty($event_ids) || !class_exists(MjEventAnimateurs::class)) {
+            return;
+        }
+
+        $anim_table = MjEventAnimateurs::get_table_name();
+        if (empty($anim_table)) {
+            return;
+        }
+
+        global $wpdb;
+
+        // Query 1: get all event_id → animateur_id mappings in a single round-trip.
+        $placeholders = implode(',', array_fill(0, count($event_ids), '%d'));
+        $anim_rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT event_id, animateur_id FROM {$anim_table} WHERE event_id IN ({$placeholders}) ORDER BY id ASC",
+                ...$event_ids
+            )
+        );
+
+        if (empty($anim_rows)) {
+            return;
+        }
+
+        $event_anim_map = array(); // event_id → [animateur_id, ...] in order
+        $all_anim_ids   = array(); // unique animateur IDs
+        foreach ($anim_rows as $ar) {
+            $eid = (int) $ar->event_id;
+            $aid = (int) $ar->animateur_id;
+            if ($eid > 0 && $aid > 0) {
+                $event_anim_map[$eid][] = $aid;
+                $all_anim_ids[$aid]     = $aid;
+            }
+        }
+
+        if (empty($all_anim_ids)) {
+            return;
+        }
+
+        // Query 2: fetch only the columns we need for all animateurs (avoids loading large blobs).
+        $mem_table        = MjMembers::getTableName(MjMembers::TABLE_NAME);
+        $mem_placeholders = implode(',', array_fill(0, count($all_anim_ids), '%d'));
+        $member_rows      = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, first_name, last_name, nickname, photo_id, wp_user_id, email, role FROM {$mem_table} WHERE id IN ({$mem_placeholders})",
+                ...array_values($all_anim_ids)
+            )
+        );
+
+        $members_by_id = array();
+        if (!empty($member_rows)) {
+            foreach ($member_rows as $member) {
+                $members_by_id[(int) $member->id] = $member;
+            }
+        }
+
+        // Build the items array per event (mirrors the logic in build_event_animateurs_preview).
+        foreach ($event_anim_map as $eid => $anim_ids) {
+            $items = array();
+            foreach ($anim_ids as $index => $aid) {
+                $row = isset($members_by_id[$aid]) ? $members_by_id[$aid] : null;
+                if ($row === null) {
+                    continue;
+                }
+
+                $first_name = isset($row->first_name) ? sanitize_text_field((string) $row->first_name) : '';
+                $last_name  = isset($row->last_name)  ? sanitize_text_field((string) $row->last_name)  : '';
+                $full_name  = trim($first_name . ' ' . $last_name);
+                if ($full_name === '' && isset($row->nickname)) {
+                    $full_name = sanitize_text_field((string) $row->nickname);
+                }
+                if ($full_name === '') {
+                    $full_name = sprintf(__('Membre #%d', 'mj-member'), $aid);
+                }
+                $full_name = sanitize_text_field($full_name);
+
+                $role_key   = isset($row->role) ? sanitize_key((string) $row->role) : '';
+                $role_label = '';
+                if ($role_key !== '' && class_exists(MjRoles::class)) {
+                    $role_label = sanitize_text_field(MjRoles::getRoleLabel($role_key));
+                }
+
+                $avatar_url = '';
+                if (!empty($row->photo_id) && function_exists('wp_get_attachment_image_src')) {
+                    $photo_id = (int) $row->photo_id;
+                    if ($photo_id > 0) {
+                        $photo = wp_get_attachment_image_src($photo_id, 'thumbnail');
+                        if (is_array($photo) && !empty($photo[0])) {
+                            $avatar_url = esc_url_raw($photo[0]);
+                        }
+                    }
+                }
+                if ($avatar_url === '' && !empty($row->wp_user_id) && function_exists('get_avatar_url')) {
+                    $avatar_url = esc_url_raw(get_avatar_url((int) $row->wp_user_id, array('size' => 96)));
+                }
+                if ($avatar_url === '' && !empty($row->email) && is_email($row->email) && function_exists('get_avatar_url')) {
+                    $avatar_url = esc_url_raw(get_avatar_url($row->email, array('size' => 96)));
+                }
+
+                $items[] = array(
+                    'id'         => $aid,
+                    'name'       => $full_name,
+                    'role'       => $role_key,
+                    'role_label' => $role_label,
+                    'avatar'     => $avatar_url,
+                    'initials'   => sanitize_text_field(self::build_member_initials($full_name)),
+                    'is_primary' => ($index === 0),
+                );
+
+                if (count($items) >= 6) {
+                    break;
+                }
+            }
+            self::$animateurs_prefetch_cache[$eid] = $items;
+        }
+    }
+
+    /**
      * Extract two-letter initials from a name.
      */
     private static function build_member_initials($name) {
@@ -3097,6 +3301,34 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
 
         return strtoupper($initials);
+    }
+
+    /**
+     * Detect Elementor builder save requests (admin-ajax) where heavy widget rendering
+     * can cause save failures with a generic "response 0".
+     */
+    private static function is_elementor_save_request(): bool {
+        if (!(defined('DOING_AJAX') && DOING_AJAX)) {
+            return false;
+        }
+
+        $action = isset($_REQUEST['action']) ? sanitize_key((string) $_REQUEST['action']) : '';
+        if ($action !== 'elementor_ajax') {
+            return false;
+        }
+
+        $actions = $_REQUEST['actions'] ?? null;
+        if (is_array($actions)) {
+            $encoded = wp_json_encode($actions);
+            return is_string($encoded) && strpos($encoded, 'save_builder') !== false;
+        }
+
+        $actions_payload = isset($_REQUEST['actions']) ? wp_unslash((string) $_REQUEST['actions']) : '';
+        if ($actions_payload === '') {
+            return false;
+        }
+
+        return strpos($actions_payload, 'save_builder') !== false;
     }
 
     private static function build_recurring_schedule_preview($event) {

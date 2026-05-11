@@ -78,6 +78,34 @@ class Mj_Member_Elementor_Photo_Import_Timeline_Widget extends Widget_Base
         );
 
         $this->add_control(
+            'display_mode',
+            array(
+                'label' => __('Mode d\'affichage', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'timeline',
+                'options' => array(
+                    'timeline' => __('Timeline', 'mj-member'),
+                    'slideshow_fullscreen' => __('Slideshow plein écran', 'mj-member'),
+                ),
+            )
+        );
+
+        $this->add_control(
+            'slideshow_interval_ms',
+            array(
+                'label' => __('Temps entre les images (ms)', 'mj-member'),
+                'type' => Controls_Manager::NUMBER,
+                'min' => 0,
+                'step' => 100,
+                'default' => 4000,
+                'description' => __('0 désactive le défilement automatique.', 'mj-member'),
+                'condition' => array(
+                    'display_mode' => 'slideshow_fullscreen',
+                ),
+            )
+        );
+
+        $this->add_control(
             'empty_message',
             array(
                 'label' => __('Message vide', 'mj-member'),
@@ -102,6 +130,11 @@ class Mj_Member_Elementor_Photo_Import_Timeline_Widget extends Widget_Base
         }
 
         $limit = isset($settings['limit']) ? max(1, (int) $settings['limit']) : 120;
+        $displayMode = isset($settings['display_mode']) ? (string) $settings['display_mode'] : 'timeline';
+        $slideshowIntervalMs = isset($settings['slideshow_interval_ms']) ? max(0, (int) $settings['slideshow_interval_ms']) : 4000;
+        if ($displayMode !== 'slideshow_fullscreen') {
+            $displayMode = 'timeline';
+        }
         $is_preview = $this->is_elementor_preview_mode();
 
         // Keep first paint small on large libraries to avoid heavy DOM/image decode.
@@ -113,6 +146,8 @@ class Mj_Member_Elementor_Photo_Import_Timeline_Widget extends Widget_Base
 
         if ($is_preview) {
             $items = MjNextcloudPhotoImporter::getPreviewTimelineItems();
+        } elseif ($displayMode === 'slideshow_fullscreen') {
+            $items = MjNextcloudPhotoImporter::getTimelineItems(0, 'desc', 0);
         } else {
             $yearSummary = MjNextcloudPhotoImporter::getTimelineYearSummary();
             if (!empty($yearSummary) && isset($yearSummary[0]['year'])) {
@@ -139,6 +174,8 @@ class Mj_Member_Elementor_Photo_Import_Timeline_Widget extends Widget_Base
             'year_summary' => $yearSummary,
             'initial_loaded_year' => $initialLoadedYear,
             'is_preview' => $is_preview,
+            'display_mode' => $displayMode,
+            'slideshow_interval_ms' => $slideshowIntervalMs,
         );
 
         include $template_path;
