@@ -519,6 +519,8 @@ $config_json = wp_json_encode(array(
     'urlMainTab' => $url_main_tab !== '' ? $url_main_tab : null,
     'hideSidebar' => $attendance_widget_mode,
     'hideEventTabs' => $attendance_widget_mode,
+    'fitWidgetHeight' => $attendance_widget_mode,
+    'hideMemberProfileButton' => $attendance_widget_mode,
     'regDocHeader' => wpautop(get_option('mj_regdoc_header', '')),
     'regDocFooter' => wpautop(get_option('mj_regdoc_footer', '')),
     'socialPublish' => array(
@@ -1056,6 +1058,7 @@ $config_json = wp_json_encode(array(
      id="<?php echo esc_attr($widget_id); ?>"
      data-widget-id="<?php echo esc_attr($widget_id); ?>" 
      data-mj-registration-manager 
+    style="<?php echo $attendance_widget_mode ? 'height:100%;' : ''; ?>"
      data-config="<?php echo esc_attr($config_json); ?>">
 
     <div class="mj-registration-manager__boot-loader" data-boot-loader>

@@ -339,7 +339,9 @@ final class AssetsManager
         self::registerStyle('mj-member-create-event-modal', 'css/create-event-modal.css');
         self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils', 'mj-member-create-event-modal'));
         self::registerScript('mj-member-registrations-widget', 'js/elementor/registrations-widget.js', array('mj-member-utils'));
+        self::registerScript('mj-member-event-attendance-kiosk', 'js/elementor/event-attendance-kiosk.js', array('mj-member-utils'));
         self::registerStyle('mj-member-events-calendar', 'css/events-calendar.css', array('mj-member-components', 'mj-member-event-form', 'mj-member-create-event-modal'));
+        self::registerStyle('mj-member-event-attendance-kiosk', 'css/event-attendance-kiosk.css', array('mj-member-components'));
         self::registerScript('mj-member-upcoming-events', 'js/elementor/upcoming-events.js', array('mj-member-utils'));
         self::registerScript('mj-member-hour-encode', 'js/elementor/hour-encode.js', array('mj-member-utils'));
         self::registerScript('mj-member-photo-grimlins', 'js/elementor/photo-grimlins.js', array('mj-member-utils'));
@@ -644,6 +646,12 @@ final class AssetsManager
             case 'registrations-widget':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_script('mj-member-registrations-widget');
+                break;
+
+            case 'event-attendance-kiosk':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-event-attendance-kiosk');
+                wp_enqueue_script('mj-member-event-attendance-kiosk');
                 break;
 
             case 'member-account':

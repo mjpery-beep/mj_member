@@ -9205,6 +9205,12 @@
         });
 
         var effectiveActiveTab = hideEventTabs ? 'attendance' : activeTab;
+        var fitWidgetHeight = !!(config && config.fitWidgetHeight);
+        var hideMemberProfileButton = !!(config && config.hideMemberProfileButton);
+        var regMgrRootStyle = fitWidgetHeight ? { height: '100%' } : null;
+        var regMgrMainStyle = fitWidgetHeight ? { height: '100%', minHeight: 0 } : null;
+        var regMgrContentStyle = fitWidgetHeight ? { height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' } : null;
+        var regMgrTabContentStyle = fitWidgetHeight ? { flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } : null;
 
         // Afficher un loading global au premier chargement
         if (eventsLoading && !initialEventLoaded && events.length === 0 && sidebarMode === 'events') {
@@ -9216,7 +9222,7 @@
             ]);
         }
 
-        return h('div', { class: 'mj-regmgr' }, [
+        return h('div', { class: 'mj-regmgr', style: regMgrRootStyle }, [
             h('div', { class: layoutClasses }, [
                 // Sidebar
                 !hideSidebar && h(EventsSidebar, {
@@ -9278,7 +9284,7 @@
                 }),
 
                 // Zone principale
-                h('main', { class: 'mj-regmgr__main' }, [
+                h('main', { class: 'mj-regmgr__main', style: regMgrMainStyle }, [
                     // Bouton retour mobile (événements)
                     !hideSidebar && sidebarMode === 'events' && selectedEvent && h('button', {
                         type: 'button',
@@ -9334,7 +9340,7 @@
                     ]),
 
                     // Contenu événement sélectionné
-                    sidebarMode === 'events' && selectedEvent && h('div', { class: 'mj-regmgr__content' }, [
+                    sidebarMode === 'events' && selectedEvent && h('div', { class: 'mj-regmgr__content', style: regMgrContentStyle }, [
                         editorHeadingTitle && h('div', { class: 'mj-regmgr__event-heading' }, [
                             h('div', { class: 'mj-regmgr__event-heading-main' }, [
                                 h('h2', { class: 'mj-regmgr__event-heading-title' }, editorHeadingTitle),
@@ -9364,7 +9370,7 @@
                         }),
 
                         // Contenu de l'onglet
-                        h('div', { class: 'mj-regmgr__tab-content' }, [
+                        h('div', { class: 'mj-regmgr__tab-content', style: regMgrTabContentStyle }, [
                             effectiveActiveTab === 'registrations' && h(RegistrationsList, {
                                 registrations: registrations,
                                 loading: registrationsLoading,
@@ -9378,7 +9384,7 @@
                                 onShowQR: handleShowQR,
                                 onShowNotes: handleShowNotes,
                                 onChangeOccurrences: handleChangeOccurrences,
-                                onViewMember: handleViewMemberFromRegistration,
+                                onViewMember: hideMemberProfileButton ? null : handleViewMemberFromRegistration,
                                 onDownloadDoc: (regDocState.draft || (eventDetails && eventDetails.registrationDocument)) ? handleDownloadMemberDoc : null,
                                 onSendContractToYoung: (regDocState.draft || (eventDetails && eventDetails.registrationDocument)) ? handleSendContractToYoung : null,
                                 onSendContractToGuardian: (regDocState.draft || (eventDetails && eventDetails.registrationDocument)) ? handleSendContractToGuardian : null,

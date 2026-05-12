@@ -1,0 +1,258 @@
+.mj-attkiosk {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-height: 560px;
+  color: #0f172a;
+}
+
+.mj-attkiosk__boot,
+.mj-attkiosk__error,
+.mj-attkiosk__empty,
+.mj-attkiosk__empty-days {
+  padding: 24px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+  font-weight: 600;
+}
+
+.mj-attkiosk__shell {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.mj-attkiosk__header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(248, 250, 252, 0.95);
+  backdrop-filter: blur(6px);
+  border-radius: 14px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+}
+
+.mj-attkiosk__title {
+  margin: 0 0 10px;
+  font-size: clamp(1.2rem, 1.6vw, 1.8rem);
+  font-weight: 800;
+}
+
+.mj-attkiosk__search-wrap {
+  margin-bottom: 10px;
+}
+
+.mj-attkiosk__search {
+  width: 100%;
+  border: 2px solid #cbd5e1;
+  border-radius: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  background: #fff;
+}
+
+.mj-attkiosk__days {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.mj-attkiosk__day-btn {
+  flex: 0 0 auto;
+  border: 2px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 999px;
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mj-attkiosk__day-btn.is-active {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.mj-attkiosk__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  align-content: start;
+  padding-right: 4px;
+}
+
+.mj-attkiosk__card {
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mj-attkiosk__identity {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.mj-attkiosk__avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 14px;
+  object-fit: cover;
+  border: 2px solid #bfdbfe;
+  background: #eff6ff;
+}
+
+.mj-attkiosk__avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #1d4ed8;
+}
+
+.mj-attkiosk__who {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mj-attkiosk__name {
+  margin: 0 0 8px;
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: #000 !important;
+}
+
+.mj-attkiosk__meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.mj-attkiosk__meta-grid span {
+  display: block;
+  font-size: 0.74rem;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+
+.mj-attkiosk__meta-grid strong {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mj-attkiosk__actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.mj-attkiosk__status-btn {
+  min-height: 54px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.15s ease;
+}
+
+.mj-attkiosk__status-btn:active {
+  transform: scale(0.98);
+}
+
+.mj-attkiosk__status-btn--present {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.mj-attkiosk__status-btn--present.is-present {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+.mj-attkiosk__status-btn--present.is-absent {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+.mj-attkiosk__status-btn--present.is-undefined {
+  background: #dbeafe;
+  color: #1e3a8a;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+.mj-attkiosk__status-btn--absent {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+.mj-attkiosk__status-btn[disabled] {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.mj-attkiosk--preview {
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
+}
+
+.mj-attkiosk__preview-box {
+  text-align: center;
+  padding: 18px;
+}
+
+.mj-attkiosk__preview-icon {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 980px) {
+  .mj-attkiosk {
+    min-height: 460px;
+  }
+
+  .mj-attkiosk__list {
+    grid-template-columns: 1fr;
+  }
+
+  .mj-attkiosk__meta-grid {
+    grid-template-columns: 1fr;
+  }
+}

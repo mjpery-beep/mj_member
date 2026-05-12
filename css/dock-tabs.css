@@ -27,7 +27,29 @@ body.mj-dock-tabs--has-fullscreen {
     max-height: 100vh !important;
 }
 
+body.mj-dock-tabs--has-widget {
+    overflow: auto !important;
+    height: auto !important;
+    max-height: none !important;
+}
+
+body.mj-dock-tabs--has-fullscreen {
+    overflow: hidden !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+}
+
 html.mj-dock-tabs--has-widget,
+html.mj-dock-tabs--has-fullscreen {
+    overflow: hidden !important;
+    height: 100vh !important;
+}
+
+html.mj-dock-tabs--has-widget {
+    overflow: auto !important;
+    height: auto !important;
+}
+
 html.mj-dock-tabs--has-fullscreen {
     overflow: hidden !important;
     height: 100vh !important;
@@ -82,7 +104,8 @@ body.mj-dock-tabs--has-fullscreen #site-header {
     width: 100%;
     height: 100%;
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding: clamp(28px, 4vw, 56px);
     color: #e2e8f0;
     flex: 1 1 0;
@@ -91,13 +114,13 @@ body.mj-dock-tabs--has-fullscreen #site-header {
     box-sizing: border-box;
 }
 
-/* Tous les containers Elementor à l'intérieur d'un panel : fit complet, pas d'ascenseur */
+/* Laisser le contenu interne gerer son propre layout: evite de couper des widgets complexes */
 .mj-dock-tabs__panel .e-con,
 .mj-dock-tabs__panel .e-con-full,
 .mj-dock-tabs__panel .e-child,
 .mj-dock-tabs__panel .elementor-container,
 .mj-dock-tabs__panel .elementor-element {
-    overflow: hidden !important;
+    min-height: 0 !important;
     max-width: 100% !important;
     box-sizing: border-box;
 }
@@ -109,8 +132,6 @@ body.mj-dock-tabs--has-fullscreen #site-header {
 .mj-dock-tabs__panel-content > .elementor-element {
     flex: 1 1 0 !important;
     min-height: 0 !important;
-    height: 100% !important;
-    max-height: 100% !important;
     width: 100% !important;
 }
 
