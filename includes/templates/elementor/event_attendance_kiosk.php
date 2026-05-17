@@ -47,7 +47,7 @@ $config = array(
     id="<?php echo esc_attr($widget_id); ?>"
     class="mj-attkiosk"
     data-mj-attkiosk
-    data-config="<?php echo esc_attr(wp_json_encode($config)); ?>"
+    data-config='<?php echo wp_json_encode($config); ?>'
 >
     <div class="mj-attkiosk__boot"><?php esc_html_e('Chargement du kiosque...', 'mj-member'); ?></div>
 </div>

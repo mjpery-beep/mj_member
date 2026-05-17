@@ -595,7 +595,7 @@ final class MjNextcloudPhotoImporter
     public static function getTimelineItems(int $limit = 120, string $order = 'desc', int $offset = 0): array
     {
         $manifest = self::loadManifest();
-        $items = array_values($manifest['items']);
+        $items = self::getRenderableTimelineItems($manifest);
 
         usort($items, static function (array $left, array $right): int {
             $leftTs = isset($left['taken_at_ts']) ? (int) $left['taken_at_ts'] : 0;
@@ -624,7 +624,7 @@ final class MjNextcloudPhotoImporter
     public static function getTimelineYearSummary(): array
     {
         $manifest = self::loadManifest();
-        $items = isset($manifest['items']) && is_array($manifest['items']) ? array_values($manifest['items']) : array();
+        $items = self::getRenderableTimelineItems($manifest);
 
         $yearCounts = array();
         foreach ($items as $item) {
@@ -676,7 +676,7 @@ final class MjNextcloudPhotoImporter
         }
 
         $manifest = self::loadManifest();
-        $items = isset($manifest['items']) && is_array($manifest['items']) ? array_values($manifest['items']) : array();
+        $items = self::getRenderableTimelineItems($manifest);
 
         $filtered = array_values(array_filter($items, static function ($item) use ($year): bool {
             if (!is_array($item)) {
@@ -2758,6 +2758,86 @@ final class MjNextcloudPhotoImporter
         return Config::path() . 'data/photo-import/manifest.json';
     }
 
+    /**
+     * @param array<string,mixed> $manifest
+     * @return array<int,array<string,mixed>>
+     */
+    private static function getRenderableTimelineItems(array $manifest): array
+    {
+        $rawItems = isset($manifest['items']) && is_array($manifest['items']) ? array_values($manifest['items']) : array();
+        $items = array();
+
+        foreach ($rawItems as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $normalized = self::normalizeTimelineItemMedia($item);
+            if ($normalized === null) {
+                continue;
+            }
+
+            $items[] = $normalized;
+        }
+
+        return $items;
+    }
+
+    /**
+     * @param array<string,mixed> $item
+     * @return array<string,mixed>|null
+     */
+    private static function normalizeTimelineItemMedia(array $item): ?array
+    {
+        $thumbUrl = isset($item['thumb_url']) ? (string) $item['thumb_url'] : '';
+        $displayUrl = isset($item['display_url']) ? (string) $item['display_url'] : '';
+
+        $thumbUsable = self::isTimelineAssetUrlUsable($thumbUrl);
+        $displayUsable = self::isTimelineAssetUrlUsable($displayUrl);
+
+        if (!$displayUsable && $thumbUsable) {
+            $displayUrl = $thumbUrl;
+            $displayUsable = true;
+        }
+
+        if (!$thumbUsable && $displayUsable) {
+            $thumbUrl = $displayUrl;
+            $thumbUsable = true;
+        }
+
+        if (!$thumbUsable || !$displayUsable) {
+            return null;
+        }
+
+        $item['thumb_url'] = $thumbUrl;
+        $item['display_url'] = $displayUrl;
+
+        return $item;
+    }
+
+    private static function isTimelineAssetUrlUsable(string $url): bool
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return false;
+        }
+
+        $baseUrl = rtrim((string) Config::url(), '/') . '/';
+        $localPrefix = $baseUrl . 'data/photo-import/';
+
+        if (strpos($url, $localPrefix) === 0) {
+            $relativePath = ltrim(substr($url, strlen($baseUrl)), '/');
+            if ($relativePath === '') {
+                return false;
+            }
+
+            $absolutePath = Config::path() . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+            return is_file($absolutePath) && filesize($absolutePath) > 0;
+        }
+
+        return true;
+    }
+
     private static function loadManifest(): array
     {
         $path = self::getManifestPath();
@@ -2881,5 +2961,59 @@ final class MjNextcloudPhotoImporter
         }
 
         return $map;
+    }
+
+    /**
+     * Deletes all imported photos and resets the photo import system
+     * 
+     * @return true|WP_Error
+     */
+    public static function deleteAllImportedPhotos()
+    {
+        try {
+            // Get the manifest to know which files to delete
+            $manifest = self::loadManifest();
+            
+            // Get the data directory
+            $baseDir = Config::path() . 'data/photo-import/';
+            
+            // Remove all files and directories in photo-import folder
+            if (is_dir($baseDir)) {
+                $files = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($baseDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+                    \RecursiveIteratorIterator::CHILD_FIRST
+                );
+                
+                foreach ($files as $fileinfo) {
+                    $path = $fileinfo->getRealPath();
+                    if (!$path) {
+                        continue;
+                    }
+                    
+                    if ($fileinfo->isDir()) {
+                        @rmdir($path);
+                    } else {
+                        @unlink($path);
+                    }
+                }
+            }
+            
+            // Save empty manifest
+            $emptyManifest = array(
+                'updated_at' => time(),
+                'items' => array(),
+            );
+            self::saveManifest($emptyManifest);
+            
+            // Clear runtime state
+            delete_option('mj_member_photo_import_runtime_state');
+            
+            return true;
+        } catch (\Exception $e) {
+            return new \WP_Error(
+                'mj_member_photo_import_delete_failed',
+                sprintf(__('Impossible de supprimer les photos importées : %s', 'mj-member'), $e->getMessage())
+            );
+        }
     }
 }

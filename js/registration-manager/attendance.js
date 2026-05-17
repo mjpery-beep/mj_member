@@ -348,6 +348,11 @@
                             member.roleLabel,
                             member.age !== null && ' • ' + member.age + ' ans',
                         ]),
+                        registration.participationCount !== undefined && typeof registration.participationCount === 'number' && h('span', { class: 'mj-att-member__meta mj-att-member__participation-count', title: 'Nombre de participations' }, [
+                            '📌 ',
+                            registration.participationCount,
+                            ' participation' + (registration.participationCount !== 1 ? 's' : ''),
+                        ]),
                         contactPhone && h('a', {
                             class: 'mj-att-member__phone',
                             href: 'tel:' + contactPhone.replace(/\s+/g, ''),

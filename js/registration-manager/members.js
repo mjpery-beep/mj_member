@@ -5948,6 +5948,10 @@
                                         h('span', { class: 'mj-regmgr-member-activity__label' }, 'Inscrit depuis'),
                                         h('span', { class: 'mj-regmgr-member-activity__value' }, formatDate(member.dateInscription)),
                                     ]),
+                                    h('div', { class: 'mj-regmgr-member-activity__item' }, [
+                                        h('span', { class: 'mj-regmgr-member-activity__label' }, 'Jours de présence'),
+                                        h('span', { class: 'mj-regmgr-member-activity__value' }, (typeof member.presenceDaysCount === 'number' ? member.presenceDaysCount : 0)),
+                                    ]),
                                     member.lastLoginAt && h('div', { class: 'mj-regmgr-member-activity__item' }, [
                                         h('span', { class: 'mj-regmgr-member-activity__label' }, 'Dernière connexion'),
                                         h('span', { class: 'mj-regmgr-member-activity__value' }, formatTimeAgo(member.lastLoginAt)),

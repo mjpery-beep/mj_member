@@ -624,6 +624,83 @@ if (!function_exists('mj_member_get_membership_status')) {
     }
 }
 
+if (!function_exists('mj_member_get_presence_days_count')) {
+    /**
+     * Compte les jours de présence distincts enregistrés pour un membre.
+     *
+     * @param int $member_id
+     * @return int
+     */
+    function mj_member_get_presence_days_count($member_id) {
+        $member_id = (int) $member_id;
+        if ($member_id <= 0 || !class_exists('MjEventAttendance')) {
+            return 0;
+        }
+
+        $table = MjEventAttendance::get_table_name();
+        if ($table === '') {
+            return 0;
+        }
+
+        if (function_exists('mj_member_table_exists') && !mj_member_table_exists($table)) {
+            return 0;
+        }
+
+        global $wpdb;
+
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT attendance_payload FROM {$table} WHERE member_id = %d AND attendance_payload IS NOT NULL AND attendance_payload <> ''",
+                $member_id
+            )
+        );
+
+        if (empty($rows) || !is_array($rows)) {
+            return 0;
+        }
+
+        $presence_days = array();
+
+        foreach ($rows as $row) {
+            if (!isset($row->attendance_payload) || $row->attendance_payload === '') {
+                continue;
+            }
+
+            $decoded = json_decode((string) $row->attendance_payload, true);
+            if (!is_array($decoded)) {
+                continue;
+            }
+
+            $occurrences = array();
+            if (isset($decoded['occurrences']) && is_array($decoded['occurrences'])) {
+                $occurrences = $decoded['occurrences'];
+            } else {
+                $occurrences = $decoded;
+            }
+
+            foreach ($occurrences as $occurrence => $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+
+                $status = isset($entry['status']) ? MjEventAttendance::normalize_status((string) $entry['status']) : '';
+                if ($status !== MjEventAttendance::STATUS_PRESENT) {
+                    continue;
+                }
+
+                $normalized_occurrence = MjEventAttendance::normalize_occurrence($occurrence);
+                if ($normalized_occurrence === '') {
+                    continue;
+                }
+
+                $presence_days[substr($normalized_occurrence, 0, 10)] = true;
+            }
+        }
+
+        return count($presence_days);
+    }
+}
+
 if (!function_exists('mj_member_get_member_registrations')) {
     function mj_member_get_member_registrations($member_id, $args = array()) {
         $member_id = (int) $member_id;

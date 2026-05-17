@@ -18,6 +18,7 @@ final class PhotoImportController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_member_photo_import_logs', [$this, 'memberPhotoImportLogs']);
         add_action('wp_ajax_mj_member_photo_import_progress', [$this, 'memberPhotoImportProgress']);
         add_action('wp_ajax_mj_member_photo_import_start', [$this, 'memberPhotoImportStart']);
+        add_action('wp_ajax_mj_member_photo_import_reset', [$this, 'memberPhotoImportReset']);
         add_action('wp_ajax_mj_member_photo_import_worker', [$this, 'memberPhotoImportWorker']);
         add_action('wp_ajax_nopriv_mj_member_photo_import_worker', [$this, 'memberPhotoImportWorker']);
     }
@@ -278,5 +279,23 @@ final class PhotoImportController implements AjaxHandlerInterface
     fclose($handle);
 
     return array_reverse($lines);
+    }
+
+    public function memberPhotoImportReset(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+        }
+
+        check_ajax_referer('mj_member_photo_import_admin', 'nonce');
+
+        $result = MjNextcloudPhotoImporter::deleteAllImportedPhotos();
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+        }
+
+        wp_send_json_success(array(
+            'message' => __('Toutes les photos importées ont été supprimées.', 'mj-member'),
+        ));
     }
 }

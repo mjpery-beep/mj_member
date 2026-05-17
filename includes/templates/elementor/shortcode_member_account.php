@@ -534,6 +534,21 @@ if (!function_exists('mj_member_render_account_component')) {
             }
         }
 
+        $presence_days = 0;
+        if ($is_preview) {
+            $presence_days = 12;
+        } elseif (function_exists('mj_member_get_presence_days_count')) {
+            $presence_days = mj_member_get_presence_days_count((int) $member->id);
+        }
+
+        $presence_days_label = sprintf(
+            _n('%s jour de présence', '%s jours de présence', $presence_days, 'mj-member'),
+            number_format_i18n($presence_days)
+        );
+        $presence_days_hint = $presence_days > 0
+            ? __('Jours où votre présence a été enregistrée.', 'mj-member')
+            : __('Aucune présence enregistrée pour le moment.', 'mj-member');
+
         $form_values = array(
             'first_name' => isset($member->first_name) ? sanitize_text_field((string) $member->first_name) : '',
             'last_name' => isset($member->last_name) ? sanitize_text_field((string) $member->last_name) : '',
@@ -965,6 +980,14 @@ if (!function_exists('mj_member_render_account_component')) {
                             </span>
                         <?php endif; ?>
                     </header>
+
+                    <div class="mj-account-card__stats">
+                        <article class="mj-account-stat mj-account-stat--presence">
+                            <span class="mj-account-stat__label"><?php esc_html_e('Présences', 'mj-member'); ?></span>
+                            <strong class="mj-account-stat__value"><?php echo esc_html($presence_days_label); ?></strong>
+                            <span class="mj-account-stat__hint"><?php echo esc_html($presence_days_hint); ?></span>
+                        </article>
+                    </div>
 
                     <?php if (!empty($errors)) : ?>
                         <div class="mj-notice mj-notice--error">
@@ -2078,6 +2101,45 @@ if (function_exists('add_shortcode') && function_exists('mj_member_render_accoun
     margin: 8px 0 0;
     color: var(--mj-account-muted);
     line-height: 1.5;
+}
+
+.mj-account-card__stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.mj-account-stat {
+    border-radius: 22px;
+    padding: 20px 22px;
+    border: 1px solid rgba(47, 82, 143, 0.12);
+    background: linear-gradient(135deg, rgba(47, 82, 143, 0.08), rgba(255, 255, 255, 0.96));
+}
+
+.mj-account-stat__label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--mj-account-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.mj-account-stat__value {
+    display: block;
+    color: #111827;
+    font-size: 1.7rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.mj-account-stat__hint {
+    display: block;
+    margin-top: 8px;
+    color: var(--mj-account-muted);
+    line-height: 1.45;
 }
 
 .mj-account-card__badge {

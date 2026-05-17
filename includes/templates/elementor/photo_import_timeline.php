@@ -105,31 +105,45 @@ $estimatedCols = 4;
         <?php if (empty($slideshowItems)) : ?>
             <div class="mj-photo-timeline__empty"><?php echo esc_html($emptyMessage); ?></div>
         <?php else : ?>
+            <?php $firstBgUrl = esc_url((string) $slideshowItems[0]['display_url']); ?>
+            <div class="mj-photo-slideshow__bg-layer is-active" data-mj-slideshow-bg-a aria-hidden="true" style="background-image:url('<?php echo $firstBgUrl; ?>')"></div>
+            <div class="mj-photo-slideshow__bg-layer" data-mj-slideshow-bg-b aria-hidden="true"></div>
+
             <div class="mj-photo-slideshow" data-mj-photo-slideshow>
-                <figure class="mj-photo-slideshow__stage">
-                    <img
-                        src="<?php echo esc_url((string) $slideshowItems[0]['display_url']); ?>"
-                        alt="<?php echo esc_attr((string) ($slideshowItems[0]['title'] ?? $slideshowItems[0]['source_name'] ?? __('Photo importée', 'mj-member'))); ?>"
-                        data-mj-photo-slideshow-image
-                    />
-                    <figcaption class="mj-photo-slideshow__caption" data-mj-photo-slideshow-caption>
-                        <?php
-                        $initialTitle = (string) ($slideshowItems[0]['title'] ?? $slideshowItems[0]['source_name'] ?? __('Photo importée', 'mj-member'));
-                        $initialDate = (string) ($slideshowItems[0]['taken_at_label'] ?? '');
-                        echo esc_html($initialTitle . ($initialDate !== '' ? ' - ' . $initialDate : ''));
-                        ?>
-                    </figcaption>
-                </figure>
+                <div class="mj-photo-slideshow__drag-surface" data-mj-slideshow-frame>
+                    <div class="mj-photo-slideshow__drag-hint" data-mj-slideshow-drag-hint aria-hidden="true">
+                        <span class="mj-photo-slideshow__drag-hint-arrow mj-photo-slideshow__drag-hint-arrow--left">‹</span>
+                        <span class="mj-photo-slideshow__drag-hint-label"><?php esc_html_e('Glisser pour naviguer', 'mj-member'); ?></span>
+                        <span class="mj-photo-slideshow__drag-hint-arrow mj-photo-slideshow__drag-hint-arrow--right">›</span>
+                    </div>
+                </div>
+
+                <p class="mj-photo-slideshow__caption" data-mj-photo-slideshow-caption>
+                    <?php
+                    $initialTitle = (string) ($slideshowItems[0]['title'] ?? $slideshowItems[0]['source_name'] ?? __('Photo importée', 'mj-member'));
+                    $initialDate  = (string) ($slideshowItems[0]['taken_at_label'] ?? '');
+                    echo esc_html($initialTitle . ($initialDate !== '' ? ' - ' . $initialDate : ''));
+                    ?>
+                </p>
 
                 <div class="mj-photo-slideshow__controls">
-                    <button type="button" class="mj-photo-slideshow__button" data-mj-photo-slideshow-prev>
-                        <?php esc_html_e('Précédente', 'mj-member'); ?>
+                    <button type="button" class="mj-photo-slideshow__btn mj-photo-slideshow__btn--prev" data-mj-photo-slideshow-prev aria-label="<?php esc_attr_e('Précédente', 'mj-member'); ?>">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
                     </button>
-                    <span class="mj-photo-slideshow__counter" data-mj-photo-slideshow-counter>
-                        1 / <?php echo esc_html((string) count($slideshowItems)); ?>
-                    </span>
-                    <button type="button" class="mj-photo-slideshow__button" data-mj-photo-slideshow-next>
-                        <?php esc_html_e('Suivante', 'mj-member'); ?>
+                    <div class="mj-photo-slideshow__center-controls">
+                        <button type="button" class="mj-photo-slideshow__btn mj-photo-slideshow__btn--play" data-mj-photo-slideshow-play aria-label="<?php esc_attr_e('Lecture', 'mj-member'); ?>" aria-pressed="true">
+                            <svg class="mj-photo-slideshow__icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 3 20 12 6 21"/></svg>
+                            <svg class="mj-photo-slideshow__icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                        </button>
+                        <button type="button" class="mj-photo-slideshow__btn mj-photo-slideshow__btn--random" data-mj-photo-slideshow-random aria-label="<?php esc_attr_e('Aléatoire', 'mj-member'); ?>" aria-pressed="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                        </button>
+                        <span class="mj-photo-slideshow__counter" data-mj-photo-slideshow-counter>
+                            1 / <?php echo esc_html((string) count($slideshowItems)); ?>
+                        </span>
+                    </div>
+                    <button type="button" class="mj-photo-slideshow__btn mj-photo-slideshow__btn--next" data-mj-photo-slideshow-next aria-label="<?php esc_attr_e('Suivante', 'mj-member'); ?>">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
                     </button>
                 </div>
 

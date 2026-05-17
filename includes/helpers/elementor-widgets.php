@@ -6,6 +6,60 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+if (!function_exists('mj_member_get_elementor_widget_custom_titles')) {
+    /**
+     * Return custom widget titles saved from plugin settings.
+     *
+     * @return array<string, string>
+     */
+    function mj_member_get_elementor_widget_custom_titles() {
+        $saved_titles = get_option('mj_member_widget_titles', array());
+        if (!is_array($saved_titles)) {
+            return array();
+        }
+
+        $normalized = array();
+        foreach ($saved_titles as $slug => $title) {
+            $safe_slug = sanitize_key((string) $slug);
+            if ($safe_slug === '') {
+                continue;
+            }
+
+            $safe_title = sanitize_text_field((string) $title);
+            if ($safe_title === '') {
+                continue;
+            }
+
+            $normalized[$safe_slug] = $safe_title;
+        }
+
+        return $normalized;
+    }
+}
+
+if (!function_exists('mj_member_get_elementor_widget_custom_title')) {
+    /**
+     * Return the custom title for a widget slug when available.
+     *
+     * @param string $widget_slug
+     * @param string $fallback_title
+     * @return string
+     */
+    function mj_member_get_elementor_widget_custom_title($widget_slug, $fallback_title = '') {
+        $slug = sanitize_key((string) $widget_slug);
+        if ($slug === '') {
+            return (string) $fallback_title;
+        }
+
+        $titles = mj_member_get_elementor_widget_custom_titles();
+        if (isset($titles[$slug]) && $titles[$slug] !== '') {
+            return $titles[$slug];
+        }
+
+        return (string) $fallback_title;
+    }
+}
+
 if (!function_exists('mj_member_get_elementor_widgets_catalog')) {
     /**
      * Build metadata for all Elementor widgets shipped with the plugin.
@@ -66,6 +120,10 @@ if (!function_exists('mj_member_get_elementor_widgets_catalog')) {
 
                     if (method_exists($instance, 'get_name')) {
                         $record['slug'] = (string) $instance->get_name();
+                    }
+
+                    if (!empty($record['slug'])) {
+                        $record['title'] = mj_member_get_elementor_widget_custom_title($record['slug'], (string) $record['title']);
                     }
 
                     if (method_exists($instance, 'get_categories')) {

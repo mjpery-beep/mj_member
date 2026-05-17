@@ -331,9 +331,42 @@
         });
     }
 
+    function resetPhotos() {
+        var config = ensureConfig();
+        if (!config) {
+            return;
+        }
+
+        if (!confirm('Êtes-vous sûr de vouloir supprimer TOUTES les photos importées ? Cette action est irréversible.')) {
+            return;
+        }
+
+        var ajaxUrl = getAjaxUrl(config);
+
+        setStatus('Suppression des photos importées...', 'info');
+
+        $.post(ajaxUrl, {
+            action: 'mj_member_photo_import_reset',
+            nonce: config.nonce
+        }).done(function (response) {
+            if (!response || !response.success) {
+                var errorMessage = response && response.data && response.data.message ? response.data.message : 'Suppression impossible.';
+                setStatus(errorMessage, 'error');
+                return;
+            }
+
+            var message = response && response.data && response.data.message ? response.data.message : 'Photos supprimées.';
+            setStatus(message, 'success');
+            renderLiveState(null);
+        }).fail(function () {
+            setStatus('Erreur de communication lors de la suppression.', 'error');
+        });
+    }
+
     $(function () {
         var loadButton = document.getElementById('mj-photo-import-load-tags');
         var importButton = document.getElementById('mj-photo-import-run');
+        var resetButton = document.getElementById('mj-photo-import-reset');
         var refreshLiveButton = document.getElementById('mj-photo-import-refresh-live');
 
         if (loadButton) {
@@ -347,6 +380,13 @@
             importButton.addEventListener('click', function (event) {
                 event.preventDefault();
                 runImport();
+            });
+        }
+
+        if (resetButton) {
+            resetButton.addEventListener('click', function (event) {
+                event.preventDefault();
+                resetPhotos();
             });
         }
 

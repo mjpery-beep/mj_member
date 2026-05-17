@@ -19,6 +19,7 @@
     var Fragment = preact.Fragment;
     var useState = hooks.useState;
     var useCallback = hooks.useCallback;
+    var useMemo = hooks.useMemo;
 
     var formatDate = Utils.formatDate;
     var formatTimeAgo = Utils.formatTimeAgo;
@@ -575,19 +576,30 @@
         var eventRequiresValidation = props.eventRequiresValidation !== false;
         var onViewMember = props.onViewMember;
 
+        // Trier les registrations par participation (décroissant)
+        var sortedRegistrations = useMemo(function () {
+            var sorted = (registrations || []).slice();
+            sorted.sort(function (a, b) {
+                var countA = typeof a.participationCount === 'number' ? a.participationCount : 0;
+                var countB = typeof b.participationCount === 'number' ? b.participationCount : 0;
+                return countB - countA;
+            });
+            return sorted;
+        }, [registrations]);
+
         // Stats rapides
         var stats = {
-            total: registrations.length,
-            pending: eventRequiresValidation ? registrations.filter(function (r) { return r.status === 'en_attente'; }).length : 0,
-            confirmed: registrations.filter(function (r) {
+            total: sortedRegistrations.length,
+            pending: eventRequiresValidation ? sortedRegistrations.filter(function (r) { return r.status === 'en_attente'; }).length : 0,
+            confirmed: sortedRegistrations.filter(function (r) {
                 if (r.status === 'valide') {
                     return true;
                 }
                 return !eventRequiresValidation && r.status === 'en_attente';
             }).length,
-            cancelled: registrations.filter(function (r) { return r.status === 'annule'; }).length,
-            unpaid: eventRequiresPayment ? registrations.filter(function (r) { return r.paymentStatus === 'unpaid' && r.status !== 'annule'; }).length : 0,
-            paid: eventRequiresPayment ? registrations.filter(function (r) { return r.paymentStatus === 'paid'; }).length : 0,
+            cancelled: sortedRegistrations.filter(function (r) { return r.status === 'annule'; }).length,
+            unpaid: eventRequiresPayment ? sortedRegistrations.filter(function (r) { return r.paymentStatus === 'unpaid' && r.status !== 'annule'; }).length : 0,
+            paid: eventRequiresPayment ? sortedRegistrations.filter(function (r) { return r.paymentStatus === 'paid'; }).length : 0,
         };
 
         return h('div', { class: 'mj-regmgr-registrations' }, [
@@ -707,7 +719,7 @@
             ]),
 
             !loading && registrations.length > 0 && h('div', { class: 'mj-regmgr-registrations__list' },
-                registrations.map(function (reg) {
+                sortedRegistrations.map(function (reg) {
                     return h(RegistrationCard, {
                         key: reg.id,
                         registration: reg,

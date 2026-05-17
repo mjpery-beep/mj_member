@@ -13,7 +13,7 @@
     function postAction(config, action, payload) {
         var body = new URLSearchParams();
         body.append('action', action);
-        body.append('nonce', config.nonce || '');
+        body.append('nonce', config.nonce ? String(config.nonce) : '');
         Object.keys(payload || {}).forEach(function (key) {
             var val = payload[key];
             if (val === null || typeof val === 'undefined') {
@@ -91,17 +91,75 @@
         return rows;
     }
 
+    function extractStatusValue(value) {
+        if (!value) {
+            return '';
+        }
+
+        if (typeof value === 'string') {
+            return value;
+        }
+
+        if (typeof value === 'object' && value.status) {
+            return String(value.status);
+        }
+
+        return '';
+    }
+
+    function normalizeOccurrenceKey(value) {
+        if (!value) {
+            return '';
+        }
+
+        var raw = String(value).trim();
+        if (!raw) {
+            return '';
+        }
+
+        // Convert ISO values to the backend format key when possible.
+        var dt = new Date(raw);
+        if (!isNaN(dt.getTime())) {
+            var pad = function (n) { return String(n).padStart(2, '0'); };
+            return dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate()) + ' ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes()) + ':' + pad(dt.getSeconds());
+        }
+
+        return raw.replace('T', ' ').replace('Z', '');
+    }
+
     function resolveStatus(attendanceMap, occurrenceKey) {
         if (!attendanceMap || !occurrenceKey) {
             return '';
         }
-        if (attendanceMap[occurrenceKey]) {
-            return attendanceMap[occurrenceKey];
+
+        var candidates = [];
+        var rawKey = String(occurrenceKey);
+        var normalizedKey = normalizeOccurrenceKey(rawKey);
+
+        candidates.push(rawKey);
+        if (normalizedKey && normalizedKey !== rawKey) {
+            candidates.push(normalizedKey);
         }
-        var dayKey = occurrenceKey.slice(0, 10);
-        if (attendanceMap[dayKey]) {
-            return attendanceMap[dayKey];
+
+        if (rawKey.length >= 10) {
+            candidates.push(rawKey.slice(0, 10));
         }
+        if (normalizedKey.length >= 10) {
+            candidates.push(normalizedKey.slice(0, 10));
+        }
+
+        for (var i = 0; i < candidates.length; i += 1) {
+            var key = candidates[i];
+            if (!key || !Object.prototype.hasOwnProperty.call(attendanceMap, key)) {
+                continue;
+            }
+
+            var status = extractStatusValue(attendanceMap[key]);
+            if (status) {
+                return status;
+            }
+        }
+
         return '';
     }
 
@@ -311,7 +369,7 @@
                         return;
                     }
                     row.attendance = row.attendance || {};
-                    row.attendance[occ] = nextStatus;
+                    row.attendance[occ] = { status: nextStatus };
                 });
             }).catch(function () {
                 // No-op: leave previous status if update failed.
@@ -328,7 +386,20 @@
         try {
             config = JSON.parse(raw);
         } catch (e) {
+            console.error('Failed to parse kiosk config:', e, raw);
             config = {};
+        }
+
+        // Validate required config fields
+        if (!config.nonce) {
+            console.error('Missing nonce in kiosk config');
+            node.innerHTML = '<div style="color: red;">Erreur de configuration: nonce manquant.</div>';
+            return;
+        }
+        if (!config.ajaxUrl) {
+            console.error('Missing ajaxUrl in kiosk config');
+            node.innerHTML = '<div style="color: red;">Erreur de configuration: URL AJAX manquante.</div>';
+            return;
         }
 
         var app = {

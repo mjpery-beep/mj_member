@@ -760,6 +760,10 @@ class MjEventAttendance {
         if (!mj_member_column_exists($table_key, 'payment_recorded_by')) {
             $wpdb->query("ALTER TABLE {$table_key} ADD COLUMN payment_recorded_by bigint(20) unsigned DEFAULT NULL");
         }
+
+        if (function_exists('mj_member_index_exists') && !mj_member_index_exists($table_key, 'idx_event_member_created')) {
+            $wpdb->query("ALTER TABLE {$table_key} ADD KEY idx_event_member_created (event_id, member_id, created_at)");
+        }
     }
 }
 

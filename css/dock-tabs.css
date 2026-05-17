@@ -114,6 +114,37 @@ body.mj-dock-tabs--has-fullscreen #site-header {
     box-sizing: border-box;
 }
 
+/* Mode non fullscreen: laisser le panel actif definir sa hauteur naturellement
+   pour eviter les ascenseurs internes dans certains onglets (ex: gestionnaire). */
+.mj-dock-tabs:not(.mj-dock-tabs--fullscreen) {
+    min-height: 0;
+    height: auto;
+    overflow: visible;
+}
+
+.mj-dock-tabs:not(.mj-dock-tabs--fullscreen) .mj-dock-tabs__panels {
+    height: auto;
+}
+
+.mj-dock-tabs:not(.mj-dock-tabs--fullscreen) .mj-dock-tabs__panel {
+    position: relative;
+    inset: auto;
+    transform: none;
+    display: none;
+    overflow: visible;
+}
+
+.mj-dock-tabs:not(.mj-dock-tabs--fullscreen) .mj-dock-tabs__panel.is-active {
+    display: flex;
+}
+
+.mj-dock-tabs:not(.mj-dock-tabs--fullscreen) .mj-dock-tabs__panel-content {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    flex: 0 0 auto;
+}
+
 /* Laisser le contenu interne gerer son propre layout: evite de couper des widgets complexes */
 .mj-dock-tabs__panel .e-con,
 .mj-dock-tabs__panel .e-con-full,
@@ -525,6 +556,11 @@ body.mj-dock-tabs--has-fullscreen #site-header {
     .mj-dock-tabs {
         min-height: 85vh;
         height: 85vh;
+    }
+
+    .mj-dock-tabs:not(.mj-dock-tabs--fullscreen) {
+        min-height: 0;
+        height: auto;
     }
 
     .mj-dock-tabs__panel-content {

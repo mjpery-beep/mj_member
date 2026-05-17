@@ -307,6 +307,7 @@ if (!defined('ABSPATH')) {
                                 <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
                                     <button type="button" class="button" id="mj-photo-import-load-tags">Charger les étiquettes</button>
                                     <button type="button" class="button button-primary" id="mj-photo-import-run">Importer les photos sélectionnées</button>
+                                    <button type="button" class="button button-link-delete" id="mj-photo-import-reset" style="color:#dc2626;">Réinitialiser</button>
                                 </div>
 
                                 <label for="mj-photo-import-tags"><strong>Étiquettes Nextcloud</strong></label>
@@ -2152,6 +2153,10 @@ if (!defined('ABSPATH')) {
                     if (!is_array($disabled_widgets_option)) {
                         $disabled_widgets_option = array();
                     }
+                    $widget_custom_titles_option = get_option('mj_member_widget_titles', array());
+                    if (!is_array($widget_custom_titles_option)) {
+                        $widget_custom_titles_option = array();
+                    }
                     $widgets_catalog = array();
                     if (function_exists('mj_member_get_elementor_widgets_catalog')) {
                         $widgets_catalog = mj_member_get_elementor_widgets_catalog();
@@ -2171,11 +2176,16 @@ if (!defined('ABSPATH')) {
                     }
 
                     if (!$has_notification_list_widget) {
+                        $fallback_title = __('Liste Notifications MJ', 'mj-member');
+                        if (!empty($widget_custom_titles_option['mj-member-notification-list'])) {
+                            $fallback_title = sanitize_text_field((string) $widget_custom_titles_option['mj-member-notification-list']);
+                        }
+
                         $widgets_catalog[] = array(
                             'class' => 'Mj_Member_Elementor_Notification_List_Widget',
                             'path' => 'includes/elementor/class-mj-member-notification-list-widget.php',
                             'loaded' => true,
-                            'title' => __('Liste Notifications MJ', 'mj-member'),
+                            'title' => $fallback_title,
                             'slug' => 'mj-member-notification-list',
                             'categories' => array('mj-member'),
                             'keywords' => array('mj', 'notifications', 'liste'),
@@ -2211,6 +2221,8 @@ if (!defined('ABSPATH')) {
                                     <?php foreach ($widgets_catalog as $widget_info) :
                                         $w_slug = !empty($widget_info['slug']) ? $widget_info['slug'] : '';
                                         $w_title = !empty($widget_info['title']) ? $widget_info['title'] : $widget_info['class'];
+                                        $w_custom_title = isset($widget_custom_titles_option[$w_slug]) ? sanitize_text_field((string) $widget_custom_titles_option[$w_slug]) : '';
+                                        $w_display_title = $w_custom_title !== '' ? $w_custom_title : $w_title;
                                         $w_desc = '';
                                         if (!empty($widget_info['keywords'])) {
                                             $w_desc = implode(', ', $widget_info['keywords']);
@@ -2235,7 +2247,12 @@ if (!defined('ABSPATH')) {
                                             <?php endif; ?>
                                         </td>
                                         <td style="vertical-align:middle;">
-                                            <strong><?php echo esc_html($w_title); ?></strong>
+                                            <strong><?php echo esc_html($w_display_title); ?></strong>
+                                            <br>
+                                            <label style="display:inline-block; margin-top:6px; color:#475569; font-size:12px;">
+                                                Nom personnalisé
+                                                <input type="text" name="mj_member_widget_titles[<?php echo esc_attr($w_slug); ?>]" value="<?php echo esc_attr($w_custom_title); ?>" placeholder="<?php echo esc_attr($w_title); ?>" class="regular-text" style="margin-top:3px; max-width:320px;" />
+                                            </label>
                                             <?php if ($w_desc !== '') : ?>
                                                 <br><span style="color:#6b7280; font-size:12px;"><?php echo esc_html($w_desc); ?></span>
                                             <?php endif; ?>

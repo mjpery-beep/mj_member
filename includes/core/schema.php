@@ -6129,6 +6129,9 @@ function mj_member_upgrade_to_2_77($wpdb) {
         if (!mj_member_index_exists($registrations_table, 'idx_event_statut')) {
             $wpdb->query("ALTER TABLE `{$registrations_table}` ADD INDEX idx_event_statut (event_id, statut)");
         }
+        if (!mj_member_index_exists($registrations_table, 'idx_event_member_created')) {
+            $wpdb->query("ALTER TABLE `{$registrations_table}` ADD INDEX idx_event_member_created (event_id, member_id, created_at)");
+        }
     }
 
     $recipients_table = mj_member_get_notification_recipients_table_name();

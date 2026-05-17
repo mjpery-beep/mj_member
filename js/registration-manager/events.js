@@ -775,6 +775,7 @@
                             h('option', { value: 'last_login' }, getString(strings, 'sortByLastLogin', 'Dernière connexion')),
                             h('option', { value: 'last_activity' }, getString(strings, 'sortByLastActivity', 'Dernière activité')),
                             h('option', { value: 'level' }, getString(strings, 'sortByLevel', 'Niveau')),
+                            h('option', { value: 'participation' }, getString(strings, 'sortByParticipation', 'Participations')),
                         ]),
                     ],
             ]),

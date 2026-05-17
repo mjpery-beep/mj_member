@@ -366,6 +366,21 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'content_vertical_center',
+            array(
+                'label' => __('Centrer verticalement', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'no',
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins' => 'display: flex; align-items: center; justify-content: center; min-height: 100%;',
+                ),
+            )
+        );
+
         $this->end_controls_section();
 
         /* ── Style : Titre ── */

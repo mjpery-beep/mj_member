@@ -412,6 +412,25 @@ function mj_settings_page() {
             : array();
         update_option('mj_member_disabled_widgets', $disabled_widgets);
 
+        $widget_titles_post = isset($_POST['mj_member_widget_titles']) && is_array($_POST['mj_member_widget_titles'])
+            ? $_POST['mj_member_widget_titles']
+            : array();
+        $widget_custom_titles = array();
+        foreach ($widget_titles_post as $widget_slug => $custom_title_raw) {
+            $slug = sanitize_key((string) $widget_slug);
+            if ($slug === '') {
+                continue;
+            }
+
+            $custom_title = sanitize_text_field(wp_unslash((string) $custom_title_raw));
+            if ($custom_title === '') {
+                continue;
+            }
+
+            $widget_custom_titles[$slug] = $custom_title;
+        }
+        update_option('mj_member_widget_titles', $widget_custom_titles);
+
         // Web Push VAPID
         update_option('mj_member_vapid_public_key', $vapid_public_key);
         update_option('mj_member_vapid_private_key', $vapid_private_key);

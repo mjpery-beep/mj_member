@@ -92,6 +92,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
         add_action('wp_ajax_mj_regmgr_get_events', [$this, 'getEvents']);
         add_action('wp_ajax_mj_regmgr_get_event_details', [$this, 'getEventDetails']);
+        add_action('wp_ajax_nopriv_mj_regmgr_get_event_details', [$this, 'getEventDetails']);
         add_action('wp_ajax_mj_regmgr_get_event_photos', [$this, 'getEventPhotos']);
         add_action('wp_ajax_mj_regmgr_upload_event_photo', [$this, 'uploadEventPhoto']);
         add_action('wp_ajax_mj_regmgr_get_event_editor', [$this, 'getEventEditor']);
@@ -99,11 +100,13 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_create_event', [$this, 'createEvent']);
         add_action('wp_ajax_mj_regmgr_delete_event', [$this, 'deleteEvent']);
         add_action('wp_ajax_mj_regmgr_get_registrations', [$this, 'getRegistrations']);
+        add_action('wp_ajax_nopriv_mj_regmgr_get_registrations', [$this, 'getRegistrations']);
         add_action('wp_ajax_mj_regmgr_search_members', [$this, 'searchMembers']);
         add_action('wp_ajax_mj_regmgr_add_registration', [$this, 'addRegistration']);
         add_action('wp_ajax_mj_regmgr_update_registration', [$this, 'updateRegistration']);
         add_action('wp_ajax_mj_regmgr_delete_registration', [$this, 'deleteRegistration']);
         add_action('wp_ajax_mj_regmgr_update_attendance', [$this, 'updateAttendance']);
+        add_action('wp_ajax_nopriv_mj_regmgr_update_attendance', [$this, 'updateAttendance']);
         add_action('wp_ajax_mj_regmgr_bulk_attendance', [$this, 'bulkAttendance']);
         add_action('wp_ajax_mj_regmgr_validate_payment', [$this, 'validatePayment']);
         add_action('wp_ajax_mj_regmgr_cancel_payment', [$this, 'cancelPayment']);
@@ -236,6 +239,30 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'is_animateur' => MjRoles::isAnimateur((string) $member_role),
             'is_coordinateur' => MjRoles::isCoordinateur((string) $member_role) || current_user_can('manage_options'),
         );
+    }
+
+    /**
+     * Verify kiosk requests (allows unauthenticated usage with nonce only).
+     *
+     * @return array<string,mixed>|false
+     */
+    private function verifyKioskRequest() {
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'mj-registration-manager')) {
+            wp_send_json_error(array('message' => __('Vérification de sécurité échouée.', 'mj-member')), 403);
+            return false;
+        }
+
+        if (!is_user_logged_in()) {
+            return array(
+                'member' => null,
+                'member_id' => 0,
+                'role' => '',
+                'is_animateur' => false,
+                'is_coordinateur' => false,
+            );
+        }
+
+        return $this->verifyRequest();
     }
 
     /**
@@ -2243,7 +2270,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
      * Get single event details with occurrences
      */
     public function getEventDetails() {
-        $auth = $this->verifyRequest();
+        $auth = $this->verifyKioskRequest();
         if (!$auth) return;
 
         $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
@@ -2802,7 +2829,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
      * Get registrations for an event
      */
     public function getRegistrations() {
-        $auth = $this->verifyRequest();
+        $auth = $this->verifyKioskRequest();
         if (!$auth) return;
 
         $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
@@ -2957,6 +2984,20 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 }
             }
 
+            // Count participations (present status) for this event
+            $participation_count = 0;
+            foreach ($attendance as $occurrence_key => $occurrence_data) {
+                $status = '';
+                if (is_string($occurrence_data)) {
+                    $status = $occurrence_data;
+                } elseif (is_array($occurrence_data) && isset($occurrence_data['status'])) {
+                    $status = $occurrence_data['status'];
+                }
+                if ($status === 'present') {
+                    $participation_count++;
+                }
+            }
+
             // Get assigned occurrences
             $assigned_occurrences = array();
             if (!empty($reg->selected_occurrences)) {
@@ -3025,6 +3066,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'assignedOccurrences' => $assigned_occurrences,
                 'notesCount' => $notes_count,
                 'dynFieldsCount' => $dyn_fields_count,
+                'participationCount' => $participation_count,
                 'contractEmailStatus' => $contract_email_status,
             );
         }
@@ -3421,16 +3463,13 @@ final class RegistrationManagerController implements AjaxHandlerInterface
      * @return int|WP_Error
      */
     private function ensureAttendanceRegistration($event, $member_id) {
+        static $existing_registration_ids = array();
+
         $event_id = isset($event->id) ? (int) $event->id : 0;
         $member_id = (int) $member_id;
 
         if ($event_id <= 0 || $member_id <= 0) {
             return new WP_Error('mj_regmgr_attendance_invalid_args', __('Paramètres de présence invalides.', 'mj-member'));
-        }
-
-        $existing = MjEventRegistrations::get_existing($event_id, $member_id);
-        if ($existing && isset($existing->id)) {
-            return (int) $existing->id;
         }
 
         if (!function_exists('mj_member_get_event_registrations_table_name')) {
@@ -3440,6 +3479,25 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $table = mj_member_get_event_registrations_table_name();
         if (!$table) {
             return new WP_Error('mj_regmgr_attendance_missing_table', __('Table des inscriptions introuvable.', 'mj-member'));
+        }
+
+        $cache_key = $event_id . ':' . $member_id;
+        if (isset($existing_registration_ids[$cache_key])) {
+            return (int) $existing_registration_ids[$cache_key];
+        }
+
+        global $wpdb;
+        $existing_registration_id = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT id FROM {$table} WHERE event_id = %d AND member_id = %d ORDER BY created_at DESC LIMIT 1",
+                $event_id,
+                $member_id
+            )
+        );
+
+        if ($existing_registration_id > 0) {
+            $existing_registration_ids[$cache_key] = $existing_registration_id;
+            return $existing_registration_id;
         }
 
         $guardian_id = null;
@@ -3467,17 +3525,21 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $insert['created_at'] = $now;
         $formats[] = '%s';
 
-        global $wpdb;
         $result = $wpdb->insert($table, $insert, $formats);
         if ($result === false) {
             return new WP_Error('mj_regmgr_attendance_insert_failed', __('Impossible de créer une inscription automatique.', 'mj-member'));
         }
 
-        return (int) $wpdb->insert_id;
+        $created_registration_id = (int) $wpdb->insert_id;
+        if ($created_registration_id > 0) {
+            $existing_registration_ids[$cache_key] = $created_registration_id;
+        }
+
+        return $created_registration_id;
     }
 
     public function updateAttendance() {
-        $auth = $this->verifyRequest();
+        $auth = $this->verifyKioskRequest();
         if (!$auth) return;
 
         $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
@@ -9326,6 +9388,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'fundingSource' => $memberData->get('funding_source', ''),
             'jobDescription' => $memberData->get('job_description', ''),
             'signatureMessage' => $memberData->get('signature_message', ''),
+            'presenceDaysCount' => function_exists('mj_member_get_presence_days_count')
+                ? (int) mj_member_get_presence_days_count($member_id)
+                : 0,
         );
 
         if ($member['hasLinkedAccount']) {
