@@ -249,6 +249,20 @@ class Mj_Member_Elementor_Iframe_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'allow_preset',
+            array(
+                'label' => __('Preset de permissions', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'custom',
+                'options' => array(
+                    'custom' => __('Personnalise', 'mj-member'),
+                    'media' => __('Camera + microphone + autoplay + display-capture', 'mj-member'),
+                ),
+                'description' => __('Le preset media génère allow="camera; microphone; autoplay; display-capture".', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
             'allow_origin',
             array(
                 'label' => __('Portee des permissions', 'mj-member'),
@@ -552,6 +566,7 @@ class Mj_Member_Elementor_Iframe_Widget extends Widget_Base {
 
         $sandbox = self::sanitize_token_list(isset($settings['sandbox_tokens']) ? $settings['sandbox_tokens'] : array());
         $allow_features = self::sanitize_token_list(isset($settings['allow_features']) ? $settings['allow_features'] : array());
+        $allow_preset = isset($settings['allow_preset']) ? sanitize_text_field((string) $settings['allow_preset']) : 'custom';
         $allow_origin = isset($settings['allow_origin']) ? trim((string) $settings['allow_origin']) : '*';
         $iframe_csp = isset($settings['iframe_csp']) ? trim((string) $settings['iframe_csp']) : '';
 
@@ -592,7 +607,9 @@ class Mj_Member_Elementor_Iframe_Widget extends Widget_Base {
             $attributes['sandbox'] = implode(' ', $sandbox);
         }
 
-        if (!empty($allow_features)) {
+        if ($allow_preset === 'media') {
+            $attributes['allow'] = self::build_allow_preset_value('media');
+        } elseif (!empty($allow_features)) {
             $attributes['allow'] = self::build_allow_value($allow_features, $allow_origin);
         }
 
@@ -680,6 +697,16 @@ class Mj_Member_Elementor_Iframe_Widget extends Widget_Base {
         }
 
         return implode('; ', $rules);
+    }
+
+    private static function build_allow_preset_value($preset) {
+        $preset = sanitize_text_field((string) $preset);
+
+        if ($preset === 'media') {
+            return 'camera; microphone; autoplay; display-capture';
+        }
+
+        return '';
     }
 
     private static function append_custom_attributes(array $attributes, $raw) {

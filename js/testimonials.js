@@ -17,6 +17,7 @@
         i18n: {}
     };
     const i18n = config.i18n || {};
+    const allowFileUpload = config.allowFileUpload !== false;
 
     /**
      * Initialize testimonials widget
@@ -153,8 +154,10 @@
 
         bindEvents() {
             this.$form.on('submit', (e) => this.handleSubmit(e));
-            this.$addPhotoBtn.on('click', () => this.$photoInput.trigger('click'));
-            this.$photoInput.on('change', (e) => this.handlePhotoSelect(e));
+            if (allowFileUpload) {
+                this.$addPhotoBtn.on('click', () => this.$photoInput.trigger('click'));
+                this.$photoInput.on('change', (e) => this.handlePhotoSelect(e));
+            }
             this.$photosGrid.on('click', '.mj-testimonials__photo-remove', (e) => this.removePhoto(e));
             
             // Link preview detection on textarea input
@@ -180,6 +183,11 @@
         }
 
         handlePhotoSelect(e) {
+            if (!allowFileUpload) {
+                this.$photoInput.val('');
+                return;
+            }
+
             const files = e.target.files;
             if (!files || files.length === 0) return;
 

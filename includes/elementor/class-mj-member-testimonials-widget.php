@@ -138,6 +138,22 @@ class Mj_Member_Elementor_Testimonials_Widget extends Widget_Base
         );
 
         $this->add_control(
+            'allow_file_upload',
+            array(
+                'label' => __('Autoriser l\'upload depuis l\'ordinateur', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Désactive la sélection de fichiers locaux. Les captures photo/vidéo restent disponibles.', 'mj-member'),
+                'condition' => array(
+                    'allow_submission' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
             'allow_kiosk_submission',
             array(
                 'label' => __('Soumission sans connexion au nom de l\'utilisateur kiosk', 'mj-member'),

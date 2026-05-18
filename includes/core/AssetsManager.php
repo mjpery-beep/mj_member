@@ -495,6 +495,10 @@ final class AssetsManager
         // Team Hierarchy Widget
         self::registerStyle('mj-member-team-hierarchy', 'css/team-hierarchy.css', array('mj-member-components'));
 
+        // Player Widget
+        self::registerStyle('mj-member-player-widget', 'css/player-widget.css', array('mj-member-components'));
+        self::registerScript('mj-member-player-widget', 'js/elementor/player-widget.js', array());
+
         // Iframe Widget
         self::registerStyle('mj-member-iframe-widget', 'css/iframe-widget.css', array('mj-member-components'));
     }
@@ -851,6 +855,12 @@ final class AssetsManager
             case 'team-hierarchy':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-team-hierarchy');
+                break;
+
+            case 'player-widget':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-player-widget');
+                wp_enqueue_script('mj-member-player-widget');
                 break;
 
             default:

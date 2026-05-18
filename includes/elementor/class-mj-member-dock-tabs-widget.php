@@ -152,6 +152,27 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
             )
         );
 
+        $this->add_responsive_control(
+            'dock_icon_spacing',
+            array(
+                'label' => __('Espacement entre les icones', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array(
+                        'min' => 0,
+                        'max' => 40,
+                    ),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs' => '--mj-dock-tabs-icon-gap: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__dock' => 'gap: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs--top .mj-dock-tabs__tab + .mj-dock-tabs__tab, {{WRAPPER}} .mj-dock-tabs--bottom .mj-dock-tabs__tab + .mj-dock-tabs__tab' => 'margin-left: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs--left .mj-dock-tabs__tab + .mj-dock-tabs__tab, {{WRAPPER}} .mj-dock-tabs--right .mj-dock-tabs__tab + .mj-dock-tabs__tab' => 'margin-top: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
         $this->add_control(
             'transition_duration',
             array(

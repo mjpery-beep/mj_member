@@ -63,6 +63,12 @@
     overflow: hidden;
 }
 
+.mj-photo-grimlins--fullscreen .mj-photo-grimlins__mosaic {
+    inset: 0;
+    height: 100%;
+    grid-auto-rows: 1fr;
+}
+
 /* ── Fullscreen mode (dblclick on mosaic) ── */
 .mj-photo-grimlins:fullscreen,
 .mj-photo-grimlins:-webkit-full-screen {
@@ -119,6 +125,11 @@
     margin: 0;
     padding: 0;
     line-height: 0;
+}
+
+.mj-photo-grimlins--fullscreen .mj-photo-grimlins__tile {
+    aspect-ratio: auto;
+    min-height: 0;
 }
 
 /* Padding trick: guarantees a perfect square regardless of content */

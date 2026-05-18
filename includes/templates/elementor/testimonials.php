@@ -39,6 +39,7 @@ $show_list = !isset($settings['show_approved_list']) || $settings['show_approved
 $per_page = isset($settings['per_page']) ? (int) $settings['per_page'] : 6;
 $max_photos = isset($settings['max_photos']) ? (int) $settings['max_photos'] : 5;
 $allow_video = !isset($settings['allow_video']) || $settings['allow_video'] === 'yes';
+$allow_file_upload = !isset($settings['allow_file_upload']) || $settings['allow_file_upload'] === 'yes';
 $allow_kiosk_submission = isset($settings['allow_kiosk_submission']) && $settings['allow_kiosk_submission'] === 'yes';
 $kiosk_member_id = isset($settings['kiosk_member_id']) ? (int) $settings['kiosk_member_id'] : 0;
 $layout = isset($settings['layout']) ? sanitize_key($settings['layout']) : 'grid';
@@ -183,6 +184,7 @@ $localize_data = array(
     'perPage' => $per_page,
     'maxPhotos' => $max_photos,
     'allowVideo' => $allow_video,
+    'allowFileUpload' => $allow_file_upload,
     'maxVideoSize' => min(100 * 1024 * 1024, wp_max_upload_size()),
     'reactionTypes' => $reaction_types,
     'i18n' => array(
@@ -263,14 +265,16 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                         <div class="mj-testimonials__photos-grid" data-photos="[]"></div>
                         
                         <div class="mj-testimonials__media-actions">
-                            <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__add-photo">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                    <polyline points="21 15 16 10 5 21"></polyline>
-                                </svg>
-                                <span><?php esc_html_e('Photos / Vidéos', 'mj-member'); ?></span>
-                            </button>
+                            <?php if ($allow_file_upload): ?>
+                                <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__add-photo">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                        <polyline points="21 15 16 10 5 21"></polyline>
+                                    </svg>
+                                    <span><?php esc_html_e('Photos / Vidéos', 'mj-member'); ?></span>
+                                </button>
+                            <?php endif; ?>
                             
                             <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__capture-photo">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
