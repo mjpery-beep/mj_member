@@ -31,6 +31,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Notification_Preferences_Widget' => 'includes/elementor/class-mj-member-notification-preferences-widget.php',
             'Mj_Member_Elementor_Payment_Success_Widget' => 'includes/elementor/class-mj-member-payment-success-widget.php',
             'Mj_Member_Elementor_Dock_Tabs_Widget' => 'includes/elementor/class-mj-member-dock-tabs-widget.php',
+            'Mj_Member_Elementor_Draggable_Modal_Icon_Widget' => 'includes/elementor/class-mj-member-draggable-modal-icon-widget.php',
             'Mj_Member_Elementor_Contact_Form_Widget' => 'includes/elementor/class-mj-member-contact-form-widget.php',
             'Mj_Member_Elementor_Contact_Messages_Widget' => 'includes/elementor/class-mj-member-contact-messages-widget.php',
             'Mj_Member_Elementor_Photo_Grimlins_Widget' => 'includes/elementor/class-mj-member-photo-grimlins-widget.php',
@@ -59,6 +60,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Mileage_Widget' => 'includes/elementor/class-mj-member-mileage-widget.php',
             'Mj_Member_Elementor_Team_Hierarchy_Widget' => 'includes/elementor/class-mj-member-team-hierarchy-widget.php',
             'Mj_Member_Elementor_Header_Widget' => 'includes/elementor/class-mj-member-header-widget.php',
+            'Mj_Member_Elementor_Iframe_Widget' => 'includes/elementor/class-mj-member-iframe-widget.php',
         );
     }
 }

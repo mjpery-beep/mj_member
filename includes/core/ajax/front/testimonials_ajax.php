@@ -22,9 +22,11 @@ final class TestimonialsController implements AjaxHandlerInterface {
 
     public function registerHooks(): void {
         add_action('wp_ajax_mj_front_testimonial_submit', [$this, 'submit']);
+        add_action('wp_ajax_nopriv_mj_front_testimonial_submit', [$this, 'submit']);
         add_action('wp_ajax_mj_front_testimonial_list', [$this, 'list']);
         add_action('wp_ajax_nopriv_mj_front_testimonial_list', [$this, 'list']);
         add_action('wp_ajax_mj_front_testimonial_upload', [$this, 'upload']);
+        add_action('wp_ajax_nopriv_mj_front_testimonial_upload', [$this, 'upload']);
         add_action('wp_ajax_mj_front_testimonial_my_list', [$this, 'myList']);
         add_action('wp_ajax_mj_front_testimonial_react', [$this, 'react']);
         add_action('wp_ajax_mj_front_testimonial_unreact', [$this, 'unreact']);
@@ -50,13 +52,13 @@ final class TestimonialsController implements AjaxHandlerInterface {
     public function submit() {
         check_ajax_referer('mj-testimonial-submit', '_wpnonce');
 
-        // Get current member
-        $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
-        if (!$current_member || !isset($current_member->id)) {
+        $member_context = $this->resolveSubmissionMemberContext();
+        if (!$member_context) {
             wp_send_json_error(__('Vous devez être connecté pour soumettre un témoignage.', 'mj-member'), 403);
         }
 
-        $member_id = (int) $current_member->id;
+        $member_id = (int) $member_context['member_id'];
+        $member_record = $member_context['member'];
 
         // Parse event slug (from EventPage submissions)
         $event_slug = isset($_POST['event_slug']) ? sanitize_title(wp_unslash($_POST['event_slug'])) : '';
@@ -102,7 +104,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
         }
 
         // Check if member is trusted - auto-approve if true
-        $is_trusted = isset($current_member->is_trusted_member) && (int) $current_member->is_trusted_member === 1;
+        $is_trusted = isset($member_record->is_trusted_member) && (int) $member_record->is_trusted_member === 1;
         $initial_status = $is_trusted ? MjTestimonials::STATUS_APPROVED : MjTestimonials::STATUS_PENDING;
 
         // Create testimonial
@@ -221,9 +223,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
     public function upload() {
         check_ajax_referer('mj-testimonial-submit', '_wpnonce');
 
-        // Get current member
-        $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
-        if (!$current_member || !isset($current_member->id)) {
+        if (!$this->resolveSubmissionMemberContext()) {
             wp_send_json_error(__('Vous devez être connecté pour envoyer des fichiers.', 'mj-member'), 403);
         }
 
@@ -315,6 +315,44 @@ final class TestimonialsController implements AjaxHandlerInterface {
             'thumb' => $thumb ?: $url,
             'type' => $media_type,
         ));
+    }
+
+    /**
+     * Resolve member context for standard or kiosk submissions.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function resolveSubmissionMemberContext() {
+        $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+        if ($current_member && isset($current_member->id)) {
+            return array(
+                'member_id' => (int) $current_member->id,
+                'member' => $current_member,
+                'is_kiosk' => false,
+            );
+        }
+
+        $kiosk_member_id = isset($_POST['kiosk_member_id']) ? (int) $_POST['kiosk_member_id'] : 0;
+        $kiosk_signature = isset($_POST['kiosk_signature']) ? sanitize_text_field(wp_unslash($_POST['kiosk_signature'])) : '';
+
+        if ($kiosk_member_id <= 0 || $kiosk_signature === '') {
+            return null;
+        }
+
+        if (!wp_verify_nonce($kiosk_signature, 'mj-testimonial-kiosk-' . $kiosk_member_id)) {
+            return null;
+        }
+
+        $kiosk_member = MjMembers::getById($kiosk_member_id);
+        if (!$kiosk_member || !isset($kiosk_member->id)) {
+            return null;
+        }
+
+        return array(
+            'member_id' => (int) $kiosk_member->id,
+            'member' => $kiosk_member,
+            'is_kiosk' => true,
+        );
     }
 
     /**

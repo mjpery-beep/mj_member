@@ -185,6 +185,19 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'show_tabs',
+            array(
+                'label' => __('Afficher les onglets', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Si désactivé, seule la page d\'inscription est affichée.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
             'login_show_title',
             array(
                 'label' => __('Afficher le titre', 'mj-member'),
@@ -903,6 +916,7 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
         $args = array(
             'message_logged_out' => isset($settings['logged_out_message']) ? $settings['logged_out_message'] : '',
             'message_logged_in' => isset($settings['logged_in_message']) ? $settings['logged_in_message'] : '',
+            'show_tabs' => !isset($settings['show_tabs']) || $settings['show_tabs'] === 'yes',
             'title' => $title_settings,
             'login_title' => $login_title_settings,
             'regulation' => $regulation_data,

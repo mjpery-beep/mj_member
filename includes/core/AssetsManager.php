@@ -353,6 +353,8 @@ final class AssetsManager
         self::registerStyle('mj-member-payments-overview', 'css/payments-overview.css', array('mj-member-components'));
         self::registerScript('mj-member-dock-tabs', 'js/elementor/dock-tabs.js', array('mj-member-utils'));
         self::registerStyle('mj-member-dock-tabs', 'css/dock-tabs.css', array('mj-member-components'));
+        self::registerScript('mj-member-draggable-modal-icon', 'js/elementor/draggable-modal-icon.js', array('mj-member-utils'));
+        self::registerStyle('mj-member-draggable-modal-icon', 'css/draggable-modal-icon.css', array('mj-member-components'));
         self::registerScript('mj-member-events-manager', 'js/elementor/events-manager.js', array('mj-member-utils', 'mj-member-create-event-modal'));
         self::registerStyle('mj-member-event-form', 'css/event-form.css');
         self::registerStyle('mj-member-events-manager', 'css/events-manager.css', array('mj-member-components', 'mj-member-event-form', 'mj-member-create-event-modal'));
@@ -492,6 +494,9 @@ final class AssetsManager
 
         // Team Hierarchy Widget
         self::registerStyle('mj-member-team-hierarchy', 'css/team-hierarchy.css', array('mj-member-components'));
+
+        // Iframe Widget
+        self::registerStyle('mj-member-iframe-widget', 'css/iframe-widget.css', array('mj-member-components'));
     }
 
     /**
@@ -634,6 +639,12 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-dock-tabs');
                 break;
 
+            case 'draggable-modal-icon':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-draggable-modal-icon');
+                wp_enqueue_script('mj-member-draggable-modal-icon');
+                break;
+
             case 'events-manager':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-events-manager');
@@ -710,6 +721,11 @@ final class AssetsManager
             case 'header-widget':
                 wp_enqueue_style('mj-member-header-widget');
                 wp_enqueue_script('mj-member-header-widget');
+                break;
+
+            case 'iframe-widget':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-iframe-widget');
                 break;
 
             case 'registration-manager':
@@ -863,14 +879,25 @@ final class AssetsManager
      */
     public static function enqueueElementorEditorAssets(): void
     {
-        $path = Config::path() . 'js/elementor/dock-tabs-editor.js';
-        $version = file_exists($path) ? filemtime($path) : Config::version();
+        $dockTabsPath = Config::path() . 'js/elementor/dock-tabs-editor.js';
+        $dockTabsVersion = file_exists($dockTabsPath) ? filemtime($dockTabsPath) : Config::version();
+
+        $draggableModalPath = Config::path() . 'js/elementor/draggable-modal-icon-editor.js';
+        $draggableModalVersion = file_exists($draggableModalPath) ? filemtime($draggableModalPath) : Config::version();
 
         wp_enqueue_script(
             'mj-member-dock-tabs-editor',
             Config::url() . 'js/elementor/dock-tabs-editor.js',
             array('nested-elements'),
-            $version,
+            $dockTabsVersion,
+            true
+        );
+
+        wp_enqueue_script(
+            'mj-member-draggable-modal-icon-editor',
+            Config::url() . 'js/elementor/draggable-modal-icon-editor.js',
+            array('nested-elements'),
+            $draggableModalVersion,
             true
         );
     }

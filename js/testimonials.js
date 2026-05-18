@@ -221,6 +221,7 @@
             formData.append('_wpnonce', config.nonce);
             formData.append('type', 'photo');
             formData.append('file', file);
+            this.appendKioskAuth(formData);
 
             try {
                 const response = await $.ajax({
@@ -276,6 +277,7 @@
             formData.append('_wpnonce', config.nonce);
             formData.append('type', 'video');
             formData.append('file', file);
+            this.appendKioskAuth(formData);
 
             const self = this;
 
@@ -776,6 +778,7 @@
                     formData.append('_wpnonce', config.nonce);
                     formData.append('type', 'photo');
                     formData.append('file', blob, 'capture-' + Date.now() + '.jpg');
+                    this.appendKioskAuth(formData);
 
                     const response = await $.ajax({
                         url: config.ajaxUrl,
@@ -939,6 +942,7 @@
             formData.append('_wpnonce', config.nonce);
             formData.append('type', 'video');
             formData.append('file', this.videoBlob, 'testimonial-video.webm');
+            this.appendKioskAuth(formData);
 
             const self = this;
             return new Promise((resolve, reject) => {
@@ -1017,6 +1021,7 @@
                 formData.append('_wpnonce', config.nonce);
                 formData.append('content', content);
                 formData.append('photo_ids', JSON.stringify(this.photos.map(p => p.id)));
+                this.appendKioskAuth(formData);
                 
                 if (this.videoId) {
                     formData.append('video_id', this.videoId);
@@ -1069,6 +1074,23 @@
             this.$photoIdsInput.val('[]');
             this.removeVideo();
             this.removeLinkPreview();
+        }
+
+        appendKioskAuth(formData) {
+            if (!formData || config.isLoggedIn) {
+                return;
+            }
+
+            const kioskMemberId = parseInt(config.kioskMemberId, 10) || 0;
+            const kioskSignature = config.kioskSignature || '';
+            const kioskEnabled = !!config.kioskSubmissionEnabled;
+
+            if (!kioskEnabled || kioskMemberId <= 0 || !kioskSignature) {
+                return;
+            }
+
+            formData.append('kiosk_member_id', String(kioskMemberId));
+            formData.append('kiosk_signature', kioskSignature);
         }
 
         showStatus(message, type) {

@@ -12,6 +12,7 @@ if (!defined('ABSPATH')) {
 use Mj\Member\Classes\Crud\MjTestimonials;
 use Mj\Member\Classes\Crud\MjTestimonialReactions;
 use Mj\Member\Classes\Crud\MjTestimonialComments;
+use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Core\AssetsManager;
 
 $settings = $widget->get_settings_for_display();
@@ -38,6 +39,8 @@ $show_list = !isset($settings['show_approved_list']) || $settings['show_approved
 $per_page = isset($settings['per_page']) ? (int) $settings['per_page'] : 6;
 $max_photos = isset($settings['max_photos']) ? (int) $settings['max_photos'] : 5;
 $allow_video = !isset($settings['allow_video']) || $settings['allow_video'] === 'yes';
+$allow_kiosk_submission = isset($settings['allow_kiosk_submission']) && $settings['allow_kiosk_submission'] === 'yes';
+$kiosk_member_id = isset($settings['kiosk_member_id']) ? (int) $settings['kiosk_member_id'] : 0;
 $layout = isset($settings['layout']) ? sanitize_key($settings['layout']) : 'grid';
 $columns = isset($settings['columns']) ? (int) $settings['columns'] : 2;
 $featured_only = isset($settings['featured_only']) && $settings['featured_only'] === 'yes';
@@ -48,6 +51,21 @@ $current_member = function_exists('mj_member_get_current_member') ? mj_member_ge
 $is_logged_in = $current_member && isset($current_member->id);
 $member_id = $is_logged_in ? (int) $current_member->id : 0;
 $is_animator = false;
+$kiosk_member = null;
+$kiosk_submission_active = false;
+
+if ($allow_kiosk_submission && $kiosk_member_id > 0) {
+    $kiosk_member = MjMembers::getById($kiosk_member_id);
+    $kiosk_submission_active = (bool) $kiosk_member;
+}
+
+$effective_member_initial = ($is_logged_in && isset($current_member->first_name) && $current_member->first_name)
+    ? mb_strtoupper(mb_substr($current_member->first_name, 0, 1))
+    : (($kiosk_submission_active && isset($kiosk_member->first_name) && $kiosk_member->first_name)
+        ? mb_strtoupper(mb_substr($kiosk_member->first_name, 0, 1))
+        : 'M');
+
+$can_submit = $is_logged_in || $is_preview || $kiosk_submission_active;
 
 // Check for single post mode (URL parameter)
 $single_post_id = isset($_GET['post']) ? (int) $_GET['post'] : 0;
@@ -159,6 +177,9 @@ $localize_data = array(
     'nonce' => wp_create_nonce('mj-testimonial-submit'),
     'isLoggedIn' => $is_logged_in,
     'memberId' => $member_id,
+    'kioskSubmissionEnabled' => $kiosk_submission_active,
+    'kioskMemberId' => $kiosk_submission_active ? $kiosk_member_id : 0,
+    'kioskSignature' => $kiosk_submission_active ? wp_create_nonce('mj-testimonial-kiosk-' . $kiosk_member_id) : '',
     'perPage' => $per_page,
     'maxPhotos' => $max_photos,
     'allowVideo' => $allow_video,
@@ -204,7 +225,7 @@ $localize_data['isAnimator'] = $is_animator ?? false;
 $localize_data['hasPendingApprovals'] = $is_animator && !empty($pending_testimonials);
 $localize_data['featuredOnly'] = $featured_only;
 $localize_data['displayTemplate'] = $display_template;
-$localize_data['memberInitial'] = ($is_logged_in && isset($current_member->first_name) && $current_member->first_name) ? mb_strtoupper(mb_substr($current_member->first_name, 0, 1)) : 'M';
+$localize_data['memberInitial'] = $effective_member_initial;
 
 wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_data);
 ?>
@@ -227,7 +248,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
 
     <?php if ($allow_submission): ?>
         <div class="mj-testimonials__form-section">
-            <?php if ($is_logged_in || $is_preview): ?>
+            <?php if ($can_submit): ?>
                 <form class="mj-testimonials__form" data-widget-id="<?php echo esc_attr($widget_id); ?>">
                     <div class="mj-testimonials__form-content">
                         <textarea 

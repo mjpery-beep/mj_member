@@ -1245,6 +1245,7 @@ if (!function_exists('mj_member_render_registration_form')) {
         $args = wp_parse_args($args, array(
             'message_logged_out' => '',
             'message_logged_in' => __('Tu es déjà inscrit.', 'mj-member'),
+            'show_tabs' => true,
             'title' => array(
                 'show' => true,
                 'text' => __('Inscription MJ', 'mj-member'),
@@ -1295,6 +1296,7 @@ if (!function_exists('mj_member_render_registration_form')) {
 
         $title_settings = is_array($args['title']) ? $args['title'] : array();
         $title_settings = wp_parse_args($title_settings, $title_defaults);
+        $args['show_tabs'] = !empty($args['show_tabs']);
         $allowed_title_image_positions = array('inline-right', 'inline-left', 'above-center', 'above-right');
         $allowed_title_image_positions[] = 'above-left';
         $title_image_position = isset($title_settings['image_position']) ? (string) $title_settings['image_position'] : 'inline-right';
@@ -1505,7 +1507,7 @@ if (!function_exists('mj_member_render_registration_form')) {
 
         // Determine initial active tab from URL parameter
         $initial_tab = 'register';
-        if (isset($_GET['tab'])) {
+        if (!empty($args['show_tabs']) && isset($_GET['tab'])) {
             $tab_param = sanitize_text_field(wp_unslash($_GET['tab']));
             if (in_array($tab_param, array('register', 'login'), true)) {
                 $initial_tab = $tab_param;
@@ -1513,15 +1515,17 @@ if (!function_exists('mj_member_render_registration_form')) {
         }
         ?>
         <div class="mj-inscription-container">
-            <!-- Tabs Navigation -->
-            <div class="mj-inscription-tabs-nav">
-                <button type="button" class="mj-inscription-tab-button <?php echo $initial_tab === 'register' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="register" aria-selected="<?php echo $initial_tab === 'register' ? 'true' : 'false'; ?>">
-                    <?php esc_html_e('Devenir membre', 'mj-member'); ?>
-                </button>
-                <button type="button" class="mj-inscription-tab-button <?php echo $initial_tab === 'login' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="login" aria-selected="<?php echo $initial_tab === 'login' ? 'true' : 'false'; ?>">
-                    <?php esc_html_e('Se connecter', 'mj-member'); ?>
-                </button>
-            </div>
+            <?php if (!empty($args['show_tabs'])) : ?>
+                <!-- Tabs Navigation -->
+                <div class="mj-inscription-tabs-nav">
+                    <button type="button" class="mj-inscription-tab-button <?php echo $initial_tab === 'register' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="register" aria-selected="<?php echo $initial_tab === 'register' ? 'true' : 'false'; ?>">
+                        <?php esc_html_e('Devenir membre', 'mj-member'); ?>
+                    </button>
+                    <button type="button" class="mj-inscription-tab-button <?php echo $initial_tab === 'login' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="login" aria-selected="<?php echo $initial_tab === 'login' ? 'true' : 'false'; ?>">
+                        <?php esc_html_e('Se connecter', 'mj-member'); ?>
+                    </button>
+                </div>
+            <?php endif; ?>
             <?php if ($intro_message !== '') :
                 $message_classes = array('mj-inscription-message');
                 if (!$show_form) {
@@ -1926,6 +1930,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                 </form>
                 </div>
 
+                <?php if (!empty($args['show_tabs'])) : ?>
                 <!-- Login Tab -->
                 <div class="mj-inscription-tab-content <?php echo $initial_tab === 'login' ? 'mj-inscription-tab-content--active' : ''; ?>" data-tab-panel="login" role="tabpanel">
                     <?php if (!empty($args['login_title']['show']) && (!empty($args['login_title']['text']) || !empty($args['login_title']['image_url']))) : ?>
@@ -1987,6 +1992,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                         </div>
                     </form>
                 </div>
+                <?php endif; ?>
             <?php endif; ?>
             <?php if ($show_form && !empty($args['regulation']['enabled']) && !empty($args['regulation']['content'])) : ?>
                 <div class="mj-modal-backdrop" data-mj-regulation-backdrop hidden></div>

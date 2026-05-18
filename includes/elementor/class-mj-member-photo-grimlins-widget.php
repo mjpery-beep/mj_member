@@ -276,6 +276,19 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'camera_autostart_only',
+            array(
+                'label' => __('Caméra auto au chargement (sans upload fichier)', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'no',
+                'description' => __('Démarre automatiquement la caméra au 1er chargement et désactive l\'upload de fichier.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
             'show_avatars_section',
             array(
                 'label'        => __('Afficher "Mes avatars Grimlins"', 'mj-member'),
@@ -854,6 +867,7 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
         $mosaic_speed = isset($settings['mosaic_speed']['size']) ? (float) $settings['mosaic_speed']['size'] : 5;
         $fullscreen = !empty($settings['fullscreen']) && $settings['fullscreen'] === 'yes';
         $fullscreen_dblclick = !array_key_exists('fullscreen_dblclick', $settings) || $settings['fullscreen_dblclick'] === 'yes';
+        $camera_autostart_only = !empty($settings['camera_autostart_only']) && $settings['camera_autostart_only'] === 'yes';
 
         $mosaic_sessions = array();
         if ($mosaic_enabled) {
@@ -889,6 +903,7 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             'mosaic_speed' => $mosaic_speed,
             'fullscreen' => $fullscreen,
             'fullscreen_dblclick' => $fullscreen_dblclick,
+            'camera_autostart_only' => $camera_autostart_only,
             'cta_register_enabled' => $cta_register_enabled,
             'cta_register_label' => $cta_register_label,
             'cta_register_url' => $cta_register_url,

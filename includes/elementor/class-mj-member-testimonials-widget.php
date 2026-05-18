@@ -138,6 +138,35 @@ class Mj_Member_Elementor_Testimonials_Widget extends Widget_Base
         );
 
         $this->add_control(
+            'allow_kiosk_submission',
+            array(
+                'label' => __('Soumission sans connexion au nom de l\'utilisateur kiosk', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'condition' => array(
+                    'allow_submission' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'kiosk_member_id',
+            array(
+                'label' => __('ID utilisateur kiosk', 'mj-member'),
+                'type' => Controls_Manager::NUMBER,
+                'min' => 1,
+                'step' => 1,
+                'condition' => array(
+                    'allow_submission' => 'yes',
+                    'allow_kiosk_submission' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
             'featured_only',
             array(
                 'label' => __('Uniquement les mis en avant', 'mj-member'),

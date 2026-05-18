@@ -350,19 +350,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             )
         );
 
-        $this->add_control(
-            'open_event_page_modal',
-            array(
-                'label' => __('Ouvrir EventPage dans une modal', 'mj-member'),
-                'type' => Controls_Manager::SWITCHER,
-                'label_on' => __('Oui', 'mj-member'),
-                'label_off' => __('Non', 'mj-member'),
-                'return_value' => 'yes',
-                'default' => '',
-                'description' => __('Quand activé, le clic sur un événement ouvre la page événement dans une fenêtre modale.', 'mj-member'),
-            )
-        );
-
         $this->end_controls_section();
 
         $this->register_visibility_controls();
@@ -522,7 +509,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $hide_closure_occurrences = !isset($settings['hide_closure_occurrences']) || $settings['hide_closure_occurrences'] === 'yes';
         $show_toolbar_left = !isset($settings['show_toolbar_left']) || $settings['show_toolbar_left'] === 'yes';
         $show_toolbar_actions = !isset($settings['show_toolbar_actions']) || $settings['show_toolbar_actions'] === 'yes';
-        $open_event_page_modal = isset($settings['open_event_page_modal']) && $settings['open_event_page_modal'] === 'yes';
 
         $cover_width_settings = self::normalize_cover_width_settings($settings);
 
@@ -2782,7 +2768,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $instance_config = array(
             'preferredIndex' => $preferred_index,
             'todayMonth' => $today_month_key,
-            'openEventPageModal' => $open_event_page_modal,
         );
 
         if ($can_edit_events) {
@@ -2814,7 +2799,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             'empty_message' => __('Aucun événement à afficher pour le moment.', 'mj-member'),
             'show_leave_requests' => 'yes',
             'show_todos' => 'yes',
-            'open_event_page_modal' => '',
         );
     }
 

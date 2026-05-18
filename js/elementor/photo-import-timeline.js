@@ -415,7 +415,53 @@
             });
         }
 
+        function isEditableTarget(target) {
+            if (!target || target.nodeType !== 1) {
+                return false;
+            }
+            if (target.isContentEditable) {
+                return true;
+            }
+            var tagName = target.tagName;
+            return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+        }
+
+        function canHandleSlideshowShortcut(event) {
+            if (!event || event.defaultPrevented) {
+                return false;
+            }
+            if (event.ctrlKey || event.metaKey || event.altKey) {
+                return false;
+            }
+
+            var target = event.target;
+            if (isEditableTarget(target)) {
+                return false;
+            }
+
+            var activeElement = document.activeElement;
+            if (activeElement && isEditableTarget(activeElement)) {
+                return false;
+            }
+
+            // Restrict global shortcuts to the active/hovered slideshow instance.
+            if (activeElement && root.contains(activeElement)) {
+                return true;
+            }
+            if (target && root.contains(target)) {
+                return true;
+            }
+            if (root.matches && root.matches(':hover')) {
+                return true;
+            }
+
+            return false;
+        }
+
         document.addEventListener('keydown', function (event) {
+            if (!canHandleSlideshowShortcut(event)) {
+                return;
+            }
             if (event.key === 'ArrowLeft') { move(-1, false, 'left'); scheduleIdleState(); return; }
             if (event.key === 'ArrowRight') { move(1, false, 'right'); scheduleIdleState(); return; }
             if (event.key === ' ' || event.key === 'Spacebar') {

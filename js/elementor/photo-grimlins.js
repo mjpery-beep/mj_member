@@ -68,10 +68,12 @@
         this.config = parseConfig(root);
         this.accessScope = resolveAccessScope(this.config);
         this.accessNonce = this.config && typeof this.config.accessNonce === 'string' ? this.config.accessNonce : '';
+        this.cameraAutostartOnly = !!(this.config && this.config.cameraAutostartOnly);
         this.file = null;
         this.previewUrl = '';
         this.controller = null;
         this.isSubmitting = false;
+        this.hasAutoOpenedCamera = false;
 
         this.dom = {
             dropzone: root.querySelector('[data-photo-grimlins="dropzone"]'),
@@ -94,6 +96,8 @@
             cameraBtn: root.querySelector('[data-photo-grimlins="camera"]'),
             cameraModal: root.querySelector('[data-photo-grimlins="camera-modal"]'),
             cameraVideo: root.querySelector('[data-photo-grimlins="camera-video"]'),
+            cameraCountdown: root.querySelector('[data-photo-grimlins="camera-countdown"]'),
+            cameraCountdownValue: root.querySelector('[data-photo-grimlins="camera-countdown-value"]'),
             cameraCaptureBtn: root.querySelector('[data-photo-grimlins="camera-capture"]'),
             cameraCancelBtn: root.querySelector('[data-photo-grimlins="camera-cancel"]'),
             openYoungSearchBtn: root.querySelector('[data-photo-grimlins="open-young-search"]'),
@@ -130,6 +134,8 @@
         this.historyCount = 0;
         this.limitReached = false;
         this.isYoungSearchLoading = false;
+        this.cameraCountdownInterval = null;
+        this.isCountingDown = false;
         this.initialHistory = {
             items: globalConfig && Array.isArray(globalConfig.history) ? globalConfig.history.slice() : [],
             count: globalConfig && typeof globalConfig.historyCount === 'number' ? globalConfig.historyCount : null,
@@ -235,9 +241,31 @@
         }
         this.refreshUi();
 
+        if (this.cameraAutostartOnly && !this.cameraSupported) {
+            this.updateStatus(globalConfig.i18n ? globalConfig.i18n.cameraUnavailable : 'Caméra indisponible sur cet appareil.', 'error');
+        }
+
+        if (this.cameraAutostartOnly && !this.config.isPreview) {
+            this.scheduleInitialCameraOpen();
+        }
+
         if (this.config.isPreview && this.dom.previewBox && this.dom.previewBox.dataset.placeholder) {
             this.dom.previewBox.hidden = false;
         }
+    };
+
+    PhotoGrimlins.prototype.scheduleInitialCameraOpen = function() {
+        var self = this;
+        if (this.hasAutoOpenedCamera || this.file || this.isSubmitting || this.isApplyingAvatar) {
+            return;
+        }
+        if (this.limitReached && !this.config.isPreview) {
+            return;
+        }
+        this.hasAutoOpenedCamera = true;
+        window.setTimeout(function() {
+            self.openCamera();
+        }, 120);
     };
 
     PhotoGrimlins.prototype.hasMediaDevices = function() {
@@ -261,7 +289,7 @@
     PhotoGrimlins.prototype.bindEvents = function() {
         var self = this;
 
-        if (this.dom.fileInput) {
+        if (this.dom.fileInput && !this.cameraAutostartOnly) {
             this.dom.fileInput.addEventListener('change', function(event) {
                 var target = event.currentTarget;
                 var selected = target && target.files ? target.files[0] : null;
@@ -281,7 +309,7 @@
             });
         }
 
-        if (this.dom.dropzone) {
+        if (this.dom.dropzone && !this.cameraAutostartOnly) {
             ['dragenter', 'dragover'].forEach(function(type) {
                 self.dom.dropzone.addEventListener(type, function(event) {
                     event.preventDefault();
@@ -307,6 +335,27 @@
                 if (candidate) {
                     self.setFile(candidate);
                 }
+            });
+        } else if (this.dom.dropzone && this.cameraAutostartOnly) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(type) {
+                self.dom.dropzone.addEventListener(type, function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+            });
+
+            this.dom.dropzone.addEventListener('click', function(event) {
+                if (!event || !event.target || typeof event.target.closest !== 'function') {
+                    return;
+                }
+                if (event.target.closest('[data-photo-grimlins="camera-modal"]')) {
+                    return;
+                }
+                if (self.file || self.isSubmitting || self.isApplyingAvatar) {
+                    return;
+                }
+                event.preventDefault();
+                self.openCamera();
             });
         }
 
@@ -334,7 +383,7 @@
         if (this.dom.cameraCaptureBtn) {
             this.dom.cameraCaptureBtn.addEventListener('click', function(event) {
                 event.preventDefault();
-                self.captureFromCamera();
+                self.startCaptureCountdown();
             });
         }
 
@@ -412,7 +461,11 @@
             }
             if (target.matches('[data-photo-grimlins="choose"]') && self.dom.fileInput) {
                 event.preventDefault();
-                self.dom.fileInput.click();
+                if (self.cameraAutostartOnly) {
+                    self.openCamera();
+                } else {
+                    self.dom.fileInput.click();
+                }
             }
         });
 
@@ -1211,7 +1264,7 @@
             this.dom.cameraBtn.classList.toggle('is-hidden', !this.cameraSupported || limitReached || hasFile);
         }
         if (this.dom.fileInput) {
-            this.dom.fileInput.disabled = busy || limitReached;
+            this.dom.fileInput.disabled = busy || limitReached || this.cameraAutostartOnly;
         }
         if (this.dom.cameraInput) {
             this.dom.cameraInput.disabled = busy || limitReached;
@@ -1278,6 +1331,7 @@
         if (!this.dom.cameraModal) {
             return;
         }
+        this.clearCaptureCountdown();
         if (this.dom.dropzone) {
             this.dom.dropzone.classList.add('is-camera-active');
             this.dom.dropzone.setAttribute('aria-disabled', 'true');
@@ -1299,6 +1353,7 @@
         if (!this.dom.cameraModal) {
             return;
         }
+        this.clearCaptureCountdown();
         this.dom.cameraModal.classList.remove('is-visible');
         this.dom.cameraModal.setAttribute('aria-hidden', 'true');
         this.dom.cameraModal.hidden = true;
@@ -1637,6 +1692,8 @@
             return;
         }
 
+        this.clearCaptureCountdown();
+
         if (this.dom.cameraCaptureBtn) {
             this.dom.cameraCaptureBtn.disabled = true;
         }
@@ -1695,6 +1752,60 @@
         } else {
             finalize(dataUrlToBlob(canvas.toDataURL('image/jpeg', 0.92)));
         }
+    };
+
+    PhotoGrimlins.prototype.updateCountdownOverlay = function(remaining) {
+        if (this.dom.cameraCountdownValue) {
+            this.dom.cameraCountdownValue.textContent = String(remaining);
+        }
+        if (this.dom.cameraCountdown) {
+            this.dom.cameraCountdown.hidden = false;
+            this.dom.cameraCountdown.removeAttribute('hidden');
+        }
+    };
+
+    PhotoGrimlins.prototype.clearCaptureCountdown = function() {
+        if (this.cameraCountdownInterval) {
+            window.clearInterval(this.cameraCountdownInterval);
+            this.cameraCountdownInterval = null;
+        }
+        this.isCountingDown = false;
+        if (this.dom.cameraCountdown) {
+            this.dom.cameraCountdown.hidden = true;
+            this.dom.cameraCountdown.setAttribute('hidden', '');
+        }
+        if (this.dom.cameraCountdownValue) {
+            this.dom.cameraCountdownValue.textContent = '5';
+        }
+    };
+
+    PhotoGrimlins.prototype.startCaptureCountdown = function() {
+        var _this = this;
+        if (this.isCountingDown || !this.cameraStream || !this.dom.cameraVideo) {
+            return;
+        }
+
+        this.clearCaptureCountdown();
+        this.isCountingDown = true;
+
+        var remaining = 5;
+        if (this.dom.cameraCaptureBtn) {
+            this.dom.cameraCaptureBtn.disabled = true;
+        }
+
+        this.updateCountdownOverlay(remaining);
+        this.updateStatus('Photo dans ' + String(remaining) + '…', 'info');
+
+        this.cameraCountdownInterval = window.setInterval(function() {
+            remaining -= 1;
+            if (remaining <= 0) {
+                _this.clearCaptureCountdown();
+                _this.captureFromCamera();
+                return;
+            }
+            _this.updateCountdownOverlay(remaining);
+            _this.updateStatus('Photo dans ' + String(remaining) + '…', 'info');
+        }, 1000);
     };
 
     PhotoGrimlins.prototype.validateFile = function(file) {
