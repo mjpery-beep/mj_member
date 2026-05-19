@@ -5,6 +5,7 @@ if (!defined('ABSPATH')) {
 }
 
 use Elementor\Controls_Manager;
+use Elementor\Group_Control_Background;
 use Elementor\Group_Control_Border;
 use Elementor\Group_Control_Box_Shadow;
 use Elementor\Group_Control_Typography;
@@ -99,6 +100,19 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
                 'type' => Controls_Manager::TEXT,
                 'default' => __('Contenu', 'mj-member'),
                 'label_block' => true,
+            )
+        );
+
+        $this->add_control(
+            'show_icon_in_header',
+            array(
+                'label' => __('Afficher l\'icône dans le header', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'description' => __('Affiche l\'icône du trigger à gauche du titre dans le header de la modale.', 'mj-member'),
             )
         );
 
@@ -243,6 +257,47 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
             )
         );
 
+        $this->add_control(
+            'modal_fit_content',
+            array(
+                'label' => __('Ajuster la modal au contenu', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'description' => __('Quand active, la largeur et la hauteur suivent le contenu (dans les limites max de l\'ecran).', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'modal_resizable',
+            array(
+                'label' => __('Modale etirable', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'description' => __('Affiche une poignee native en bas a droite pour redimensionner la modal.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'close_button_type',
+            array(
+                'label' => __('Type bouton fermer', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'icon',
+                'options' => array(
+                    'icon' => __('Icone simple', 'mj-member'),
+                    'filled' => __('Bouton plein', 'mj-member'),
+                    'outline' => __('Bouton contour', 'mj-member'),
+                    'text' => __('Texte', 'mj-member'),
+                ),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->start_controls_section(
@@ -265,6 +320,18 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
                 'default' => array('size' => 56, 'unit' => 'px'),
                 'selectors' => array(
                     '{{WRAPPER}} .mj-dmiw__icon-button' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'icon_padding',
+            array(
+                'label' => __('Padding icone', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__icon-button' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
                 ),
             )
         );
@@ -338,6 +405,14 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
         );
 
         $this->add_control(
+            'modal_container_style_heading',
+            array(
+                'label' => __('Container modal', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+            )
+        );
+
+        $this->add_control(
             'modal_background_color',
             array(
                 'label' => __('Fond modal', 'mj-member'),
@@ -393,6 +468,15 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
             )
         );
 
+        $this->add_control(
+            'modal_title_style_heading',
+            array(
+                'label' => __('Titre', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
         $this->add_group_control(
             Group_Control_Typography::get_type(),
             array(
@@ -413,6 +497,264 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
             )
         );
 
+        $this->add_control(
+            'modal_header_style_heading',
+            array(
+                'label' => __('Header', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_responsive_control(
+            'modal_header_padding',
+            array(
+                'label' => __('Padding header', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%', 'em', 'rem'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-header' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'modal_header_min_height',
+            array(
+                'label' => __('Hauteur minimum header', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', 'vh'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 260),
+                    'vh' => array('min' => 0, 'max' => 40),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-header' => 'min-height: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'modal_header_gap',
+            array(
+                'label' => __('Espacement header', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 64),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-header' => 'gap: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'modal_header_align_items',
+            array(
+                'label' => __('Alignement vertical', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'flex-start' => array(
+                        'title' => __('Haut', 'mj-member'),
+                        'icon' => 'eicon-v-align-top',
+                    ),
+                    'center' => array(
+                        'title' => __('Centre', 'mj-member'),
+                        'icon' => 'eicon-v-align-middle',
+                    ),
+                    'flex-end' => array(
+                        'title' => __('Bas', 'mj-member'),
+                        'icon' => 'eicon-v-align-bottom',
+                    ),
+                ),
+                'default' => 'center',
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-header' => 'align-items: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'modal_header_justify_content',
+            array(
+                'label' => __('Alignement horizontal', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'flex-start' => array(
+                        'title' => __('Debut', 'mj-member'),
+                        'icon' => 'eicon-h-align-left',
+                    ),
+                    'space-between' => array(
+                        'title' => __('Espace', 'mj-member'),
+                        'icon' => 'eicon-h-align-stretch',
+                    ),
+                    'flex-end' => array(
+                        'title' => __('Fin', 'mj-member'),
+                        'icon' => 'eicon-h-align-right',
+                    ),
+                ),
+                'default' => 'space-between',
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-header' => 'justify-content: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'modal_header_background_heading',
+            array(
+                'label' => __('Fond header', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Background::get_type(),
+            array(
+                'name' => 'modal_header_background',
+                'types' => array('classic', 'gradient'),
+                'selector' => '{{WRAPPER}} .mj-dmiw__modal-header',
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Border::get_type(),
+            array(
+                'name' => 'modal_header_border',
+                'selector' => '{{WRAPPER}} .mj-dmiw__modal-header',
+            )
+        );
+
+        $this->add_responsive_control(
+            'modal_header_radius',
+            array(
+                'label' => __('Rayon header', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-header' => 'border-radius: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Box_Shadow::get_type(),
+            array(
+                'name' => 'modal_header_shadow',
+                'selector' => '{{WRAPPER}} .mj-dmiw__modal-header',
+            )
+        );
+
+        $this->add_control(
+            'modal_title_background_color',
+            array(
+                'label' => __('Fond titre', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-title' => 'background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'modal_title_padding',
+            array(
+                'label' => __('Padding titre', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%', 'em', 'rem'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-title' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'modal_title_radius',
+            array(
+                'label' => __('Rayon titre', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', '%'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 40),
+                    '%' => array('min' => 0, 'max' => 50),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-title' => 'border-radius: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'close_button_style_heading',
+            array(
+                'label' => __('Bouton fermer', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_responsive_control(
+            'close_button_size',
+            array(
+                'label' => __('Taille bouton fermer', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 22, 'max' => 56),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__close' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'close_button_color',
+            array(
+                'label' => __('Couleur bouton fermer', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__close' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'close_button_background_color',
+            array(
+                'label' => __('Fond bouton fermer', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__close' => 'background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Border::get_type(),
+            array(
+                'name' => 'close_button_border',
+                'selector' => '{{WRAPPER}} .mj-dmiw__close',
+            )
+        );
+
+        $this->add_responsive_control(
+            'close_button_radius',
+            array(
+                'label' => __('Rayon bouton fermer', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', '%'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 40),
+                    '%' => array('min' => 0, 'max' => 50),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__close' => 'border-radius: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->register_visibility_controls();
@@ -426,7 +768,14 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
 
         $modal_title = isset($settings['modal_title']) ? sanitize_text_field((string) $settings['modal_title']) : __('Contenu', 'mj-member');
         $close_on_overlay = !isset($settings['close_on_overlay']) || $settings['close_on_overlay'] === 'yes';
+        $modal_fit_content = isset($settings['modal_fit_content']) && $settings['modal_fit_content'] === 'yes';
+        $modal_resizable = isset($settings['modal_resizable']) && $settings['modal_resizable'] === 'yes';
+        $close_button_type = isset($settings['close_button_type']) ? sanitize_key((string) $settings['close_button_type']) : 'icon';
+        if (!in_array($close_button_type, array('icon', 'filled', 'outline', 'text'), true)) {
+            $close_button_type = 'icon';
+        }
         $icon_url = isset($settings['trigger_icon']['url']) ? esc_url((string) $settings['trigger_icon']['url']) : '';
+        $show_icon_in_header = isset($settings['show_icon_in_header']) && $settings['show_icon_in_header'] === 'yes';
         $modal_shortcode = isset($settings['modal_shortcode']) ? trim((string) $settings['modal_shortcode']) : '';
         $modal_shortcode_html = '';
         if ($modal_shortcode !== '') {
@@ -442,7 +791,14 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
 
     protected function content_template() {
         ?>
-        <div class="mj-dmiw" data-mj-draggable-modal-widget="1" data-overlay-close="0">
+        <div
+            class="mj-dmiw"
+            data-mj-draggable-modal-widget="1"
+            data-overlay-close="0"
+            data-modal-fit-content="{{ settings.modal_fit_content === 'yes' ? '1' : '0' }}"
+            data-modal-resizable="{{ settings.modal_resizable === 'yes' ? '1' : '0' }}"
+            data-close-button-type="{{ settings.close_button_type || 'icon' }}"
+        >
             <button type="button" class="mj-dmiw__icon-button" aria-label="<?php echo esc_attr__('Ouvrir la modal', 'mj-member'); ?>">
                 <span class="mj-dmiw__icon" aria-hidden="true">
                     <# if ( settings.trigger_icon && settings.trigger_icon.url ) { #>
@@ -458,7 +814,11 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
             <section class="mj-dmiw__modal" role="dialog" aria-modal="true" hidden>
                 <header class="mj-dmiw__modal-header" data-modal-drag-handle="1">
                     <h3 class="mj-dmiw__modal-title">{{ settings.modal_title || '<?php echo esc_js(__('Contenu', 'mj-member')); ?>' }}</h3>
-                    <button type="button" class="mj-dmiw__close" aria-label="<?php echo esc_attr__('Fermer', 'mj-member'); ?>">&times;</button>
+                    <# if ( ( settings.close_button_type || 'icon' ) === 'text' ) { #>
+                        <button type="button" class="mj-dmiw__close" aria-label="<?php echo esc_attr__('Fermer', 'mj-member'); ?>"><?php echo esc_html__('Fermer', 'mj-member'); ?></button>
+                    <# } else { #>
+                        <button type="button" class="mj-dmiw__close" aria-label="<?php echo esc_attr__('Fermer', 'mj-member'); ?>">&times;</button>
+                    <# } #>
                 </header>
                 <div class="mj-dmiw__modal-content">
                     <# if ( settings.modal_panels ) { #>

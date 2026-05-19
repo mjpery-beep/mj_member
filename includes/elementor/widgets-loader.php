@@ -61,6 +61,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Team_Hierarchy_Widget' => 'includes/elementor/class-mj-member-team-hierarchy-widget.php',
             'Mj_Member_Elementor_Header_Widget' => 'includes/elementor/class-mj-member-header-widget.php',
             'Mj_Member_Elementor_Player_Widget' => 'includes/elementor/class-mj-member-player-widget.php',
+            'Mj_Member_Elementor_Tactile_Keyboard_Widget' => 'includes/elementor/class-mj-member-tactile-keyboard-widget.php',
             'Mj_Member_Elementor_Iframe_Widget' => 'includes/elementor/class-mj-member-iframe-widget.php',
         );
     }

@@ -15,12 +15,18 @@ $aria_label = esc_attr__('Ouvrir la modal', 'mj-member');
 $close_label = esc_attr__('Fermer', 'mj-member');
 $children = isset($children) && is_array($children) ? $children : array();
 $modal_shortcode_html = isset($modal_shortcode_html) && is_string($modal_shortcode_html) ? $modal_shortcode_html : '';
+$modal_fit_content = !empty($modal_fit_content);
+$modal_resizable = !empty($modal_resizable);
+$close_button_type = isset($close_button_type) ? (string) $close_button_type : 'icon';
 ?>
 <div
     class="mj-dmiw"
     data-mj-draggable-modal-widget="1"
     data-widget-id="<?php echo esc_attr((string) $widget_id); ?>"
     data-overlay-close="<?php echo $close_on_overlay ? '1' : '0'; ?>"
+    data-modal-fit-content="<?php echo $modal_fit_content ? '1' : '0'; ?>"
+    data-modal-resizable="<?php echo $modal_resizable ? '1' : '0'; ?>"
+    data-close-button-type="<?php echo esc_attr($close_button_type); ?>"
 >
     <button type="button" class="mj-dmiw__icon-button" aria-label="<?php echo $aria_label; ?>">
         <span class="mj-dmiw__icon" aria-hidden="true">
@@ -45,8 +51,21 @@ $modal_shortcode_html = isset($modal_shortcode_html) && is_string($modal_shortco
         hidden
     >
         <header class="mj-dmiw__modal-header" data-modal-drag-handle="1">
+            <?php if (!empty($show_icon_in_header) && $icon_url !== '') : ?>
+                <span class="mj-dmiw__modal-header-icon"><img src="<?php echo esc_url($icon_url); ?>" alt="" loading="lazy" /></span>
+            <?php elseif (!empty($show_icon_in_header)) : ?>
+                <span class="mj-dmiw__modal-header-icon">
+                    <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                        <path d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm4.65 12.35a1 1 0 0 1-1.41 1.41L11 11.52V7a1 1 0 0 1 2 0v3.69Z"></path>
+                    </svg>
+                </span>
+            <?php endif; ?>
             <h3 id="<?php echo esc_attr($title_id); ?>" class="mj-dmiw__modal-title"><?php echo esc_html($modal_title); ?></h3>
-            <button type="button" class="mj-dmiw__close" aria-label="<?php echo $close_label; ?>">&times;</button>
+            <?php if ($close_button_type === 'text') : ?>
+                <button type="button" class="mj-dmiw__close" aria-label="<?php echo $close_label; ?>"><?php echo esc_html__('Fermer', 'mj-member'); ?></button>
+            <?php else : ?>
+                <button type="button" class="mj-dmiw__close" aria-label="<?php echo $close_label; ?>">&times;</button>
+            <?php endif; ?>
         </header>
         <div class="mj-dmiw__modal-content">
             <?php

@@ -29,22 +29,13 @@
         var overlay = root.querySelector('.mj-dmiw__overlay');
         var closeButton = root.querySelector('.mj-dmiw__close');
         var dragHandle = root.querySelector('[data-modal-drag-handle="1"]');
+        var modalResizable = root.getAttribute('data-modal-resizable') === '1';
 
         if (!iconButton || !modal || !overlay || !closeButton || !dragHandle) {
             return;
         }
 
         root.__mjDraggableModalBound = true;
-
-        var iconInitial = { left: 0, top: 0 };
-        var iconDrag = {
-            pointerId: null,
-            startX: 0,
-            startY: 0,
-            originLeft: 0,
-            originTop: 0,
-            moved: false,
-        };
 
         var modalDrag = {
             pointerId: null,
@@ -55,8 +46,6 @@
             moved: false,
         };
 
-        var clickThreshold = 6;
-        var iconMovedOnPointer = false;
         var storageKey = 'mj-member:dmiw:' + String(root.getAttribute('data-widget-id') || 'default');
 
         function readState() {
@@ -80,38 +69,27 @@
             }
         }
 
-        function saveIconPosition() {
-            var state = readState();
-            var left = parseFloat(iconButton.style.left || '0');
-            var top = parseFloat(iconButton.style.top || '0');
-            state.icon = {
-                left: isFinite(left) ? left : 0,
-                top: isFinite(top) ? top : 0,
-            };
-            writeState(state);
-        }
-
         function saveModalPosition() {
             var state = readState();
             var left = parseFloat(modal.style.left || '0');
             var top = parseFloat(modal.style.top || '0');
+            var width = parseFloat(modal.style.width || '0');
+            var height = parseFloat(modal.style.height || '0');
             state.modal = {
                 left: isFinite(left) ? left : 0,
                 top: isFinite(top) ? top : 0,
             };
+
+            if (modalResizable) {
+                state.modal.width = isFinite(width) ? width : 0;
+                state.modal.height = isFinite(height) ? height : 0;
+            }
+
             writeState(state);
         }
 
         function applySavedState() {
             var state = readState();
-
-            if (state.icon && typeof state.icon === 'object') {
-                var iconLeft = Number(state.icon.left);
-                var iconTop = Number(state.icon.top);
-                if (isFinite(iconLeft) && isFinite(iconTop)) {
-                    setIconPosition(iconLeft, iconTop);
-                }
-            }
 
             if (state.modal && typeof state.modal === 'object') {
                 var modalLeft = Number(state.modal.left);
@@ -121,40 +99,18 @@
                     modal.style.top = modalTop + 'px';
                     modal.style.transform = 'none';
                 }
+
+                if (modalResizable) {
+                    var modalWidth = Number(state.modal.width);
+                    var modalHeight = Number(state.modal.height);
+                    if (isFinite(modalWidth) && modalWidth > 0) {
+                        modal.style.width = modalWidth + 'px';
+                    }
+                    if (isFinite(modalHeight) && modalHeight > 0) {
+                        modal.style.height = modalHeight + 'px';
+                    }
+                }
             }
-        }
-
-        function ensureIconHasAbsolutePosition() {
-            var rect = iconButton.getBoundingClientRect();
-            iconButton.style.left = rect.left + 'px';
-            iconButton.style.top = rect.top + 'px';
-            iconButton.style.right = 'auto';
-            iconButton.style.bottom = 'auto';
-        }
-
-        function setIconPosition(left, top) {
-            var rect = iconButton.getBoundingClientRect();
-            var maxLeft = Math.max(0, window.innerWidth - rect.width);
-            var maxTop = Math.max(0, window.innerHeight - rect.height);
-
-            var clampedLeft = clamp(left, 0, maxLeft);
-            var clampedTop = clamp(top, 0, maxTop);
-
-            iconButton.style.left = clampedLeft + 'px';
-            iconButton.style.top = clampedTop + 'px';
-            iconButton.style.right = 'auto';
-            iconButton.style.bottom = 'auto';
-        }
-
-        function captureInitialIconPosition() {
-            ensureIconHasAbsolutePosition();
-            var rect = iconButton.getBoundingClientRect();
-            iconInitial.left = rect.left;
-            iconInitial.top = rect.top;
-        }
-
-        function resetIconPosition() {
-            setIconPosition(iconInitial.left, iconInitial.top);
         }
 
         function showModal() {
@@ -184,82 +140,7 @@
             modal.style.transform = 'none';
         }
 
-        function onIconPointerDown(event) {
-            if (event.button !== undefined && event.button !== 0) {
-                return;
-            }
-
-            ensureIconHasAbsolutePosition();
-
-            iconDrag.pointerId = event.pointerId;
-            iconDrag.startX = event.clientX;
-            iconDrag.startY = event.clientY;
-            var rect = iconButton.getBoundingClientRect();
-            iconDrag.originLeft = rect.left;
-            iconDrag.originTop = rect.top;
-            iconDrag.moved = false;
-            iconMovedOnPointer = false;
-
-            if (typeof iconButton.setPointerCapture === 'function') {
-                iconButton.setPointerCapture(event.pointerId);
-            }
-        }
-
-        function onIconPointerMove(event) {
-            if (iconDrag.pointerId !== event.pointerId) {
-                return;
-            }
-
-            var dx = event.clientX - iconDrag.startX;
-            var dy = event.clientY - iconDrag.startY;
-            var distance = Math.sqrt((dx * dx) + (dy * dy));
-
-            if (distance > clickThreshold) {
-                iconDrag.moved = true;
-                iconMovedOnPointer = true;
-            }
-
-            if (!iconDrag.moved) {
-                return;
-            }
-
-            setIconPosition(iconDrag.originLeft + dx, iconDrag.originTop + dy);
-            event.preventDefault();
-        }
-
-        function onIconPointerUp(event) {
-            if (iconDrag.pointerId !== event.pointerId) {
-                return;
-            }
-
-            if (typeof iconButton.releasePointerCapture === 'function') {
-                iconButton.releasePointerCapture(event.pointerId);
-            }
-
-            var moved = iconDrag.moved;
-            iconDrag.pointerId = null;
-            saveIconPosition();
-
-            if (!moved) {
-                showModal();
-            }
-        }
-
-        function onIconPointerCancel(event) {
-            if (iconDrag.pointerId !== event.pointerId) {
-                return;
-            }
-            iconDrag.pointerId = null;
-        }
-
         function onIconClick(event) {
-            if (iconMovedOnPointer) {
-                event.preventDefault();
-                event.stopPropagation();
-                iconMovedOnPointer = false;
-                return;
-            }
-
             if (modal.hidden) {
                 showModal();
             }
@@ -350,19 +231,17 @@
                 }
             }
 
-            var iconRect = iconButton.getBoundingClientRect();
-            setIconPosition(iconRect.left, iconRect.top);
-            saveIconPosition();
-
             if (modal.style.transform === 'none' && !modal.hidden) {
                 saveModalPosition();
             }
         }
 
-        iconButton.addEventListener('pointerdown', onIconPointerDown);
-        iconButton.addEventListener('pointermove', onIconPointerMove);
-        iconButton.addEventListener('pointerup', onIconPointerUp);
-        iconButton.addEventListener('pointercancel', onIconPointerCancel);
+        function onWindowMouseUp() {
+            if (!modal.hidden && modalResizable) {
+                saveModalPosition();
+            }
+        }
+
         iconButton.addEventListener('click', onIconClick);
 
         dragHandle.addEventListener('pointerdown', onModalPointerDown);
@@ -374,10 +253,9 @@
         overlay.addEventListener('click', onOverlayClick);
         document.addEventListener('keydown', onEscape);
         window.addEventListener('resize', onResize);
+        window.addEventListener('mouseup', onWindowMouseUp);
 
-        captureInitialIconPosition();
         applySavedState();
-        saveIconPosition();
     }
 
     function init(rootNode) {

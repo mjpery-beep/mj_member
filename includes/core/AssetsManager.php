@@ -497,7 +497,21 @@ final class AssetsManager
 
         // Player Widget
         self::registerStyle('mj-member-player-widget', 'css/player-widget.css', array('mj-member-components'));
-        self::registerScript('mj-member-player-widget', 'js/elementor/player-widget.js', array());
+        self::registerScript(
+            'mj-member-player-widget',
+            'js/elementor/player-widget.js',
+            array('mj-member-utils', 'mj-member-preact-hooks')
+        );
+
+        self::registerStyle(
+            'mj-member-player-widget',
+            'css/player-widget.css',
+            array('mj-member-components')
+        );
+
+        // Tactile Keyboard Widget
+        self::registerStyle('mj-member-tactile-keyboard', 'css/tactile-keyboard.css', array('mj-member-components'));
+        self::registerScript('mj-member-tactile-keyboard', 'js/elementor/tactile-keyboard.js', array());
 
         // Iframe Widget
         self::registerStyle('mj-member-iframe-widget', 'css/iframe-widget.css', array('mj-member-components'));
@@ -730,6 +744,12 @@ final class AssetsManager
             case 'iframe-widget':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-iframe-widget');
+                break;
+
+            case 'tactile-keyboard':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-tactile-keyboard');
+                wp_enqueue_script('mj-member-tactile-keyboard');
                 break;
 
             case 'registration-manager':

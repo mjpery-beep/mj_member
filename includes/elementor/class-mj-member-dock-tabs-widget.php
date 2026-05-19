@@ -890,7 +890,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                     ),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab' => 'border-radius: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab' => '--mj-dock-tab-radius: {{SIZE}}{{UNIT}}; border-radius: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -902,7 +902,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'type' => Controls_Manager::DIMENSIONS,
                 'size_units' => array('px', '%'),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab' => '--mj-dock-tab-padding-normal: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}}; padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
                 ),
             )
         );
@@ -920,7 +920,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                     ),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__icon' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__icon' => '--mj-dock-tab-icon-size-normal: {{SIZE}}{{UNIT}}; width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -961,6 +961,22 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
             )
         );
 
+        $this->add_control(
+            'tab_effect_style',
+            array(
+                'label' => __('Effet CSS preset', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'none',
+                'options' => array(
+                    'none' => __('Aucun', 'mj-member'),
+                    'glow' => __('Glow neon', 'mj-member'),
+                    'lift' => __('Lift doux', 'mj-member'),
+                    'press' => __('Pression tactile', 'mj-member'),
+                ),
+                'prefix_class' => 'mj-dock-tabs--fx-',
+            )
+        );
+
         $this->start_controls_tabs('tab_style_states_tabs');
 
         $this->start_controls_tab(
@@ -976,7 +992,38 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'label' => __('Fond', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab' => 'background-color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab' => '--mj-dock-tab-bg-normal: {{VALUE}}; background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'tab_normal_opacity',
+            array(
+                'label' => __('Opacite', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('custom'),
+                'range' => array(
+                    'custom' => array(
+                        'min' => 0,
+                        'max' => 1,
+                        'step' => 0.01,
+                    ),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__tab' => '--mj-dock-tab-opacity-normal: {{SIZE}}; opacity: {{SIZE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'tab_normal_padding',
+            array(
+                'label' => __('Padding', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__tab' => '--mj-dock-tab-padding-normal: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}}; padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
                 ),
             )
         );
@@ -987,7 +1034,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'label' => __('Couleur texte', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab' => '--mj-dock-tab-color-normal: {{VALUE}}; color: {{VALUE}};',
                 ),
             )
         );
@@ -1005,7 +1052,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                     ),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab .mj-dock-tabs__icon' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab .mj-dock-tabs__icon' => '--mj-dock-tab-icon-size-normal: {{SIZE}}{{UNIT}}; width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -1041,7 +1088,38 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'label' => __('Fond', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab:hover' => 'background-color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab:hover' => '--mj-dock-tab-bg-hover: {{VALUE}}; background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'tab_hover_opacity',
+            array(
+                'label' => __('Opacite', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('custom'),
+                'range' => array(
+                    'custom' => array(
+                        'min' => 0,
+                        'max' => 1,
+                        'step' => 0.01,
+                    ),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__tab:hover' => '--mj-dock-tab-opacity-hover: {{SIZE}}; opacity: {{SIZE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'tab_hover_padding',
+            array(
+                'label' => __('Padding', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__tab:hover' => '--mj-dock-tab-padding-hover: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}}; padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
                 ),
             )
         );
@@ -1052,7 +1130,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'label' => __('Couleur texte', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab:hover' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab:hover' => '--mj-dock-tab-color-hover: {{VALUE}}; color: {{VALUE}};',
                 ),
             )
         );
@@ -1070,7 +1148,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                     ),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab:hover .mj-dock-tabs__icon' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab:hover .mj-dock-tabs__icon' => '--mj-dock-tab-icon-size-hover: {{SIZE}}{{UNIT}}; width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -1106,7 +1184,38 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'label' => __('Fond', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active' => 'background-color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active' => '--mj-dock-tab-bg-active: {{VALUE}}; background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'tab_active_opacity',
+            array(
+                'label' => __('Opacite', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('custom'),
+                'range' => array(
+                    'custom' => array(
+                        'min' => 0,
+                        'max' => 1,
+                        'step' => 0.01,
+                    ),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active' => '--mj-dock-tab-opacity-active: {{SIZE}}; opacity: {{SIZE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'tab_active_padding',
+            array(
+                'label' => __('Padding', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active' => '--mj-dock-tab-padding-active: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}}; padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
                 ),
             )
         );
@@ -1117,7 +1226,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'label' => __('Couleur texte', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active' => '--mj-dock-tab-color-active: {{VALUE}}; color: {{VALUE}};',
                 ),
             )
         );
@@ -1135,7 +1244,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                     ),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active .mj-dock-tabs__icon' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab.is-active .mj-dock-tabs__icon' => '--mj-dock-tab-icon-size-active: {{SIZE}}{{UNIT}}; width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -1171,7 +1280,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'label' => __('Fond', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => 'background-color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => '--mj-dock-tab-bg-focus: {{VALUE}}; background-color: {{VALUE}};',
                 ),
             )
         );
@@ -1182,7 +1291,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'label' => __('Couleur texte', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => '--mj-dock-tab-color-focus: {{VALUE}}; color: {{VALUE}};',
                 ),
             )
         );
@@ -1200,7 +1309,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                     ),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible .mj-dock-tabs__icon' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible .mj-dock-tabs__icon' => '--mj-dock-tab-icon-size-focus: {{SIZE}}{{UNIT}}; width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -1211,7 +1320,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                 'label' => __('Couleur contour', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => 'outline-color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => '--mj-dock-tab-focus-outline-color: {{VALUE}}; outline-color: {{VALUE}};',
                 ),
             )
         );
@@ -1229,7 +1338,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                     ),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => 'outline-width: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => '--mj-dock-tab-focus-outline-width: {{SIZE}}{{UNIT}}; outline-width: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -1247,7 +1356,7 @@ class Mj_Member_Elementor_Dock_Tabs_Widget extends Widget_Nested_Base
                     ),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => 'outline-offset: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-dock-tabs__tab:focus-visible' => '--mj-dock-tab-focus-outline-offset: {{SIZE}}{{UNIT}}; outline-offset: {{SIZE}}{{UNIT}};',
                 ),
             )
         );

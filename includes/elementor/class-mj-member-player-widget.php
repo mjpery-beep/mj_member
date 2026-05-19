@@ -37,6 +37,16 @@ class Mj_Member_Elementor_Player_Widget extends Widget_Base
         return array('mj', 'player', 'youtube', 'music', 'audio', 'playlist');
     }
 
+    public function get_style_depends()
+    {
+        return array('mj-member-player-widget');
+    }
+
+    public function get_script_depends()
+    {
+        return array('mj-member-player-widget');
+    }
+
     protected function register_controls()
     {
         $this->start_controls_section(
@@ -63,6 +73,36 @@ class Mj_Member_Elementor_Player_Widget extends Widget_Base
                 'type' => Controls_Manager::TEXTAREA,
                 'rows' => 3,
                 'placeholder' => __('Cherche un morceau sur YouTube et écoute-le en audio.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'header_title_text',
+            array(
+                'label' => __('Titre header', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'default' => __('♪ JUKEBOX', 'mj-member'),
+                'label_block' => true,
+            )
+        );
+
+        $this->add_control(
+            'header_sub_text',
+            array(
+                'label' => __('Sous-titre header', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'default' => __('Selection musicale', 'mj-member'),
+                'label_block' => true,
+            )
+        );
+
+        $this->add_control(
+            'screen_label_text',
+            array(
+                'label' => __('Label écran', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'default' => __('♪ EN LECTURE', 'mj-member'),
+                'label_block' => true,
             )
         );
 
@@ -120,6 +160,482 @@ class Mj_Member_Elementor_Player_Widget extends Widget_Base
             )
         );
 
+        $this->add_control(
+            'layout_heading',
+            array(
+                'label' => __('Mise en page', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_responsive_control(
+            'widget_width',
+            array(
+                'label' => __('Largeur du widget', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', '%', 'vw'),
+                'range' => array(
+                    'px' => array(
+                        'min' => 280,
+                        'max' => 1200,
+                        'step' => 1,
+                    ),
+                    '%' => array(
+                        'min' => 20,
+                        'max' => 100,
+                        'step' => 1,
+                    ),
+                    'vw' => array(
+                        'min' => 20,
+                        'max' => 100,
+                        'step' => 1,
+                    ),
+                ),
+                'default' => array(
+                    'unit' => 'px',
+                    'size' => 500,
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => 'width: min(100%, {{SIZE}}{{UNIT}}); max-width: {{SIZE}}{{UNIT}}; --mj-player-width: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'widget_height',
+            array(
+                'label' => __('Hauteur du widget', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', 'vh'),
+                'range' => array(
+                    'px' => array(
+                        'min' => 360,
+                        'max' => 1400,
+                        'step' => 1,
+                    ),
+                    'vh' => array(
+                        'min' => 40,
+                        'max' => 100,
+                        'step' => 1,
+                    ),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget .jb-machine' => 'height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-player-widget' => '--mj-player-height: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'section_style_theme',
+            array(
+                'label' => __('Apparence', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_control(
+            'appearance_preset',
+            array(
+                'label' => __('Preset visuel', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'retro',
+                'options' => array(
+                    'retro' => __('Retro Jukebox', 'mj-member'),
+                    'dark' => __('Dark Studio', 'mj-member'),
+                    'cream' => __('Cream Vinyl', 'mj-member'),
+                    'neon' => __('Neon Arcade', 'mj-member'),
+                ),
+                'prefix_class' => 'mj-player-theme--',
+            )
+        );
+
+        $this->add_control(
+            'show_header',
+            array(
+                'label' => __('Afficher le header', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'default' => 'yes',
+                'selectors_dictionary' => array(
+                    'yes' => 'flex',
+                    '' => 'none',
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-header' => 'display: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'machine_bg_start',
+            array(
+                'label' => __('Fond machine haut', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-machine-bg-start: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'machine_bg_mid',
+            array(
+                'label' => __('Fond machine milieu', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-machine-bg-mid: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'machine_bg_end',
+            array(
+                'label' => __('Fond machine bas', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-machine-bg-end: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'color_text',
+            array(
+                'label' => __('Couleur texte principal', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-text: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'color_muted',
+            array(
+                'label' => __('Couleur texte secondaire', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-muted: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'color_chrome',
+            array(
+                'label' => __('Couleur chrome', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-chrome: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'color_accent',
+            array(
+                'label' => __('Couleur accent (or)', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-gold: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'color_accent_light',
+            array(
+                'label' => __('Couleur accent claire', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-gold-l: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'color_playing',
+            array(
+                'label' => __('Couleur lecture active', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-amber: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'section_style_header',
+            array(
+                'label' => __('Header', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_control(
+            'header_bg_start',
+            array(
+                'label' => __('Fond header haut', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-header-bg-start: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'header_bg_end',
+            array(
+                'label' => __('Fond header bas', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-header-bg-end: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'header_title_color',
+            array(
+                'label' => __('Couleur titre header', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-header__logo' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'header_sub_color',
+            array(
+                'label' => __('Couleur sous-titre header', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-header__sub' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'header_padding',
+            array(
+                'label' => __('Padding header', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', 'em', 'rem'),
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-header' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'section_style_title',
+            array(
+                'label' => __('Titre du widget', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_control(
+            'widget_title_color',
+            array(
+                'label' => __('Couleur', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget__title' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'widget_title_size',
+            array(
+                'label' => __('Taille', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', 'rem'),
+                'range' => array(
+                    'px' => array('min' => 12, 'max' => 72),
+                    'rem' => array('min' => 0.8, 'max' => 4, 'step' => 0.05),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget__title' => 'font-size: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'section_style_thumbs',
+            array(
+                'label' => __('Vignettes', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_responsive_control(
+            'thumb_width',
+            array(
+                'label' => __('Largeur vignette', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 28, 'max' => 180),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-thumb-w: {{SIZE}}px;',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'thumb_height',
+            array(
+                'label' => __('Hauteur vignette', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 22, 'max' => 140),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-thumb-h: {{SIZE}}px;',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'thumb_radius',
+            array(
+                'label' => __('Arrondi vignette', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', '%'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 40),
+                    '%' => array('min' => 0, 'max' => 50),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-thumb-radius: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'thumb_border_width',
+            array(
+                'label' => __('Bordure vignette', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 10),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-thumb-border-width: {{SIZE}}px;',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'thumb_border_color',
+            array(
+                'label' => __('Couleur bordure vignette', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-player-widget' => '--jb-thumb-border-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'section_style_source_presets',
+            array(
+                'label' => __('Presets sources', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_control(
+            'source_presets_bg',
+            array(
+                'label' => __('Fond zone presets', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-presets' => 'background: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'source_presets_label_color',
+            array(
+                'label' => __('Couleur titre presets', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-presets__label' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'source_preset_btn_bg',
+            array(
+                'label' => __('Fond bouton preset', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-preset__btn' => 'background: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'source_preset_btn_color',
+            array(
+                'label' => __('Couleur texte preset', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-preset__btn' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'source_preset_btn_border_color',
+            array(
+                'label' => __('Couleur bordure preset', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-preset__btn' => 'border-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'source_preset_btn_radius',
+            array(
+                'label' => __('Arrondi preset', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', '%'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 50),
+                    '%' => array('min' => 0, 'max' => 50),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .jb-preset__btn' => 'border-radius: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->register_visibility_controls();
@@ -130,8 +646,27 @@ class Mj_Member_Elementor_Player_Widget extends Widget_Base
         $settings = $this->get_settings_for_display();
         $this->apply_visibility_to_wrapper($settings, 'mj-player-widget');
 
+        $readDimension = static function ($value, array $allowedUnits): string {
+            if (!is_array($value)) {
+                return '';
+            }
+
+            $size = isset($value['size']) ? (float) $value['size'] : 0.0;
+            $unit = isset($value['unit']) ? strtolower((string) $value['unit']) : 'px';
+
+            if ($size <= 0 || !in_array($unit, $allowedUnits, true)) {
+                return '';
+            }
+
+            $sizeString = rtrim(rtrim(sprintf('%.4F', $size), '0'), '.');
+            return $sizeString . $unit;
+        };
+
         $title = isset($settings['title']) ? sanitize_text_field((string) $settings['title']) : '';
         $intro = isset($settings['intro_text']) ? wp_kses_post($settings['intro_text']) : '';
+        $headerTitle = isset($settings['header_title_text']) ? sanitize_text_field((string) $settings['header_title_text']) : '';
+        $headerSub = isset($settings['header_sub_text']) ? sanitize_text_field((string) $settings['header_sub_text']) : '';
+        $screenLabel = isset($settings['screen_label_text']) ? sanitize_text_field((string) $settings['screen_label_text']) : '';
         $apiKey = isset($settings['youtube_api_key']) ? sanitize_text_field((string) $settings['youtube_api_key']) : '';
         $defaultQuery = isset($settings['default_query']) ? sanitize_text_field((string) $settings['default_query']) : '';
 
@@ -185,15 +720,33 @@ class Mj_Member_Elementor_Player_Widget extends Widget_Base
             );
         }
 
+        $width = $readDimension(isset($settings['widget_width']) ? $settings['widget_width'] : null, array('px', '%', 'vw'));
+        $height = $readDimension(isset($settings['widget_height']) ? $settings['widget_height'] : null, array('px', 'vh'));
+        $rootStyleParts = array();
+
+        if ($width !== '') {
+            $rootStyleParts[] = '--mj-player-width: ' . $width;
+            $rootStyleParts[] = 'width: min(100%, ' . $width . ')';
+            $rootStyleParts[] = 'max-width: ' . $width;
+        }
+
+        if ($height !== '') {
+            $rootStyleParts[] = '--mj-player-height: ' . $height;
+        }
+
         $template_data = array(
             'title' => $title,
             'intro' => $intro,
+            'root_style' => implode('; ', $rootStyleParts),
             'config' => array(
                 'apiKey' => $apiKey,
                 'defaultQuery' => $defaultQuery,
                 'maxResults' => $maxResults,
                 'autoplay' => $autoplay,
                 'playlists' => $playlists,
+                'headerTitle' => $headerTitle,
+                'headerSub' => $headerSub,
+                'screenLabel' => $screenLabel,
                 'preview' => $isPreview,
             ),
         );

@@ -1,0 +1,278 @@
+.mj-tactile-keyboard {
+    --mj-tactile-bg: linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+    --mj-tactile-surface: rgba(255, 255, 255, 0.9);
+    --mj-tactile-border: rgba(148, 163, 184, 0.24);
+    --mj-tactile-text: #122033;
+    --mj-tactile-muted: #5f6f82;
+    --mj-tactile-accent: #177e89;
+    --mj-tactile-accent-soft: rgba(23, 126, 137, 0.12);
+    --mj-tactile-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+    --mj-tactile-radius: 18px;
+    --mj-tactile-gap: 10px;
+    color: var(--mj-tactile-text);
+    width: 100%;
+}
+
+.mj-tactile-keyboard__shell {
+    background: var(--mj-tactile-bg);
+    border: 1px solid var(--mj-tactile-border);
+    border-radius: calc(var(--mj-tactile-radius) + 10px);
+    box-shadow: var(--mj-tactile-shadow);
+    overflow: hidden;
+    padding: 18px;
+    position: relative;
+}
+
+.mj-tactile-keyboard__shell::before {
+    background: radial-gradient(circle at top right, rgba(23, 126, 137, 0.16), transparent 35%);
+    content: '';
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+}
+
+.mj-tactile-keyboard__header,
+.mj-tactile-keyboard__viewport,
+.mj-tactile-keyboard__hint,
+.mj-tactile-keyboard__preview-note,
+.mj-tactile-keyboard__display-label,
+.mj-tactile-keyboard__display-wrap {
+    position: relative;
+    z-index: 1;
+}
+
+.mj-tactile-keyboard__header {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.mj-tactile-keyboard__eyebrow {
+    color: var(--mj-tactile-muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    margin: 0 0 4px;
+    text-transform: uppercase;
+}
+
+.mj-tactile-keyboard__title {
+    color: var(--mj-tactile-text);
+    font-size: 24px;
+    line-height: 1.1;
+    margin: 0;
+}
+
+.mj-tactile-keyboard__mode-badge {
+    background: var(--mj-tactile-accent-soft);
+    border: 1px solid rgba(23, 126, 137, 0.18);
+    border-radius: 999px;
+    color: var(--mj-tactile-accent);
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 12px;
+    white-space: nowrap;
+}
+
+.mj-tactile-keyboard__display-label {
+    color: var(--mj-tactile-muted);
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.mj-tactile-keyboard__display-wrap {
+    margin-bottom: 16px;
+}
+
+.mj-tactile-keyboard__display {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: calc(var(--mj-tactile-radius) - 4px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    color: var(--mj-tactile-text);
+    font-size: 16px;
+    min-height: 54px;
+    padding: 14px 16px;
+    width: 100%;
+}
+
+.mj-tactile-keyboard__display:focus {
+    border-color: rgba(23, 126, 137, 0.45);
+    box-shadow: 0 0 0 3px rgba(23, 126, 137, 0.14);
+    outline: none;
+}
+
+.mj-tactile-keyboard__viewport {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.mj-tactile-keyboard__main,
+.mj-tactile-keyboard__numpad {
+    background: var(--mj-tactile-surface);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: var(--mj-tactile-radius);
+    padding: 12px;
+}
+
+.mj-tactile-keyboard__rows,
+.mj-tactile-keyboard__emoji {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mj-tactile-gap);
+}
+
+.mj-tactile-keyboard[data-view='keyboard'] .mj-tactile-keyboard__emoji {
+    display: none;
+}
+
+.mj-tactile-keyboard[data-view='emoji'] .mj-tactile-keyboard__rows {
+    display: none;
+}
+
+.mj-tactile-keyboard__row {
+    display: flex;
+    gap: var(--mj-tactile-gap);
+    justify-content: center;
+}
+
+.mj-tactile-keyboard__key {
+    align-items: center;
+    appearance: none;
+    background: linear-gradient(180deg, #ffffff 0%, #edf2f7 100%);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: calc(var(--mj-tactile-radius) - 6px);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+    color: var(--mj-tactile-text);
+    cursor: pointer;
+    display: inline-flex;
+    flex: 1 1 0;
+    font-size: 16px;
+    font-weight: 600;
+    justify-content: center;
+    min-height: 52px;
+    min-width: 0;
+    padding: 0 10px;
+    transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.mj-tactile-keyboard__key:hover,
+.mj-tactile-keyboard__key:focus-visible {
+    border-color: rgba(23, 126, 137, 0.34);
+    box-shadow: 0 10px 22px rgba(23, 126, 137, 0.14);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.mj-tactile-keyboard__key:active,
+.mj-tactile-keyboard__key.is-active {
+    background: linear-gradient(180deg, rgba(23, 126, 137, 0.16) 0%, rgba(23, 126, 137, 0.22) 100%);
+    border-color: rgba(23, 126, 137, 0.38);
+    color: #0d5960;
+}
+
+.mj-tactile-keyboard__key--action {
+    color: var(--mj-tactile-accent);
+    font-size: 14px;
+}
+
+.mj-tactile-keyboard__key--wide {
+    flex: 1.3 1 0;
+}
+
+.mj-tactile-keyboard__key--space {
+    flex: 3 1 0;
+}
+
+.mj-tactile-keyboard__key--emoji {
+    font-size: 22px;
+}
+
+.mj-tactile-keyboard__emoji-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.mj-tactile-keyboard__emoji-tab {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 999px;
+    color: var(--mj-tactile-muted);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 14px;
+}
+
+.mj-tactile-keyboard__emoji-tab.is-active {
+    background: var(--mj-tactile-accent-soft);
+    border-color: rgba(23, 126, 137, 0.32);
+    color: var(--mj-tactile-accent);
+}
+
+.mj-tactile-keyboard__emoji-grid {
+    display: grid;
+    gap: var(--mj-tactile-gap);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.mj-tactile-keyboard__emoji-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.mj-tactile-keyboard__numpad {
+    display: none;
+    gap: var(--mj-tactile-gap);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mj-tactile-keyboard[data-view='keyboard'] .mj-tactile-keyboard__numpad:not(:empty) {
+    display: grid;
+}
+
+.mj-tactile-keyboard__hint,
+.mj-tactile-keyboard__preview-note {
+    color: var(--mj-tactile-muted);
+    font-size: 13px;
+    margin: 14px 0 0;
+}
+
+@media (min-width: 900px) {
+    .mj-tactile-keyboard__viewport {
+        grid-template-columns: minmax(0, 1fr) 220px;
+    }
+}
+
+@media (max-width: 767px) {
+    .mj-tactile-keyboard__shell {
+        padding: 14px;
+    }
+
+    .mj-tactile-keyboard__header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .mj-tactile-keyboard__title {
+        font-size: 20px;
+    }
+
+    .mj-tactile-keyboard__key {
+        font-size: 15px;
+        min-height: 48px;
+        padding: 0 8px;
+    }
+
+    .mj-tactile-keyboard__emoji-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
