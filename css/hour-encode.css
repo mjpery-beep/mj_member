@@ -1860,6 +1860,11 @@
     margin-right: auto;
 }
 
+.mj-hour-encode-app__selection-duplicate {
+    flex: 1 0 100%;
+    order: 10;
+}
+
 .mj-hour-encode-app__selection-error {
     font-size: 13px;
     color: #b81c2d;

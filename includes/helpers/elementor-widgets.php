@@ -331,3 +331,190 @@ if (!function_exists('mj_member_get_elementor_widget_description_parts')) {
         return array_values(array_filter(array_map('trim', $parts)));
     }
 }
+
+if (!function_exists('mj_member_extend_elementor_horizontal_position_controls')) {
+    /**
+     * Add a center option to Elementor horizontal fixed/absolute positioning controls.
+     *
+     * @param \Elementor\Controls_Stack $element
+     * @param string                     $position_control_name
+     * @return void
+     */
+    function mj_member_extend_elementor_horizontal_position_controls($element, $position_control_name = '_position') {
+        if (!is_object($element) || !method_exists($element, 'update_control') || !method_exists($element, 'add_responsive_control')) {
+            return;
+        }
+
+        $left = esc_html__('Left', 'elementor');
+        $right = esc_html__('Right', 'elementor');
+        $start = is_rtl() ? $right : $left;
+        $end = !is_rtl() ? $right : $left;
+        $position_condition_key = $position_control_name . '!';
+
+        $element->update_control(
+            '_offset_orientation_h',
+            array(
+                'options' => array(
+                    'start' => array(
+                        'title' => $start,
+                        'icon' => 'eicon-h-align-left',
+                    ),
+                    'center' => array(
+                        'title' => esc_html__('Center', 'elementor'),
+                        'icon' => 'eicon-h-align-center',
+                    ),
+                    'end' => array(
+                        'title' => $end,
+                        'icon' => 'eicon-h-align-right',
+                    ),
+                ),
+                'prefix_class' => 'mj-member-offset-h-',
+            )
+        );
+
+        $element->update_control(
+            '_offset_x',
+            array(
+                'condition' => array(
+                    '_offset_orientation_h!' => array('end', 'center'),
+                    $position_condition_key => '',
+                ),
+            )
+        );
+
+        $element->update_control(
+            '_offset_x_end',
+            array(
+                'condition' => array(
+                    '_offset_orientation_h' => 'end',
+                    $position_condition_key => '',
+                ),
+            )
+        );
+
+        $element->add_responsive_control(
+            '_offset_x_center',
+            array(
+                'label' => esc_html__('Offset', 'elementor'),
+                'type' => \Elementor\Controls_Manager::SLIDER,
+                'range' => array(
+                    'px' => array(
+                        'min' => -1000,
+                        'max' => 1000,
+                    ),
+                    '%' => array(
+                        'min' => -200,
+                        'max' => 200,
+                    ),
+                    'vw' => array(
+                        'min' => -200,
+                        'max' => 200,
+                    ),
+                    'vh' => array(
+                        'min' => -200,
+                        'max' => 200,
+                    ),
+                ),
+                'default' => array(
+                    'size' => 0,
+                ),
+                'size_units' => array('px', '%', 'em', 'rem', 'vw', 'vh', 'custom'),
+                'selectors' => array(
+                    '{{WRAPPER}}' => '--mj-member-offset-x-center: {{SIZE}}{{UNIT}};',
+                ),
+                'condition' => array(
+                    '_offset_orientation_h' => 'center',
+                    $position_condition_key => '',
+                ),
+            ),
+            array(
+                'position' => array(
+                    'at' => 'after',
+                    'of' => '_offset_x_end',
+                ),
+            )
+        );
+    }
+}
+
+if (!function_exists('mj_member_register_elementor_horizontal_center_control')) {
+    /**
+     * Register the injected center option for widgets and containers.
+     *
+     * @return void
+     */
+    function mj_member_register_elementor_horizontal_center_control() {
+        add_action(
+            'elementor/element/common/_section_style/before_section_end',
+            static function ($element) {
+                mj_member_extend_elementor_horizontal_position_controls($element, '_position');
+            },
+            20
+        );
+
+        add_action(
+            'elementor/element/container/section_layout/before_section_end',
+            static function ($element) {
+                mj_member_extend_elementor_horizontal_position_controls($element, 'position');
+            },
+            20
+        );
+    }
+}
+
+if (!function_exists('mj_member_apply_elementor_horizontal_center_class')) {
+    /**
+     * Apply an active helper class only when centered custom positioning is enabled.
+     *
+     * @param object $element
+     * @return void
+     */
+    function mj_member_apply_elementor_horizontal_center_class($element) {
+        if (!is_object($element) || !method_exists($element, 'get_settings') || !method_exists($element, 'add_render_attribute')) {
+            return;
+        }
+
+        $settings = $element->get_settings();
+        if (!is_array($settings)) {
+            return;
+        }
+
+        $position = '';
+        if (isset($settings['_position'])) {
+            $position = (string) $settings['_position'];
+        } elseif (isset($settings['position'])) {
+            $position = (string) $settings['position'];
+        }
+
+        if (!in_array($position, array('absolute', 'fixed'), true)) {
+            return;
+        }
+
+        if (!isset($settings['_offset_orientation_h']) || $settings['_offset_orientation_h'] !== 'center') {
+            return;
+        }
+
+        $element->add_render_attribute('_wrapper', 'class', 'mj-member-offset-h-center-active');
+    }
+}
+
+if (!function_exists('mj_member_enqueue_elementor_horizontal_center_styles')) {
+    /**
+     * Enqueue shared CSS for the centered horizontal fixed/absolute position helper.
+     *
+     * @return void
+     */
+    function mj_member_enqueue_elementor_horizontal_center_styles() {
+        $css = '.mj-member-offset-h-center.mj-member-offset-h-center-active{' .
+            'left:calc(50% + var(--mj-member-offset-x-center, 0px)) !important;' .
+            'right:auto !important;' .
+            'transform:translateX(-50%) !important;' .
+        '}';
+
+        wp_add_inline_style('elementor-frontend', $css);
+    }
+}
+
+add_action('elementor/init', 'mj_member_register_elementor_horizontal_center_control');
+add_action('elementor/frontend/before_render', 'mj_member_apply_elementor_horizontal_center_class');
+add_action('wp_enqueue_scripts', 'mj_member_enqueue_elementor_horizontal_center_styles', 50);

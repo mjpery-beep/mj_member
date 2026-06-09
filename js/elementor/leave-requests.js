@@ -1454,9 +1454,9 @@
                 )
             ),
 
-            // Content
-            loading ? h('div', { class: 'mj-leave-requests__loading' }, h('div', { class: 'mj-leave-requests__spinner' })) :
-            h('div', { class: 'mj-leave-requests__content' },
+            // Content — keep mounted to preserve CoordinatorView's selectedAnimateur state
+            loading && h('div', { class: 'mj-leave-requests__loading' }, h('div', { class: 'mj-leave-requests__spinner' })),
+            h('div', { class: 'mj-leave-requests__content', style: loading ? { opacity: '0.5', pointerEvents: 'none' } : {} },
                 // My requests - always shown for animateurs (no tabs), or when 'my' tab selected for coordinators
                 (tab === 'my' || (!isCoordinator && isAnimateur)) && h(Fragment, null,
                     // Calendar Overview with 3 months

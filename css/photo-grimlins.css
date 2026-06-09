@@ -282,6 +282,33 @@
     }
 }
 
+/* Performance guard: avoid infinite animated mosaics on touch / reduced-motion.
+   We keep a static after-image to preserve visual context with minimal GPU cost. */
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
+    .mj-photo-grimlins__tile--flip {
+        perspective: none;
+    }
+
+    .mj-photo-grimlins__tile--flip .mj-photo-grimlins__tile-before,
+    .mj-photo-grimlins__tile--flip .mj-photo-grimlins__tile-after,
+    .mj-photo-grimlins__tile--fade .mj-photo-grimlins__tile-before,
+    .mj-photo-grimlins__tile--fade .mj-photo-grimlins__tile-after {
+        animation: none !important;
+        transform: none !important;
+        transition: none !important;
+    }
+
+    .mj-photo-grimlins__tile--flip .mj-photo-grimlins__tile-before,
+    .mj-photo-grimlins__tile--fade .mj-photo-grimlins__tile-before {
+        opacity: 0;
+    }
+
+    .mj-photo-grimlins__tile--flip .mj-photo-grimlins__tile-after,
+    .mj-photo-grimlins__tile--fade .mj-photo-grimlins__tile-after {
+        opacity: 1;
+    }
+}
+
 /* ── Mosaic responsive ── */
 /* Column counts are now driven by the --mosaic-cols custom property
    set via Elementor responsive controls. The media-query fallbacks

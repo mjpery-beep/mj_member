@@ -381,7 +381,19 @@
         }
 
         if (this.dom.cameraCaptureBtn) {
+            var lastCameraCaptureTouchAt = 0;
+            this.dom.cameraCaptureBtn.addEventListener('touchend', function(event) {
+                lastCameraCaptureTouchAt = Date.now();
+                event.preventDefault();
+                event.stopPropagation();
+                self.startCaptureCountdown();
+            }, { passive: false });
+
             this.dom.cameraCaptureBtn.addEventListener('click', function(event) {
+                if ((Date.now() - lastCameraCaptureTouchAt) < 700) {
+                    event.preventDefault();
+                    return;
+                }
                 event.preventDefault();
                 self.startCaptureCountdown();
             });

@@ -271,10 +271,12 @@
                         selectionDurationLabel: 'Durée estimée',
                         selectionConfirm: 'Encoder cette plage',
                         selectionUpdate: 'Mettre à jour la plage',
+                        selectionDuplicate: 'Dupliquer sur le créneau suivant',
                         selectionCancel: 'Annuler',
                         selectionErrorRange: 'Veuillez choisir une heure de fin postérieure à l’heure de début.',
                         selectionErrorTask: 'Veuillez saisir un intitulé.',
                         selectionErrorOverlap: 'Une plage est déjà encodée sur ces horaires.',
+                        selectionDuplicateNoSlot: 'Aucun créneau disponible pour dupliquer cette plage sur cette journée.',
                         selectionDelete: 'Supprimer',
                         selectionDeleteConfirm: 'Voulez-vous vraiment supprimer cette plage ?',
                         selectionDeleteSuccess: 'Plage supprimée avec succès.',
@@ -1492,6 +1494,7 @@
                         var labels = props.labels || {};
                         var isEditing = Boolean(selection.isEditing);
                         var canDelete = isEditing && typeof props.onDelete === 'function';
+                        var canDuplicate = isEditing && typeof props.onDuplicate === 'function';
                         var title = isEditing ? (labels.selectionEditTitle || labels.selectionTitle) : labels.selectionTitle;
                         var primaryLabel = isEditing ? (labels.selectionUpdate || labels.selectionConfirm) : labels.selectionConfirm;
                         var taskSuggestions = Array.isArray(props.taskSuggestions) ? props.taskSuggestions : [];
@@ -1628,7 +1631,15 @@
                                 h('button', {
                                     type: 'submit',
                                     className: 'mj-hour-encode-app__button mj-hour-encode-app__button--primary'
-                                }, primaryLabel)
+                                }, primaryLabel),
+                                canDuplicate ? h('button', {
+                                    type: 'button',
+                                    className: 'mj-hour-encode-app__button mj-hour-encode-app__button--secondary mj-hour-encode-app__selection-duplicate',
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        props.onDuplicate();
+                                    }
+                                }, labels.selectionDuplicate || 'Dupliquer sur le créneau suivant') : null
                             ])
                         ]);
                     }
@@ -3451,7 +3462,8 @@
                                 onChange: props.onSelectionChange,
                                 onSubmit: props.onSelectionSubmit,
                                 onCancel: props.onSelectionCancel,
-                                onDelete: props.onSelectionDelete
+                                onDelete: props.onSelectionDelete,
+                                onDuplicate: props.onSelectionDuplicate
                             }));
                         }
 
@@ -6907,19 +6919,207 @@
                             }
                         }
 
-                        function handleSelectionSubmit() {
-                            if (!selectedSlot) {
+                        function getWeekdayKey(dayIso) {
+                            var dayDate = parseISODate(dayIso);
+                            if (!dayDate) {
+                                return '';
+                            }
+                            var dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                            return dayNames[dayDate.getDay()] || '';
+                        }
+
+                        function normalizeIntervals(intervals, rangeStart, rangeEnd) {
+                            var sorted = (Array.isArray(intervals) ? intervals : []).slice()
+                                .map(function(interval) {
+                                    if (!interval || !Number.isFinite(interval.start) || !Number.isFinite(interval.end)) {
+                                        return null;
+                                    }
+                                    var start = clamp(Math.round(interval.start), rangeStart, rangeEnd);
+                                    var end = clamp(Math.round(interval.end), rangeStart, rangeEnd);
+                                    if (end <= start) {
+                                        return null;
+                                    }
+                                    return { start: start, end: end };
+                                })
+                                .filter(Boolean)
+                                .sort(function(a, b) {
+                                    return a.start - b.start;
+                                });
+
+                            if (sorted.length === 0) {
+                                return [];
+                            }
+
+                            var merged = [sorted[0]];
+                            for (var index = 1; index < sorted.length; index++) {
+                                var current = sorted[index];
+                                var last = merged[merged.length - 1];
+                                if (current.start <= last.end) {
+                                    if (current.end > last.end) {
+                                        last.end = current.end;
+                                    }
+                                } else {
+                                    merged.push(current);
+                                }
+                            }
+                            return merged;
+                        }
+
+                        function roundUpToStep(value, step) {
+                            var safeStep = Math.max(1, Number(step) || 1);
+                            return Math.ceil(value / safeStep) * safeStep;
+                        }
+
+                        function getScheduleIntervalsForDay(dayIso) {
+                            var rangeStart = HOURS_START * 60;
+                            var rangeEnd = HOURS_END * 60;
+                            var weekdayKey = getWeekdayKey(dayIso);
+                            if (!weekdayKey || !Array.isArray(config.workSchedule) || config.workSchedule.length === 0) {
+                                return [{ start: rangeStart, end: rangeEnd }];
+                            }
+
+                            var intervals = [];
+                            config.workSchedule.forEach(function(slot) {
+                                if (!slot || !isString(slot.day)) {
+                                    return;
+                                }
+                                if (normalizeProjectValue(slot.day) !== weekdayKey) {
+                                    return;
+                                }
+                                var start = timeValueToMinutes(slot.start);
+                                var end = timeValueToMinutes(slot.end);
+                                if (!Number.isFinite(start) || !Number.isFinite(end)) {
+                                    return;
+                                }
+                                if (end <= start) {
+                                    return;
+                                }
+                                intervals.push({ start: start, end: end });
+                            });
+
+                            var normalized = normalizeIntervals(intervals, rangeStart, rangeEnd);
+                            if (normalized.length === 0) {
+                                return [{ start: rangeStart, end: rangeEnd }];
+                            }
+                            return normalized;
+                        }
+
+                        function getBusyIntervalsForDay(dayIso, excludeSelection) {
+                            var rangeStart = HOURS_START * 60;
+                            var rangeEnd = HOURS_END * 60;
+                            var dayDate = parseISODate(dayIso);
+                            if (!dayDate) {
+                                return [];
+                            }
+                            var dayStartTime = dayDate.getTime();
+                            var dayEndTime = dayStartTime + (24 * 60 * 60 * 1000);
+
+                            var intervals = [];
+                            entries.forEach(function(item) {
+                                if (!item || typeof item !== 'object') {
+                                    return;
+                                }
+                                if (excludeSelection) {
+                                    if (excludeSelection.hourId && item.hourId && excludeSelection.hourId === item.hourId) {
+                                        return;
+                                    }
+                                    if (excludeSelection.entryId && item.id && excludeSelection.entryId === item.id) {
+                                        return;
+                                    }
+                                }
+                                var itemStart = parseDateTime(item.start);
+                                var itemEnd = parseDateTime(item.end);
+                                if (!isValidDate(itemStart) || !isValidDate(itemEnd) || itemEnd <= itemStart) {
+                                    return;
+                                }
+                                if (itemEnd.getTime() <= dayStartTime || itemStart.getTime() >= dayEndTime) {
+                                    return;
+                                }
+                                var startMinutes = Math.max(rangeStart, Math.floor((Math.max(itemStart.getTime(), dayStartTime) - dayStartTime) / 60000));
+                                var endMinutes = Math.min(rangeEnd, Math.ceil((Math.min(itemEnd.getTime(), dayEndTime) - dayStartTime) / 60000));
+                                if (endMinutes <= startMinutes) {
+                                    return;
+                                }
+                                intervals.push({ start: startMinutes, end: endMinutes });
+                            });
+
+                            return normalizeIntervals(intervals, rangeStart, rangeEnd);
+                        }
+
+                        function findConflict(startMinutes, endMinutes, intervals) {
+                            for (var index = 0; index < intervals.length; index++) {
+                                var interval = intervals[index];
+                                if (startMinutes < interval.end && endMinutes > interval.start) {
+                                    return interval;
+                                }
+                            }
+                            return null;
+                        }
+
+                        function findRangeInWindows(windows, busyIntervals, desiredStart, durationMinutes) {
+                            var safeDuration = Math.max(SLOT_STEP_MINUTES, Math.round(durationMinutes));
+                            var step = SLOT_STEP_MINUTES;
+
+                            for (var windowIndex = 0; windowIndex < windows.length; windowIndex++) {
+                                var windowRange = windows[windowIndex];
+                                var candidate = Math.max(windowRange.start, desiredStart);
+                                candidate = roundUpToStep(candidate, step);
+
+                                while (candidate + safeDuration <= windowRange.end) {
+                                    var candidateEnd = candidate + safeDuration;
+                                    var conflict = findConflict(candidate, candidateEnd, busyIntervals);
+                                    if (!conflict) {
+                                        return {
+                                            start: candidate,
+                                            end: candidateEnd
+                                        };
+                                    }
+                                    candidate = roundUpToStep(conflict.end, step);
+                                }
+                            }
+
+                            return null;
+                        }
+
+                        function findNextAvailableRange(dayIso, preferredStart, durationMinutes, excludeSelection) {
+                            var windows = getScheduleIntervalsForDay(dayIso);
+                            var busyIntervals = getBusyIntervalsForDay(dayIso, excludeSelection);
+                            var dayStart = HOURS_START * 60;
+                            var preferred = clamp(Math.round(preferredStart), dayStart, HOURS_END * 60);
+
+                            var afterPreferred = findRangeInWindows(windows, busyIntervals, preferred, durationMinutes);
+                            if (afterPreferred) {
+                                return afterPreferred;
+                            }
+
+                            if (preferred > dayStart) {
+                                return findRangeInWindows(windows, busyIntervals, dayStart, durationMinutes);
+                            }
+
+                            return null;
+                        }
+
+                        function minutesToTimeValue(minutes) {
+                            var safe = clamp(Math.round(minutes), HOURS_START * 60, HOURS_END * 60);
+                            var hours = Math.floor(safe / 60);
+                            var mins = safe % 60;
+                            return pad(hours) + ':' + pad(mins);
+                        }
+
+                        function submitSelection(slotSnapshot, options) {
+                            var submitOptions = options && typeof options === 'object' ? options : {};
+                            var forceCreate = submitOptions.forceCreate === true;
+                            var keepSelection = submitOptions.keepSelection === true;
+
+                            if (!slotSnapshot) {
                                 return;
                             }
-                            if (pendingDragSubmitRef.current && pendingDragSubmitRef.current.timeoutId) {
-                                clearTimeout(pendingDragSubmitRef.current.timeoutId);
-                            }
-                            pendingDragSubmitRef.current = null;
-                            var startDate = createDateFromDayAndTime(selectedSlot.dayIso, selectedSlot.formStart);
-                            var endDate = createDateFromDayAndTime(selectedSlot.dayIso, selectedSlot.formEnd);
-                            endDate = normalizeMidnightEndDate(selectedSlot.dayIso, startDate, endDate, selectedSlot.formEnd);
-                            var taskLabel = selectedSlot.formTask ? selectedSlot.formTask.trim() : '';
-                            var projectLabel = selectedSlot.formProject ? selectedSlot.formProject.trim() : '';
+
+                            var startDate = createDateFromDayAndTime(slotSnapshot.dayIso, slotSnapshot.formStart);
+                            var endDate = createDateFromDayAndTime(slotSnapshot.dayIso, slotSnapshot.formEnd);
+                            endDate = normalizeMidnightEndDate(slotSnapshot.dayIso, startDate, endDate, slotSnapshot.formEnd);
+                            var taskLabel = slotSnapshot.formTask ? slotSnapshot.formTask.trim() : '';
+                            var projectLabel = slotSnapshot.formProject ? slotSnapshot.formProject.trim() : '';
 
                             if (!taskLabel) {
                                 setSelectedSlot(function(previous) {
@@ -6949,10 +7149,10 @@
                                 if (!item || typeof item !== 'object') {
                                     return false;
                                 }
-                                if (selectedSlot.hourId && item.hourId && item.hourId === selectedSlot.hourId) {
+                                if (slotSnapshot.hourId && item.hourId && item.hourId === slotSnapshot.hourId) {
                                     return false;
                                 }
-                                if (selectedSlot.entryId && item.id && item.id === selectedSlot.entryId) {
+                                if (slotSnapshot.entryId && item.id && item.id === slotSnapshot.entryId) {
                                     return false;
                                 }
                                 var itemStart = parseDateTime(item.start);
@@ -6960,7 +7160,7 @@
                                 if (!isValidDate(itemStart) || !isValidDate(itemEnd)) {
                                     return false;
                                 }
-                                if (toISODate(startOfDay(itemStart)) !== selectedSlot.dayIso) {
+                                if (toISODate(startOfDay(itemStart)) !== slotSnapshot.dayIso) {
                                     return false;
                                 }
                                 return itemStart < endDate && itemEnd > startDate;
@@ -6979,17 +7179,17 @@
                             }
 
                             var durationMinutes = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
-                            var normalizedStartValue = isString(selectedSlot.formStart) ? (selectedSlot.formStart.length === 5 ? selectedSlot.formStart + ':00' : selectedSlot.formStart) : '';
-                            var normalizedEndValue = isString(selectedSlot.formEnd) ? (selectedSlot.formEnd.length === 5 ? selectedSlot.formEnd + ':00' : selectedSlot.formEnd) : '';
-                            var hasIdentifier = Boolean(selectedSlot.hourId || selectedSlot.entryId);
-                            var isEditing = Boolean(selectedSlot.isEditing && hasIdentifier);
+                            var normalizedStartValue = isString(slotSnapshot.formStart) ? (slotSnapshot.formStart.length === 5 ? slotSnapshot.formStart + ':00' : slotSnapshot.formStart) : '';
+                            var normalizedEndValue = isString(slotSnapshot.formEnd) ? (slotSnapshot.formEnd.length === 5 ? slotSnapshot.formEnd + ':00' : slotSnapshot.formEnd) : '';
+                            var hasIdentifier = Boolean(slotSnapshot.hourId || slotSnapshot.entryId);
+                            var isEditing = !forceCreate && Boolean(slotSnapshot.isEditing && hasIdentifier);
                             var action = isEditing ? config.ajax.updateAction : config.ajax.createAction;
-                            var entryColor = selectedSlot.color || config.accentColor;
-                            var entryId = selectedSlot.entryId || (isEditing && selectedSlot.hourId ? 'hour-' + selectedSlot.hourId : 'temp-' + Date.now());
+                            var entryColor = slotSnapshot.color || config.accentColor;
+                            var entryId = slotSnapshot.entryId || (isEditing && slotSnapshot.hourId ? 'hour-' + slotSnapshot.hourId : 'temp-' + Date.now());
 
                             var entry = {
                                 id: entryId,
-                                hourId: selectedSlot.hourId || null,
+                                hourId: slotSnapshot.hourId || null,
                                 task: taskLabel,
                                 project: projectLabel,
                                 start: startDate.toISOString(),
@@ -7023,7 +7223,17 @@
                                     })));
                                     return next;
                                 });
-                                setSelectedSlot(null);
+
+                                if (keepSelection) {
+                                    setSelectedSlot(function(previous) {
+                                        if (!previous) {
+                                            return previous;
+                                        }
+                                        return Object.assign({}, previous, { error: '' });
+                                    });
+                                } else {
+                                    setSelectedSlot(null);
+                                }
 
                                 var fallbackEventName = isEditing ? 'update-entry' : 'create-entry';
                                 try {
@@ -7045,14 +7255,14 @@
                             var params = new URLSearchParams();
                             params.append('action', action);
                             params.append('nonce', config.ajax.nonce || '');
-                            params.append('day', selectedSlot.dayIso);
-                            params.append('start', selectedSlot.formStart);
-                            params.append('end', selectedSlot.formEnd);
+                            params.append('day', slotSnapshot.dayIso);
+                            params.append('start', slotSnapshot.formStart);
+                            params.append('end', slotSnapshot.formEnd);
                             params.append('task', taskLabel);
                             params.append('project', projectLabel);
                             params.append('week', weekStart);
-                            if (isEditing && selectedSlot.hourId) {
-                                params.append('entry_id', String(selectedSlot.hourId));
+                            if (isEditing && slotSnapshot.hourId) {
+                                params.append('entry_id', String(slotSnapshot.hourId));
                             }
                             appendStaticParams(params, config.ajax.staticParams);
 
@@ -7094,7 +7304,17 @@
 
                                     var data = payload.data || {};
                                     applyPayload(data);
-                                    setSelectedSlot(null);
+
+                                    if (keepSelection) {
+                                        setSelectedSlot(function(previous) {
+                                            if (!previous) {
+                                                return previous;
+                                            }
+                                            return Object.assign({}, previous, { error: '' });
+                                        });
+                                    } else {
+                                        setSelectedSlot(null);
+                                    }
 
                                     var emittedEntry = data.entry && typeof data.entry === 'object' ? data.entry : Object.assign({}, entry);
                                     var emittedWeek = weekStart;
@@ -7137,6 +7357,106 @@
                                 .finally(function() {
                                     setLoading(false);
                                 });
+                        }
+
+                        function handleSelectionDuplicate() {
+                            if (!selectedSlot) {
+                                return;
+                            }
+
+                            if (pendingDragSubmitRef.current && pendingDragSubmitRef.current.timeoutId) {
+                                clearTimeout(pendingDragSubmitRef.current.timeoutId);
+                            }
+                            pendingDragSubmitRef.current = null;
+
+                            var startDate = createDateFromDayAndTime(selectedSlot.dayIso, selectedSlot.formStart);
+                            var endDate = createDateFromDayAndTime(selectedSlot.dayIso, selectedSlot.formEnd);
+                            endDate = normalizeMidnightEndDate(selectedSlot.dayIso, startDate, endDate, selectedSlot.formEnd);
+                            var taskLabel = selectedSlot.formTask ? selectedSlot.formTask.trim() : '';
+
+                            if (!taskLabel) {
+                                setSelectedSlot(function(previous) {
+                                    if (!previous) {
+                                        return previous;
+                                    }
+                                    return Object.assign({}, previous, {
+                                        error: config.labels.selectionErrorTask || 'Veuillez saisir un intitulé.'
+                                    });
+                                });
+                                return;
+                            }
+
+                            if (!isValidDate(startDate) || !isValidDate(endDate) || endDate <= startDate) {
+                                setSelectedSlot(function(previous) {
+                                    if (!previous) {
+                                        return previous;
+                                    }
+                                    return Object.assign({}, previous, {
+                                        error: config.labels.selectionErrorRange || 'Plage horaire invalide.'
+                                    });
+                                });
+                                return;
+                            }
+
+                            var durationMinutes = Math.max(SLOT_STEP_MINUTES, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
+                            var preferredStart = minutesSinceMidnight(endDate);
+                            var duplicateRange = findNextAvailableRange(selectedSlot.dayIso, preferredStart, durationMinutes, null);
+                            if (!duplicateRange) {
+                                setSelectedSlot(function(previous) {
+                                    if (!previous) {
+                                        return previous;
+                                    }
+                                    return Object.assign({}, previous, {
+                                        error: config.labels.selectionDuplicateNoSlot || 'Aucun créneau disponible pour dupliquer cette plage sur cette journée.'
+                                    });
+                                });
+                                return;
+                            }
+
+                            var dayDate = parseISODate(selectedSlot.dayIso);
+                            if (!dayDate) {
+                                setSelectedSlot(function(previous) {
+                                    if (!previous) {
+                                        return previous;
+                                    }
+                                    return Object.assign({}, previous, {
+                                        error: config.labels.selectionErrorRange || 'Plage horaire invalide.'
+                                    });
+                                });
+                                return;
+                            }
+
+                            var duplicateStart = dateFromDayMinutes(dayDate, duplicateRange.start);
+                            var duplicateEnd = dateFromDayMinutes(dayDate, duplicateRange.end);
+                            var duplicateSelection = {
+                                id: 'duplicate-' + Date.now(),
+                                dayIso: selectedSlot.dayIso,
+                                baseStartIso: duplicateStart.toISOString(),
+                                baseEndIso: duplicateEnd.toISOString(),
+                                durationMinutes: duplicateRange.end - duplicateRange.start,
+                                formTask: selectedSlot.formTask || '',
+                                formProject: selectedSlot.formProject || '',
+                                formStart: minutesToTimeValue(duplicateRange.start),
+                                formEnd: minutesToTimeValue(duplicateRange.end),
+                                hourId: null,
+                                entryId: null,
+                                isEditing: false,
+                                color: selectedSlot.color || config.accentColor,
+                                source: null,
+                                error: ''
+                            };
+
+                            submitSelection(duplicateSelection, {
+                                forceCreate: true,
+                                keepSelection: true
+                            });
+                        }
+
+                        function handleSelectionSubmit() {
+                            submitSelection(selectedSlot, {
+                                forceCreate: false,
+                                keepSelection: false
+                            });
                         }
 
                         // Auto-submit after favorite quick-select fills the form
@@ -7477,6 +7797,7 @@
                                     onCalendarWeekSelect: handleCalendarWeekSelect,
                                     onSelectionChange: handleSelectionChange,
                                     onSelectionSubmit: handleSelectionSubmit,
+                                    onSelectionDuplicate: handleSelectionDuplicate,
                                     onSelectionCancel: handleSelectionCancel,
                                     onSelectionDelete: handleSelectionDelete
                                 }),

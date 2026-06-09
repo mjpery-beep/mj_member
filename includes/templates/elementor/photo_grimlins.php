@@ -153,8 +153,13 @@ $mosaic_transition = isset($template_data['mosaic_transition']) && in_array($tem
     ? $template_data['mosaic_transition']
     : 'hover';
 $has_mosaic = $mosaic_enabled && !empty($mosaic_sessions);
+$mosaic_max_tiles = isset($template_data['mosaic_max_tiles']) ? (int) $template_data['mosaic_max_tiles'] : 18;
+$mosaic_max_tiles = max(4, min(48, $mosaic_max_tiles));
 if ($has_mosaic) {
     shuffle($mosaic_sessions);
+    if (count($mosaic_sessions) > $mosaic_max_tiles) {
+        $mosaic_sessions = array_slice($mosaic_sessions, 0, $mosaic_max_tiles);
+    }
 }
 $mosaic_speed = isset($template_data['mosaic_speed']) ? (float) $template_data['mosaic_speed'] : 5;
 $fullscreen = !empty($template_data['fullscreen']);

@@ -14,20 +14,10 @@ $config_json = isset($template_data['config_json']) ? (string) $template_data['c
 $show_demo_input = !empty($template_data['show_demo_input']);
 $input_label = isset($template_data['input_label']) ? (string) $template_data['input_label'] : __('Zone de saisie', 'mj-member');
 $input_placeholder = isset($template_data['input_placeholder']) ? (string) $template_data['input_placeholder'] : __('Touchez les touches pour ecrire ici.', 'mj-member');
-$layout_label = isset($template_data['layout_label']) ? (string) $template_data['layout_label'] : __('Belgique', 'mj-member');
-$mode_label = isset($template_data['mode_label']) ? (string) $template_data['mode_label'] : __('Clavier', 'mj-member');
 $is_preview = !empty($template_data['is_preview']);
 ?>
-<div class="<?php echo esc_attr($wrapper_classes); ?>" data-config="<?php echo esc_attr($config_json); ?>">
+<div class="<?php echo esc_attr($wrapper_classes); ?>" data-config="<?php echo esc_attr($config_json); ?>" data-preview="<?php echo $is_preview ? 'yes' : 'no'; ?>" aria-hidden="<?php echo $is_preview ? 'false' : 'true'; ?>">
     <div class="mj-tactile-keyboard__shell">
-        <div class="mj-tactile-keyboard__header">
-            <div class="mj-tactile-keyboard__header-copy">
-                <p class="mj-tactile-keyboard__eyebrow"><?php esc_html_e('Clavier tactile', 'mj-member'); ?></p>
-                <h3 class="mj-tactile-keyboard__title"><?php echo esc_html($layout_label); ?></h3>
-            </div>
-            <span class="mj-tactile-keyboard__mode-badge" data-role="mode-badge"><?php echo esc_html($mode_label); ?></span>
-        </div>
-
         <?php if ($show_demo_input) : ?>
             <label class="mj-tactile-keyboard__display-label" for="<?php echo esc_attr($widget->get_id()); ?>-display">
                 <?php echo esc_html($input_label); ?>
@@ -52,10 +42,6 @@ $is_preview = !empty($template_data['is_preview']);
             </div>
             <aside class="mj-tactile-keyboard__numpad" data-role="numpad"></aside>
         </div>
-
-        <p class="mj-tactile-keyboard__hint">
-            <?php esc_html_e('Le clavier ecrit dans le dernier champ texte actif ou dans la zone integree.', 'mj-member'); ?>
-        </p>
 
         <?php if ($is_preview) : ?>
             <p class="mj-tactile-keyboard__preview-note">

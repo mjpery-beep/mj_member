@@ -70,6 +70,10 @@
         }
     };
 
+    function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
     function initAll(scope) {
         var roots = (scope || document).querySelectorAll(ROOT_SELECTOR);
         roots.forEach(function (root) {
@@ -91,8 +95,31 @@
         }
     }
 
+    function isElementInteractive(element) {
+        var style;
+
+        if (!element || !(element instanceof HTMLElement) || !element.isConnected) {
+            return false;
+        }
+
+        if (element.closest('[hidden], [aria-hidden="true"], .is-hidden')) {
+            return false;
+        }
+
+        style = window.getComputedStyle(element);
+        if (!style || style.display === 'none' || style.visibility === 'hidden') {
+            return false;
+        }
+
+        return element.getClientRects().length > 0;
+    }
+
     function isTextInput(element) {
         if (!element || !(element instanceof HTMLElement)) {
+            return false;
+        }
+
+        if (!isElementInteractive(element)) {
             return false;
         }
 
@@ -107,6 +134,28 @@
         }
 
         return element.isContentEditable;
+    }
+
+    function isFormTextField(element) {
+        if (!element || !(element instanceof HTMLElement)) {
+            return false;
+        }
+
+        if (!isElementInteractive(element)) {
+            return false;
+        }
+
+        if (element instanceof HTMLTextAreaElement) {
+            return !element.disabled && !element.readOnly;
+        }
+
+        if (element instanceof HTMLInputElement) {
+            var type = (element.type || 'text').toLowerCase();
+            var supportedTypes = ['text', 'search', 'url', 'tel', 'password', 'email', 'number'];
+            return supportedTypes.indexOf(type) !== -1 && !element.disabled && !element.readOnly;
+        }
+
+        return false;
     }
 
     function createRow() {
@@ -150,6 +199,76 @@
         return button;
     }
 
+    function parseNumber(value, fallback) {
+        var parsed = parseFloat(value);
+        return isFinite(parsed) ? parsed : fallback;
+    }
+
+    function isDragBlockedTarget(target) {
+        if (!target || !(target instanceof HTMLElement)) {
+            return true;
+        }
+
+        return Boolean(target.closest('button, input, textarea, select, option, a, [contenteditable="true"], .mj-tactile-keyboard__key, .mj-tactile-keyboard__emoji-tab'));
+    }
+
+    function createAudioEngine() {
+        var AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+
+        if (!AudioContextConstructor) {
+            return null;
+        }
+
+        return {
+            context: null,
+            getContext: function () {
+                if (!this.context) {
+                    this.context = new AudioContextConstructor();
+                }
+
+                if (this.context.state === 'suspended' && typeof this.context.resume === 'function') {
+                    this.context.resume();
+                }
+
+                return this.context;
+            },
+            play: function (tone) {
+                var context;
+                var oscillator;
+                var gain;
+                var startAt;
+                var stopAt;
+
+                try {
+                    context = this.getContext();
+                } catch (error) {
+                    return;
+                }
+
+                if (!context) {
+                    return;
+                }
+
+                oscillator = context.createOscillator();
+                gain = context.createGain();
+                startAt = context.currentTime;
+                stopAt = startAt + 0.05;
+
+                oscillator.type = tone === 'action' ? 'triangle' : 'sine';
+                oscillator.frequency.setValueAtTime(tone === 'action' ? 420 : 520, startAt);
+
+                gain.gain.setValueAtTime(0.0001, startAt);
+                gain.gain.exponentialRampToValueAtTime(0.035, startAt + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, stopAt);
+
+                oscillator.connect(gain);
+                gain.connect(context.destination);
+                oscillator.start(startAt);
+                oscillator.stop(stopAt);
+            }
+        };
+    }
+
     function TactileKeyboard(root) {
         this.root = root;
         this.config = parseConfig(root);
@@ -158,24 +277,43 @@
         this.emojiNode = root.querySelector('[data-role="emoji"]');
         this.numpadNode = root.querySelector('[data-role="numpad"]');
         this.displayInput = root.querySelector('[data-role="display"]');
-        this.modeBadge = root.querySelector('[data-role="mode-badge"]');
         this.mode = this.config.mode === 'emoji' ? 'emoji' : 'keyboard';
         this.symbols = false;
         this.shift = false;
         this.emojiGroup = 'smileys';
         this.lastTarget = this.displayInput || null;
+        this.audio = createAudioEngine();
+        this.keepVisible = root.dataset.preview === 'yes';
+        this.dragState = {
+            pointerId: null,
+            startClientX: 0,
+            startClientY: 0,
+            startDragX: 0,
+            startDragY: 0,
+            startRect: null
+        };
 
         this.bind();
         this.render();
+        this.syncVisibility(document.activeElement);
     }
 
     TactileKeyboard.prototype.bind = function () {
         var self = this;
+        var shell = this.root.querySelector('.mj-tactile-keyboard__shell');
 
         document.addEventListener('focusin', function (event) {
             if (isTextInput(event.target)) {
                 self.lastTarget = event.target;
             }
+
+            self.syncVisibility(event.target);
+        }, true);
+
+        document.addEventListener('focusout', function () {
+            window.setTimeout(function () {
+                self.syncVisibility(document.activeElement);
+            }, 0);
         }, true);
 
         this.root.addEventListener('pointerdown', function (event) {
@@ -187,6 +325,7 @@
         this.root.addEventListener('click', function (event) {
             var tab = event.target.closest('.mj-tactile-keyboard__emoji-tab');
             if (tab) {
+                self.playKeySound('action');
                 self.emojiGroup = tab.dataset.group || 'smileys';
                 self.renderEmoji();
                 return;
@@ -197,6 +336,8 @@
                 return;
             }
 
+            self.playKeySound(key.dataset.action ? 'action' : 'key');
+
             if (key.dataset.action) {
                 self.handleAction(key.dataset.action);
                 return;
@@ -206,14 +347,133 @@
                 self.insertValue(key.dataset.value);
             }
         });
+
+        if (shell) {
+            shell.addEventListener('pointerdown', function (event) {
+                self.onDragStart(event, shell);
+            });
+            shell.addEventListener('pointermove', function (event) {
+                self.onDragMove(event, shell);
+            });
+            shell.addEventListener('pointerup', function (event) {
+                self.onDragEnd(event, shell);
+            });
+            shell.addEventListener('pointercancel', function (event) {
+                self.onDragEnd(event, shell);
+            });
+        }
+    };
+
+    TactileKeyboard.prototype.onDragStart = function (event, shell) {
+        if (!event || !shell) {
+            return;
+        }
+
+        if (event.button !== undefined && event.button !== 0) {
+            return;
+        }
+
+        if (isDragBlockedTarget(event.target)) {
+            return;
+        }
+
+        this.dragState.pointerId = event.pointerId;
+        this.dragState.startClientX = event.clientX;
+        this.dragState.startClientY = event.clientY;
+        this.dragState.startDragX = parseNumber(this.root.dataset.dragX, 0);
+        this.dragState.startDragY = parseNumber(this.root.dataset.dragY, 0);
+        this.dragState.startRect = this.root.getBoundingClientRect();
+
+        this.root.classList.add('is-dragging');
+
+        if (typeof shell.setPointerCapture === 'function') {
+            shell.setPointerCapture(event.pointerId);
+        }
+
+        event.preventDefault();
+    };
+
+    TactileKeyboard.prototype.onDragMove = function (event) {
+        var dx;
+        var dy;
+        var requestedX;
+        var requestedY;
+        var minLeft = 8;
+        var minTop = 8;
+        var startRect;
+        var maxLeft;
+        var maxTop;
+        var nextLeft;
+        var nextTop;
+        var clampedLeft;
+        var clampedTop;
+
+        if (this.dragState.pointerId !== event.pointerId || !this.dragState.startRect) {
+            return;
+        }
+
+        dx = event.clientX - this.dragState.startClientX;
+        dy = event.clientY - this.dragState.startClientY;
+        requestedX = this.dragState.startDragX + dx;
+        requestedY = this.dragState.startDragY + dy;
+
+        startRect = this.dragState.startRect;
+        maxLeft = Math.max(minLeft, window.innerWidth - startRect.width - minLeft);
+        maxTop = Math.max(minTop, window.innerHeight - startRect.height - minTop);
+
+        nextLeft = startRect.left + (requestedX - this.dragState.startDragX);
+        nextTop = startRect.top + (requestedY - this.dragState.startDragY);
+        clampedLeft = clamp(nextLeft, minLeft, maxLeft);
+        clampedTop = clamp(nextTop, minTop, maxTop);
+
+        requestedX = this.dragState.startDragX + (clampedLeft - startRect.left);
+        requestedY = this.dragState.startDragY + (clampedTop - startRect.top);
+
+        this.root.dataset.dragX = String(requestedX);
+        this.root.dataset.dragY = String(requestedY);
+        this.root.style.setProperty('--mj-tactile-drag-x', requestedX + 'px');
+        this.root.style.setProperty('--mj-tactile-drag-y', requestedY + 'px');
+        this.root.style.transform = 'translate(' + requestedX + 'px, ' + requestedY + 'px)';
+
+        event.preventDefault();
+    };
+
+    TactileKeyboard.prototype.onDragEnd = function (event, shell) {
+        if (this.dragState.pointerId !== event.pointerId) {
+            return;
+        }
+
+        if (shell && typeof shell.releasePointerCapture === 'function') {
+            shell.releasePointerCapture(event.pointerId);
+        }
+
+        this.dragState.pointerId = null;
+        this.dragState.startRect = null;
+        this.root.classList.remove('is-dragging');
+    };
+
+    TactileKeyboard.prototype.playKeySound = function (tone) {
+        if (!this.audio) {
+            return;
+        }
+
+        this.audio.play(tone);
+    };
+
+    TactileKeyboard.prototype.syncVisibility = function (activeElement) {
+        if (this.keepVisible) {
+            this.root.classList.add('is-active');
+            this.root.setAttribute('aria-hidden', 'false');
+            return;
+        }
+
+        var shouldShow = isFormTextField(activeElement);
+        this.root.classList.toggle('is-active', shouldShow);
+        this.root.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
     };
 
     TactileKeyboard.prototype.render = function () {
         this.root.dataset.view = this.mode;
-
-        if (this.modeBadge) {
-            this.modeBadge.textContent = this.mode === 'emoji' ? 'Emojis' : 'Clavier';
-        }
 
         this.renderKeyboard();
         this.renderEmoji();

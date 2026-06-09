@@ -39,6 +39,7 @@ $show_list = !isset($settings['show_approved_list']) || $settings['show_approved
 $per_page = isset($settings['per_page']) ? (int) $settings['per_page'] : 6;
 $max_photos = isset($settings['max_photos']) ? (int) $settings['max_photos'] : 5;
 $allow_video = !isset($settings['allow_video']) || $settings['allow_video'] === 'yes';
+$photo_booth_mode = isset($settings['photo_booth_mode']) && $settings['photo_booth_mode'] === 'yes';
 $allow_file_upload = !isset($settings['allow_file_upload']) || $settings['allow_file_upload'] === 'yes';
 $allow_kiosk_submission = isset($settings['allow_kiosk_submission']) && $settings['allow_kiosk_submission'] === 'yes';
 $kiosk_member_id = isset($settings['kiosk_member_id']) ? (int) $settings['kiosk_member_id'] : 0;
@@ -203,6 +204,10 @@ $localize_data = array(
         'videoRetake' => __('Recommencer', 'mj-member'),
         'videoUse' => __('Utiliser cette vidéo', 'mj-member'),
         'videoUploading' => __('Upload de la vidéo en cours...', 'mj-member'),
+        'captureIn' => __('Capture dans %s...', 'mj-member'),
+        'recordIn' => __('Enregistrement dans %s...', 'mj-member'),
+        'modePhoto' => __('Photo', 'mj-member'),
+        'modeVideo' => __('Vidéo', 'mj-member'),
         'videoTooLarge' => __('La vidéo est trop volumineuse. Taille maximale : %s.', 'mj-member'),
         'videoUploadError' => __('Echec de l\'upload vidéo. Veuillez réessayer.', 'mj-member'),
         'loadMore' => __('Voir plus', 'mj-member'),
@@ -227,12 +232,13 @@ $localize_data['isAnimator'] = $is_animator ?? false;
 $localize_data['hasPendingApprovals'] = $is_animator && !empty($pending_testimonials);
 $localize_data['featuredOnly'] = $featured_only;
 $localize_data['displayTemplate'] = $display_template;
+$localize_data['photoBoothMode'] = $photo_booth_mode;
 $localize_data['memberInitial'] = $effective_member_initial;
 
 wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_data);
 ?>
 
-<div id="<?php echo esc_attr($widget_id); ?>" class="mj-testimonials mj-testimonials--layout-<?php echo esc_attr($layout); ?> mj-testimonials--template-<?php echo esc_attr($display_template); ?><?php echo $is_single_mode ? ' mj-testimonials--single' : ''; ?>" data-columns="<?php echo esc_attr((string)$columns); ?>">
+<div id="<?php echo esc_attr($widget_id); ?>" class="mj-testimonials mj-testimonials--layout-<?php echo esc_attr($layout); ?> mj-testimonials--template-<?php echo esc_attr($display_template); ?><?php echo $photo_booth_mode ? ' mj-testimonials--photo-booth' : ''; ?><?php echo $is_single_mode ? ' mj-testimonials--single' : ''; ?>" data-columns="<?php echo esc_attr((string)$columns); ?>">
 
     <?php if ($title): ?>
         <h2 class="mj-testimonials__title"><?php echo esc_html($title); ?></h2>
@@ -251,12 +257,12 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
     <?php if ($allow_submission): ?>
         <div class="mj-testimonials__form-section">
             <?php if ($can_submit): ?>
-                <form class="mj-testimonials__form" data-widget-id="<?php echo esc_attr($widget_id); ?>">
+                <form class="mj-testimonials__form" data-widget-id="<?php echo esc_attr($widget_id); ?>" data-photo-booth="<?php echo $photo_booth_mode ? '1' : '0'; ?>" data-allow-video="<?php echo $allow_video ? '1' : '0'; ?>">
                     <div class="mj-testimonials__form-content">
                         <textarea 
                             name="content" 
                             class="mj-testimonials__textarea" 
-                            placeholder="<?php esc_attr_e('Partagez votre expérience à la Maison de Jeunes...', 'mj-member'); ?>"
+                            placeholder="<?php echo esc_attr($photo_booth_mode ? __('Ajoutez un message (optionnel)...', 'mj-member') : __('Partagez votre expérience à la Maison de Jeunes...', 'mj-member')); ?>"
                             rows="4"
                         ></textarea>
                     </div>
@@ -276,27 +282,40 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                 </button>
                             <?php endif; ?>
                             
-                            <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__capture-photo">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                                    <circle cx="12" cy="13" r="4"></circle>
-                                </svg>
-                                <span><?php esc_html_e('Prendre une photo', 'mj-member'); ?></span>
-                            </button>
-                            
-                            <?php if ($allow_video): ?>
-                                <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__add-video">
+                            <?php if (!$photo_booth_mode): ?>
+                                <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__capture-photo">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                        <circle cx="12" cy="13" r="4"></circle>
                                     </svg>
-                                    <span><?php esc_html_e('Filmer', 'mj-member'); ?></span>
+                                    <span><?php esc_html_e('Prendre une photo', 'mj-member'); ?></span>
                                 </button>
+                                
+                                <?php if ($allow_video): ?>
+                                    <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__add-video">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+                                        </svg>
+                                        <span><?php esc_html_e('Filmer', 'mj-member'); ?></span>
+                                    </button>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
 
                         <div class="mj-testimonials__camera-preview" style="display: none;">
                             <video class="mj-testimonials__camera-element" playsinline></video>
+                            <?php if ($photo_booth_mode): ?>
+                                <div class="mj-testimonials__camera-mode-switch" aria-label="<?php esc_attr_e('Mode de capture', 'mj-member'); ?>">
+                                    <button type="button" class="mj-testimonials__camera-mode-btn is-active" data-mode="photo"><?php esc_html_e('Photo', 'mj-member'); ?></button>
+                                    <?php if ($allow_video): ?>
+                                        <button type="button" class="mj-testimonials__camera-mode-btn" data-mode="video"><?php esc_html_e('Vidéo', 'mj-member'); ?></button>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="mj-testimonials__capture-countdown" aria-live="assertive" hidden>
+                                    <span class="mj-testimonials__capture-countdown-value">3</span>
+                                </div>
+                            <?php endif; ?>
                             <div class="mj-testimonials__camera-controls">
                                 <button type="button" class="mj-btn mj-btn--primary mj-testimonials__camera-capture">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -304,14 +323,25 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                     </svg>
                                     <span><?php esc_html_e('Capturer', 'mj-member'); ?></span>
                                 </button>
-                                <button type="button" class="mj-btn mj-btn--ghost mj-testimonials__camera-cancel">
-                                    <?php esc_html_e('Annuler', 'mj-member'); ?>
-                                </button>
+                                <?php if (!$photo_booth_mode): ?>
+                                    <button type="button" class="mj-btn mj-btn--ghost mj-testimonials__camera-cancel">
+                                        <?php esc_html_e('Annuler', 'mj-member'); ?>
+                                    </button>
+                                <?php endif; ?>
                             </div>
                         </div>
 
                         <div class="mj-testimonials__video-preview" style="display: none;">
                             <video class="mj-testimonials__video-element" playsinline></video>
+                            <?php if ($photo_booth_mode): ?>
+                                <div class="mj-testimonials__camera-mode-switch" aria-label="<?php esc_attr_e('Mode de capture', 'mj-member'); ?>">
+                                    <button type="button" class="mj-testimonials__camera-mode-btn" data-mode="photo"><?php esc_html_e('Photo', 'mj-member'); ?></button>
+                                    <button type="button" class="mj-testimonials__camera-mode-btn is-active" data-mode="video"><?php esc_html_e('Vidéo', 'mj-member'); ?></button>
+                                </div>
+                                <div class="mj-testimonials__capture-countdown" aria-live="assertive" hidden>
+                                    <span class="mj-testimonials__capture-countdown-value">3</span>
+                                </div>
+                            <?php endif; ?>
                             <div class="mj-testimonials__video-controls">
                                 <button type="button" class="mj-btn mj-btn--danger mj-testimonials__video-record">
                                     <span class="mj-testimonials__video-record-dot"></span>
@@ -320,9 +350,11 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                 <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__video-stop" style="display: none;">
                                     <?php esc_html_e('Arrêter', 'mj-member'); ?>
                                 </button>
-                                <button type="button" class="mj-btn mj-btn--ghost mj-testimonials__video-cancel">
-                                    <?php esc_html_e('Annuler', 'mj-member'); ?>
-                                </button>
+                                <?php if (!$photo_booth_mode): ?>
+                                    <button type="button" class="mj-btn mj-btn--ghost mj-testimonials__video-cancel">
+                                        <?php esc_html_e('Annuler', 'mj-member'); ?>
+                                    </button>
+                                <?php endif; ?>
                             </div>
                         </div>
 

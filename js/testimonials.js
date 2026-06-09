@@ -110,6 +110,12 @@
             this.$status = $form.find('.mj-testimonials__form-status');
             this.$photoIdsInput = $form.find('input[name="photo_ids"]');
             this.$videoIdInput = $form.find('input[name="video_id"]');
+            this.isPhotoBoothMode = String($form.data('photo-booth')) === '1';
+            this.photoBoothAllowVideo = String($form.data('allow-video')) === '1';
+            this.captureMode = 'photo';
+            this.$cameraModeButtons = $form.find('.mj-testimonials__camera-mode-btn');
+            this.$countdownOverlays = $form.find('.mj-testimonials__capture-countdown');
+            this.$countdownValues = $form.find('.mj-testimonials__capture-countdown-value');
 
             this.photos = [];
             this.videoBlob = null;
@@ -120,6 +126,8 @@
             this.cameraStream = null;
             this.isRecording = false;
             this.isSubmitting = false;
+            this.isCountingDown = false;
+            this.captureCountdownInterval = null;
             
             // Link preview
             this.linkPreview = null;
@@ -139,6 +147,7 @@
             this.bindEvents();
             this.initLinkPreviewContainer();
             this.initMentionDropdown();
+            this.initPhotoBoothMode();
         }
 
         initLinkPreviewContainer() {
@@ -180,6 +189,35 @@
             this.$form.find('.mj-testimonials__video-cancel').on('click', () => this.cancelVideo());
             this.$form.find('.mj-testimonials__video-retake').on('click', () => this.retakeVideo());
             this.$form.find('.mj-testimonials__video-remove').on('click', () => this.removeVideo());
+
+            if (this.isPhotoBoothMode && this.$cameraModeButtons.length) {
+                this.$cameraModeButtons.on('click', (e) => {
+                    const nextMode = String($(e.currentTarget).data('mode') || 'photo');
+                    this.setCaptureMode(nextMode);
+                });
+            }
+        }
+
+        initPhotoBoothMode() {
+            if (!this.isPhotoBoothMode) {
+                return;
+            }
+            this.setCaptureMode('photo');
+        }
+
+        setCaptureMode(mode) {
+            const nextMode = mode === 'video' && this.photoBoothAllowVideo ? 'video' : 'photo';
+            this.captureMode = nextMode;
+            this.$cameraModeButtons.removeClass('is-active');
+            this.$cameraModeButtons.filter(`[data-mode="${nextMode}"]`).addClass('is-active');
+
+            if (nextMode === 'video') {
+                this.cancelPhotoCapture();
+                this.startVideoCapture();
+            } else {
+                this.cancelVideo();
+                this.startPhotoCapture();
+            }
         }
 
         handlePhotoSelect(e) {
@@ -736,8 +774,24 @@
             }
 
             try {
+                if (this.stream) {
+                    this.stopStream();
+                }
+                this.$videoPreview.hide();
+
+                if (this.cameraStream) {
+                    this.$cameraElement[0].srcObject = this.cameraStream;
+                    await this.$cameraElement[0].play();
+                    this.$cameraPreview.show();
+                    return;
+                }
+
                 this.cameraStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    video: {
+                        facingMode: this.isPhotoBoothMode ? 'user' : 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
                     audio: false
                 });
 
@@ -751,6 +805,15 @@
         }
 
         async capturePhoto() {
+            if (this.isPhotoBoothMode) {
+                this.startCaptureCountdown('photo');
+                return;
+            }
+
+            this.capturePhotoNow();
+        }
+
+        capturePhotoNow() {
             const video = this.$cameraElement[0];
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
@@ -813,12 +876,15 @@
                     this.showStatus(i18n.submitError, 'error');
                     console.error('Photo capture upload error:', err);
                 }
-                
-                this.cancelPhotoCapture();
+
+                if (!this.isPhotoBoothMode) {
+                    this.cancelPhotoCapture();
+                }
             }, 'image/jpeg', 0.9);
         }
 
         cancelPhotoCapture() {
+            this.clearCaptureCountdown();
             if (this.cameraStream) {
                 this.cameraStream.getTracks().forEach(track => track.stop());
                 this.cameraStream = null;
@@ -835,6 +901,13 @@
             }
 
             try {
+                if (this.cameraStream) {
+                    this.cancelPhotoCapture();
+                }
+                if (this.stream) {
+                    this.stopStream();
+                }
+
                 this.stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
                     audio: true
@@ -854,7 +927,11 @@
             if (this.isRecording) {
                 this.stopRecording();
             } else {
-                this.startRecording();
+                if (this.isPhotoBoothMode) {
+                    this.startCaptureCountdown('video');
+                } else {
+                    this.startRecording();
+                }
             }
         }
 
@@ -886,6 +963,7 @@
         }
 
         stopRecording() {
+            this.clearCaptureCountdown();
             if (this.mediaRecorder && this.isRecording) {
                 this.mediaRecorder.stop();
                 this.isRecording = false;
@@ -895,6 +973,7 @@
         }
 
         showVideoResult() {
+            this.clearCaptureCountdown();
             this.stopStream();
             this.$videoPreview.hide();
             
@@ -904,6 +983,7 @@
         }
 
         cancelVideo() {
+            this.clearCaptureCountdown();
             this.stopStream();
             this.$videoPreview.hide();
             this.$addVideoBtn.show();
@@ -919,11 +999,69 @@
         }
 
         removeVideo() {
+            this.clearCaptureCountdown();
             this.$videoResult.hide();
             this.$addVideoBtn.show();
             this.videoBlob = null;
             this.videoId = null;
             this.$videoIdInput.val('');
+        }
+
+        updateCountdownOverlay(remaining) {
+            if (this.$countdownValues.length) {
+                this.$countdownValues.text(String(remaining));
+            }
+            if (this.$countdownOverlays.length) {
+                this.$countdownOverlays.prop('hidden', false).removeAttr('hidden');
+            }
+        }
+
+        clearCaptureCountdown() {
+            if (this.captureCountdownInterval) {
+                window.clearInterval(this.captureCountdownInterval);
+                this.captureCountdownInterval = null;
+            }
+            this.isCountingDown = false;
+            if (this.$countdownOverlays.length) {
+                this.$countdownOverlays.prop('hidden', true).attr('hidden', 'hidden');
+            }
+            if (this.$countdownValues.length) {
+                this.$countdownValues.text('3');
+            }
+        }
+
+        startCaptureCountdown(captureType) {
+            if (!this.isPhotoBoothMode || this.isCountingDown) {
+                return;
+            }
+
+            const isVideoCapture = captureType === 'video';
+            this.clearCaptureCountdown();
+            this.isCountingDown = true;
+
+            let remaining = 3;
+            this.updateCountdownOverlay(remaining);
+
+            const labelPattern = isVideoCapture
+                ? (i18n.recordIn || 'Enregistrement dans %s...')
+                : (i18n.captureIn || 'Capture dans %s...');
+            this.showStatus(labelPattern.replace('%s', String(remaining)), '');
+
+            this.captureCountdownInterval = window.setInterval(() => {
+                remaining -= 1;
+                if (remaining <= 0) {
+                    this.clearCaptureCountdown();
+                    if (isVideoCapture) {
+                        this.startRecording();
+                    } else {
+                        this.capturePhotoNow();
+                    }
+                    return;
+                }
+
+                this.updateCountdownOverlay(remaining);
+                this.showStatus(labelPattern.replace('%s', String(remaining)), '');
+            }, 1000);
         }
 
         stopStream() {

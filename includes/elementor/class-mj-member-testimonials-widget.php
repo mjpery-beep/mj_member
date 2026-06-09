@@ -138,6 +138,22 @@ class Mj_Member_Elementor_Testimonials_Widget extends Widget_Base
         );
 
         $this->add_control(
+            'photo_booth_mode',
+            array(
+                'label' => __('Mode photo booth', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'description' => __('Active une interface tactile avec caméra ouverte, bascule photo/vidéo sur l\'aperçu et décompte de capture.', 'mj-member'),
+                'condition' => array(
+                    'allow_submission' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
             'allow_file_upload',
             array(
                 'label' => __('Autoriser l\'upload depuis l\'ordinateur', 'mj-member'),

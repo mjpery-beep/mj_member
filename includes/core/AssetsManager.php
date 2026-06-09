@@ -347,6 +347,7 @@ final class AssetsManager
         self::registerScript('mj-member-photo-grimlins', 'js/elementor/photo-grimlins.js', array('mj-member-utils'));
         self::registerScript('mj-member-photo-import-timeline', 'js/elementor/photo-import-timeline.js', array('mj-member-utils'));
         self::registerScript('mj-member-grimlins-gallery', 'js/elementor/grimlins-gallery.js', array('mj-member-utils'));
+        self::registerScript('mj-member-grim-gif', 'js/elementor/grim-gif.js', array());
         self::registerScript('mj-member-idea-box', 'js/elementor/idea-box.js', array('mj-member-utils'));
         self::registerScript('mj-member-documents-manager', 'js/elementor/documents-manager.js', array('mj-member-utils'));
         self::registerScript('mj-member-payments-overview', 'js/elementor/payments-overview.js', array('mj-member-utils'));
@@ -605,6 +606,7 @@ final class AssetsManager
             case 'grim-gif':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-grim-gif');
+                wp_enqueue_script('mj-member-grim-gif');
                 break;
 
             case 'todo-widget':

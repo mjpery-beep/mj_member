@@ -86,6 +86,34 @@ class Mj_Member_Elementor_Grim_Gif_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'enable_switch_grimlins',
+            array(
+                'label' => __('Switch grimlins', 'mj-member'),
+                'description' => __('Charge automatiquement un autre Grimlins toutes les X secondes.', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'no',
+            )
+        );
+
+        $this->add_control(
+            'switch_grimlins_interval',
+            array(
+                'label' => __('Temps X (secondes)', 'mj-member'),
+                'type' => Controls_Manager::NUMBER,
+                'min' => 1,
+                'max' => 3600,
+                'step' => 1,
+                'default' => 8,
+                'condition' => array(
+                    'enable_switch_grimlins' => 'yes',
+                ),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->start_controls_section(
@@ -217,7 +245,8 @@ class Mj_Member_Elementor_Grim_Gif_Widget extends Widget_Base {
         $settings = $this->get_settings_for_display();
         $this->apply_visibility_to_wrapper($settings, 'mj-grim-gif');
 
-        $gif = $this->get_random_gif();
+        $available_gifs = $this->get_available_gifs();
+        $gif = $this->pick_random_gif($available_gifs);
         if ($gif === null) {
             echo '<div class="mj-member-account-warning">' . esc_html__('Aucun GIF Grimlins disponible pour le moment.', 'mj-member') . '</div>';
             return;
@@ -231,14 +260,20 @@ class Mj_Member_Elementor_Grim_Gif_Widget extends Widget_Base {
 
         $is_preview = $this->is_elementor_preview_mode();
 
+        $message_pool = $this->get_message_candidates($settings);
+
         $template_data = array(
             'title' => isset($settings['title']) ? (string) $settings['title'] : '',
             'subtitle' => isset($settings['subtitle']) ? (string) $settings['subtitle'] : '',
             'gif_url' => $gif['url'],
             'gif_name' => $gif['name'],
             'show_filename' => !empty($settings['show_filename']) && $settings['show_filename'] === 'yes',
+            'switch_enabled' => !empty($settings['enable_switch_grimlins']) && $settings['enable_switch_grimlins'] === 'yes' && count($available_gifs) > 1,
+            'switch_interval' => isset($settings['switch_grimlins_interval']) ? max(1, (int) $settings['switch_grimlins_interval']) : 8,
+            'gif_pool' => $available_gifs,
             'is_preview' => $is_preview,
             'message' => $this->pick_random_message($settings),
+            'message_pool' => $message_pool,
         );
 
         /**
@@ -257,15 +292,15 @@ class Mj_Member_Elementor_Grim_Gif_Widget extends Widget_Base {
     /**
      * @return array<string,string>|null
      */
-    private function get_random_gif(): ?array
+    private function get_available_gifs(): array
     {
         $directory = trailingslashit(Config::path()) . 'grim-gif';
         if (!is_dir($directory)) {
-            return null;
+            return array();
         }
 
         $allowedExtensions = array('gif', 'webp');
-        $files = array();
+        $gifs = array();
         try {
             foreach (new DirectoryIterator($directory) as $fileInfo) {
                 if (!$fileInfo->isFile()) {
@@ -277,37 +312,50 @@ class Mj_Member_Elementor_Grim_Gif_Widget extends Widget_Base {
                     continue;
                 }
 
-                $files[] = $fileInfo->getFilename();
+                $selected = $fileInfo->getFilename();
+                $fileName = pathinfo($selected, PATHINFO_FILENAME);
+                $readableName = trim(preg_replace('/[-_]+/', ' ', $fileName));
+                if ($readableName === '') {
+                    $readableName = __('Grimlins', 'mj-member');
+                }
+
+                $url = trailingslashit(Config::url()) . 'grim-gif/' . rawurlencode($selected);
+
+                /**
+                 * Permet d'ajuster l'URL finale du GIF Grimlins.
+                 *
+                 * @param string $url
+                 * @param string $fileName
+                 */
+                $url = apply_filters('mj_member_grim_gif_url', $url, $selected);
+
+                $gifs[] = array(
+                    'url' => (string) $url,
+                    'name' => $readableName,
+                );
             }
         } catch (Exception $exception) {
+            return array();
+        }
+
+        if (empty($gifs)) {
+            return array();
+        }
+
+        return $gifs;
+    }
+
+    /**
+     * @param array<int,array<string,string>> $gifs
+     * @return array<string,string>|null
+     */
+    private function pick_random_gif(array $gifs): ?array
+    {
+        if (empty($gifs)) {
             return null;
         }
 
-        if (empty($files)) {
-            return null;
-        }
-
-        $selected = $files[array_rand($files)];
-        $fileName = pathinfo($selected, PATHINFO_FILENAME);
-        $readableName = trim(preg_replace('/[-_]+/', ' ', $fileName));
-        if ($readableName === '') {
-            $readableName = __('Grimlins', 'mj-member');
-        }
-
-        $url = trailingslashit(Config::url()) . 'grim-gif/' . rawurlencode($selected);
-
-        /**
-         * Permet d'ajuster l'URL finale du GIF Grimlins.
-         *
-         * @param string $url
-         * @param string $fileName
-         */
-        $url = apply_filters('mj_member_grim_gif_url', $url, $selected);
-
-        return array(
-            'url' => (string) $url,
-            'name' => $readableName,
-        );
+        return $gifs[array_rand($gifs)] ?? null;
     }
 
     private function is_elementor_preview_mode(): bool
@@ -327,13 +375,28 @@ class Mj_Member_Elementor_Grim_Gif_Widget extends Widget_Base {
      */
     private function pick_random_message(array $settings): string
     {
-        if (empty($settings['messages']) || !is_string($settings['messages'])) {
+        $candidates = $this->get_message_candidates($settings);
+
+        if (empty($candidates)) {
             return '';
+        }
+
+        return (string) $candidates[array_rand($candidates)];
+    }
+
+    /**
+     * @param array<string,mixed> $settings
+     * @return array<int,string>
+     */
+    private function get_message_candidates(array $settings): array
+    {
+        if (empty($settings['messages']) || !is_string($settings['messages'])) {
+            return array();
         }
 
         $lines = preg_split('/\r?\n/', $settings['messages']);
         if (!is_array($lines) || empty($lines)) {
-            return '';
+            return array();
         }
 
         $candidates = array();
@@ -344,10 +407,6 @@ class Mj_Member_Elementor_Grim_Gif_Widget extends Widget_Base {
             }
         }
 
-        if (empty($candidates)) {
-            return '';
-        }
-
-        return (string) $candidates[array_rand($candidates)];
+        return $candidates;
     }
 }

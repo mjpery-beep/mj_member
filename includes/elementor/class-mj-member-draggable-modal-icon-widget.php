@@ -336,6 +336,34 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
             )
         );
 
+        $this->add_responsive_control(
+            'icon_image_size',
+            array(
+                'label' => __('Largeur image (header modal)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', '%'),
+                'range' => array(
+                    'px' => array('min' => 8, 'max' => 200),
+                    '%' => array('min' => 5, 'max' => 100),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-header-icon img, {{WRAPPER}} .mj-dmiw__modal-header-icon svg' => 'width: {{SIZE}}{{UNIT}}; height: auto;',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'icon_image_padding',
+            array(
+                'label' => __('Padding image (header modal)', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-dmiw__modal-header-icon img, {{WRAPPER}} .mj-dmiw__modal-header-icon svg' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
         $this->add_control(
             'icon_background_color',
             array(
@@ -813,7 +841,20 @@ class Mj_Member_Elementor_Draggable_Modal_Icon_Widget extends Widget_Nested_Base
             <div class="mj-dmiw__overlay" hidden></div>
             <section class="mj-dmiw__modal" role="dialog" aria-modal="true" hidden>
                 <header class="mj-dmiw__modal-header" data-modal-drag-handle="1">
-                    <h3 class="mj-dmiw__modal-title">{{ settings.modal_title || '<?php echo esc_js(__('Contenu', 'mj-member')); ?>' }}</h3>
+                    <div class="mj-dmiw__modal-title-group">
+                        <# if ( settings.show_icon_in_header === 'yes' ) { #>
+                            <span class="mj-dmiw__modal-header-icon">
+                                <# if ( settings.trigger_icon && settings.trigger_icon.url ) { #>
+                                    <img src="{{ settings.trigger_icon.url }}" alt="" loading="lazy" />
+                                <# } else { #>
+                                    <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                                        <path d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm4.65 12.35a1 1 0 0 1-1.41 1.41L11 11.52V7a1 1 0 0 1 2 0v3.69Z"></path>
+                                    </svg>
+                                <# } #>
+                            </span>
+                        <# } #>
+                        <h3 class="mj-dmiw__modal-title">{{ settings.modal_title || '<?php echo esc_js(__('Contenu', 'mj-member')); ?>' }}</h3>
+                    </div>
                     <# if ( ( settings.close_button_type || 'icon' ) === 'text' ) { #>
                         <button type="button" class="mj-dmiw__close" aria-label="<?php echo esc_attr__('Fermer', 'mj-member'); ?>"><?php echo esc_html__('Fermer', 'mj-member'); ?></button>
                     <# } else { #>
