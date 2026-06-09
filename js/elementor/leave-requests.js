@@ -392,36 +392,32 @@
     }
 
     // Calendar Overview Component - 3 months side by side
-    function CalendarOverview({ requests, types, onDelete, selectedYear, isCoordinator, onApprove, onReject, onRejectModal }) {
+    function CalendarOverview({ requests, types, onDelete, selectedYear, isCoordinator, onApprove, onReject, onRejectModal, selectionToken }) {
         const today = new Date();
 
-        // Compute initial start so current month is centered (prev month, current, next)
-        const getInitialStart = (year) => {
-            const isCurrentYear = !year || year === today.getFullYear();
-            if (isCurrentYear) {
-                const m = today.getMonth();
-                return m === 0
-                    ? { month: 11, year: today.getFullYear() - 1 }
-                    : { month: m - 1, year: today.getFullYear() };
-            }
-            return { month: 0, year: year };
+        // Keep the initial window aligned with the "Aujourd'hui" button behavior.
+        const getTodayStart = () => {
+            const m = today.getMonth();
+            return m === 0
+                ? { month: 11, year: today.getFullYear() - 1 }
+                : { month: m - 1, year: today.getFullYear() };
         };
 
-        const initial = getInitialStart(selectedYear);
+        const initial = getTodayStart();
         const [startMonth, setStartMonth] = useState(initial.month);
         const [startYear, setStartYear] = useState(initial.year);
         const [viewingCertificate, setViewingCertificate] = useState(null);
         const i18n = mjLeaveRequests.i18n;
 
-        // Reset calendar when selected year changes
+        // Reset the visible window when the selected member changes.
         useEffect(() => {
-            if (selectedYear) {
-                const s = getInitialStart(selectedYear);
-                setStartYear(s.year);
-                setStartMonth(s.month);
-            }
-        }, [selectedYear]);
+            const s = getTodayStart();
+            setStartYear(s.year);
+            setStartMonth(s.month);
+            setViewingCertificate(null);
+        }, [selectionToken]);
 
+        // Reset calendar when selected year changes
         // Get requests for visible period
         const getMonthRequests = useCallback((year, month) => {
             const monthStart = dateToString(year, month, 1);
@@ -489,8 +485,9 @@
         };
 
         const goToToday = () => {
-            setStartMonth(today.getMonth());
-            setStartYear(today.getFullYear());
+            const s = getTodayStart();
+            setStartMonth(s.month);
+            setStartYear(s.year);
         };
 
         return h('div', { class: 'mj-leave-requests__overview' },
@@ -1142,7 +1139,10 @@
                         )
                     ),
                     // Calendar overview
+                    // Calendar overview — remount on member/year change to recalculate the default 3-month window
                     h(CalendarOverview, {
+                        key: `${selectedAnimateur}-${viewYear}`,
+                        selectionToken: selectedAnimateur,
                         requests: memberData.requests || [],
                         types,
                         onDelete: handleDelete,
