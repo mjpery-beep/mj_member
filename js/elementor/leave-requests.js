@@ -394,16 +394,31 @@
     // Calendar Overview Component - 3 months side by side
     function CalendarOverview({ requests, types, onDelete, selectedYear, isCoordinator, onApprove, onReject, onRejectModal }) {
         const today = new Date();
-        const [startMonth, setStartMonth] = useState(selectedYear !== today.getFullYear() ? 0 : today.getMonth());
-        const [startYear, setStartYear] = useState(selectedYear || today.getFullYear());
+
+        // Compute initial start so current month is centered (prev month, current, next)
+        const getInitialStart = (year) => {
+            const isCurrentYear = !year || year === today.getFullYear();
+            if (isCurrentYear) {
+                const m = today.getMonth();
+                return m === 0
+                    ? { month: 11, year: today.getFullYear() - 1 }
+                    : { month: m - 1, year: today.getFullYear() };
+            }
+            return { month: 0, year: year };
+        };
+
+        const initial = getInitialStart(selectedYear);
+        const [startMonth, setStartMonth] = useState(initial.month);
+        const [startYear, setStartYear] = useState(initial.year);
         const [viewingCertificate, setViewingCertificate] = useState(null);
         const i18n = mjLeaveRequests.i18n;
 
         // Reset calendar when selected year changes
         useEffect(() => {
             if (selectedYear) {
-                setStartYear(selectedYear);
-                setStartMonth(0); // January of the selected year
+                const s = getInitialStart(selectedYear);
+                setStartYear(s.year);
+                setStartMonth(s.month);
             }
         }, [selectedYear]);
 
