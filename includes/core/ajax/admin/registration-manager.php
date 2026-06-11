@@ -3928,6 +3928,129 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     }
 
     /**
+     * Build dynamic fields flagged for display in gestionnaire listing.
+     *
+     * @param int $member_id
+     * @param string $member_role
+     * @return array<int,array<string,mixed>>
+     */
+    private function getManagerListDynfields($member_id, $member_role = 'jeune') {
+        $fields = \Mj\Member\Classes\Crud\MjDynamicFields::getAll();
+        $vals = \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed((int) $member_id);
+        $out = array();
+        $normalize_option_value = static function ($value) {
+            $value = sanitize_text_field((string) $value);
+            $value = trim($value);
+            if (function_exists('mb_strtolower')) {
+                return mb_strtolower($value);
+            }
+            return strtolower($value);
+        };
+
+        foreach ($fields as $df) {
+            if (empty($df->show_in_manager_list)) {
+                continue;
+            }
+            if (($df->field_type ?? '') === 'title') {
+                continue;
+            }
+            $field_id = (int) $df->id;
+            $raw_value = isset($vals[$field_id]) ? (string) $vals[$field_id] : '';
+            if ($raw_value === '' && ($df->field_type ?? '') !== 'checkbox') {
+                continue;
+            }
+
+            $options_detailed = \Mj\Member\Classes\Crud\MjDynamicFields::decodeOptionsDetailed($df->options_list ?? '');
+            $options_image_map = array();
+            foreach ($options_detailed as $opt_meta) {
+                $opt_value = (string) ($opt_meta['value'] ?? '');
+                if ($opt_value === '') {
+                    continue;
+                }
+                $opt_image_url = (string) ($opt_meta['imageUrl'] ?? '');
+                $options_image_map[$opt_value] = $opt_image_url;
+                $options_image_map[$normalize_option_value($opt_value)] = $opt_image_url;
+            }
+
+            $other_image = \Mj\Member\Classes\Crud\MjDynamicFields::decodeOtherOptionImage($df->options_list ?? '');
+            $other_image_url = (string) ($other_image['imageUrl'] ?? '');
+            $other_label = (string) ($df->other_label ?? 'Autre');
+            if ($other_label === '') {
+                $other_label = 'Autre';
+            }
+
+            $badges = array();
+            $field_type = (string) ($df->field_type ?? 'text');
+
+            if ($field_type === 'checklist') {
+                $arr = json_decode($raw_value, true);
+                if (!is_array($arr)) {
+                    $arr = array();
+                }
+                foreach ($arr as $entry) {
+                    $entry = sanitize_text_field((string) $entry);
+                    if ($entry === '') {
+                        continue;
+                    }
+                    if (strpos($entry, '__other:') === 0) {
+                        $label = trim((string) substr($entry, 8));
+                        if ($label !== '') {
+                            $badges[] = array('label' => $label, 'imageUrl' => $other_image_url);
+                        }
+                        continue;
+                    }
+                    if ($entry === '__other') {
+                        $badges[] = array('label' => $other_label, 'imageUrl' => $other_image_url);
+                        continue;
+                    }
+                    $badges[] = array(
+                        'label' => $entry,
+                        'imageUrl' => (string) ($options_image_map[$entry] ?? $options_image_map[$normalize_option_value($entry)] ?? ''),
+                    );
+                }
+            } elseif ($field_type === 'dropdown' || $field_type === 'radio') {
+                $entry = sanitize_text_field($raw_value);
+                if ($entry !== '') {
+                    if (strpos($entry, '__other:') === 0) {
+                        $label = trim((string) substr($entry, 8));
+                        if ($label !== '') {
+                            $badges[] = array('label' => $label, 'imageUrl' => $other_image_url);
+                        }
+                    } elseif ($entry === '__other') {
+                        $badges[] = array('label' => $other_label, 'imageUrl' => $other_image_url);
+                    } else {
+                        $badges[] = array(
+                            'label' => $entry,
+                            'imageUrl' => (string) ($options_image_map[$entry] ?? $options_image_map[$normalize_option_value($entry)] ?? ''),
+                        );
+                    }
+                }
+            } elseif ($field_type === 'checkbox') {
+                if ($raw_value === '1') {
+                    $badges[] = array('label' => (string) ($df->title ?? ''), 'imageUrl' => '');
+                }
+            } else {
+                $entry = trim(sanitize_text_field($raw_value));
+                if ($entry !== '') {
+                    $badges[] = array('label' => $entry, 'imageUrl' => '');
+                }
+            }
+
+            if (empty($badges)) {
+                continue;
+            }
+
+            $out[] = array(
+                'id' => $field_id,
+                'title' => (string) ($df->title ?? ''),
+                'badges' => $badges,
+            );
+        }
+
+        return $out;
+    }
+
+    /**
      * Save member note
      */
     public function saveMemberNote() {
@@ -8635,9 +8758,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $raw_filter = isset($_POST['filter']) ? $_POST['filter'] : 'all';
         // Support both legacy string filter and new array of active filters
         if (is_array($raw_filter)) {
-            $active_filters = array_map('sanitize_text_field', $raw_filter);
+            $active_filters = array_values(array_filter(array_map('sanitize_key', $raw_filter)));
         } else {
-            $filter_str = sanitize_text_field($raw_filter);
+            $filter_str = sanitize_key($raw_filter);
             $active_filters = ($filter_str === 'all' || $filter_str === '') ? array() : array($filter_str);
         }
         $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
@@ -8707,6 +8830,23 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         // Has login filter
         if (in_array('has_login', $active_filters, true)) {
             $filters['has_login'] = true;
+        }
+
+        if (in_array('missing_birth_date', $active_filters, true)) {
+            $filters['missing_birth_date'] = true;
+        }
+
+        if (in_array('missing_email', $active_filters, true)) {
+            $filters['missing_email'] = true;
+        }
+
+        if (in_array('missing_gender', $active_filters, true)) {
+            $genre_field_ids = $this->getGenreDynamicFieldIds();
+            if (empty($genre_field_ids)) {
+                $filters['ids'] = array(0);
+            } else {
+                $filters['missing_dynamic_field_ids'] = $genre_field_ids;
+            }
         }
 
         // Favorites filter
@@ -8808,6 +8948,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'wpUserId' => !empty($member->wp_user_id) ? (int) $member->wp_user_id : null,
                 'lastLoginAt' => !empty($member->last_login_at) ? $member->last_login_at : null,
                 'lastActivityAt' => !empty($member->last_activity_at) ? $member->last_activity_at : null,
+                'listingDynfields' => $this->getManagerListDynfields((int) $member->id, (string) ($member->role ?? '')),
             );
         }
 
@@ -8820,6 +8961,34 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'totalAll' => $total_all,
             ),
         ));
+    }
+
+    /**
+     * Resolve dynamic field IDs that represent gender.
+     *
+     * @return array<int,int>
+     */
+    private function getGenreDynamicFieldIds() {
+        $fields = \Mj\Member\Classes\Crud\MjDynamicFields::getAll();
+        $ids = array();
+
+        foreach ($fields as $field) {
+            $field_id = isset($field->id) ? (int) $field->id : 0;
+            if ($field_id <= 0) {
+                continue;
+            }
+
+            $title = isset($field->title) ? remove_accents((string) $field->title) : '';
+            $title = strtolower(trim($title));
+
+            $slug = isset($field->slug) ? sanitize_key((string) $field->slug) : '';
+
+            if ($title === 'genre' || $title === 'gender' || $slug === 'genre' || $slug === 'gender') {
+                $ids[] = $field_id;
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /**

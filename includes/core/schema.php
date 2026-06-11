@@ -2042,6 +2042,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_82($wpdb);
     mj_member_upgrade_to_2_83($wpdb);
     mj_member_upgrade_to_2_84($wpdb);
+    mj_member_upgrade_to_2_85($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -6377,5 +6378,25 @@ function mj_member_upgrade_to_2_84($wpdb) {
             $after_clause = ' AFTER photo_id';
         }
         $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN avatar_original_url varchar(1024) DEFAULT NULL{$after_clause}");
+    }
+}
+
+/**
+ * Migration 2.85: Add show_in_manager_list column to dynamic fields table.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_85($wpdb) {
+    $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
+    if (!$fields_table || !mj_member_table_exists($fields_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($fields_table, 'show_in_manager_list')) {
+        $after_clause = ' AFTER show_in_account';
+        if (!mj_member_column_exists($fields_table, 'show_in_account')) {
+            $after_clause = '';
+        }
+        $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN show_in_manager_list tinyint(1) NOT NULL DEFAULT 0{$after_clause}");
     }
 }

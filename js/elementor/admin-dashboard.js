@@ -343,7 +343,9 @@
         /* Append dynamic field distribution tabs */
         dfs.forEach(function (df) {
             if (df.items && df.items.length) {
-                memberTabs.push({ label: df.title, content: h(Donut, { items: df.items, total: df.total, centerLabel: 'réponses' }) });
+                var normalizedTitle = (df.title || '').toString().trim().toLowerCase();
+                var tabLabel = normalizedTitle === 'genre' ? 'Genre des jeunes' : df.title;
+                memberTabs.push({ label: tabLabel, content: h(Donut, { items: df.items, total: df.total, centerLabel: 'réponses' }) });
             }
         });
 

@@ -983,6 +983,17 @@ if (!function_exists('mj_render_child_form_block')) {
                     $df_req   = (int) $df->is_required;
                     $df_val   = isset($values['dynfield_' . $df_id]) ? $values['dynfield_' . $df_id] : '';
                     $df_opts  = MjDynamicFields::decodeOptions($df->options_list);
+                    $df_opts_detailed = MjDynamicFields::decodeOptionsDetailed($df->options_list);
+                    $df_opt_images = array();
+                    foreach ($df_opts_detailed as $df_opt_meta) {
+                        $df_opt_value = (string) ($df_opt_meta['value'] ?? '');
+                        $df_opt_img = (string) ($df_opt_meta['imageUrl'] ?? '');
+                        if ($df_opt_value !== '' && $df_opt_img !== '') {
+                            $df_opt_images[$df_opt_value] = $df_opt_img;
+                        }
+                    }
+                    $df_other_image_meta = MjDynamicFields::decodeOtherOptionImage($df->options_list);
+                    $df_other_image_url = (string) ($df_other_image_meta['imageUrl'] ?? '');
                     $df_label = esc_html($df->title) . ($df_req ? ' *' : '');
                     $df_desc  = $df->description ? '<small class="mj-field-hint">' . esc_html($df->description) . '</small>' : '';
 
@@ -1043,6 +1054,25 @@ if (!function_exists('mj_render_child_form_block')) {
                                 <option value="__other" <?php selected($df_is_other); ?>><?php echo esc_html($df_other_label); ?>…</option>
                             <?php endif; ?>
                         </select>
+                        <?php if (!empty($df_opt_images) || ($df_allow_other && $df_other_image_url !== '')) : ?>
+                            <div class="mj-dynfield-option-media-list">
+                                <?php foreach ($df_opts as $opt) :
+                                    $df_opt_img = $df_opt_images[$opt] ?? '';
+                                    if ($df_opt_img === '') continue;
+                                ?>
+                                    <div class="mj-dynfield-option-media-item">
+                                        <img class="mj-dynfield-option-media-thumb" src="<?php echo esc_url($df_opt_img); ?>" alt="" loading="lazy" />
+                                        <span><?php echo esc_html($opt); ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                                <?php if ($df_allow_other && $df_other_image_url !== '') : ?>
+                                    <div class="mj-dynfield-option-media-item">
+                                        <img class="mj-dynfield-option-media-thumb" src="<?php echo esc_url($df_other_image_url); ?>" alt="" loading="lazy" />
+                                        <span><?php echo esc_html($df_other_label); ?></span>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
                         <?php if ($df_allow_other) : ?>
                             <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:6px;" />
                         <?php endif; ?>
@@ -1053,13 +1083,13 @@ if (!function_exists('mj_render_child_form_block')) {
                             <?php foreach ($df_opts as $oi => $opt) : ?>
                                 <label class="mj-radio">
                                     <input type="radio" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($opt); ?>" <?php checked(!$df_is_other ? $df_val : '', $opt); ?> <?php echo ($df_req && $oi === 0 && !$df_allow_other) ? 'required' : ''; ?> />
-                                    <span><?php echo esc_html($opt); ?></span>
+                                    <span class="mj-dynfield-option-media-label"><?php if (!empty($df_opt_images[$opt])) : ?><img class="mj-dynfield-option-media-thumb" src="<?php echo esc_url($df_opt_images[$opt]); ?>" alt="" loading="lazy" /><?php endif; ?><span><?php echo esc_html($opt); ?></span></span>
                                 </label>
                             <?php endforeach; ?>
                             <?php if ($df_allow_other) : ?>
                                 <label class="mj-radio">
                                     <input type="radio" name="<?php echo $df_name; ?>" value="__other" <?php checked($df_is_other); ?> <?php echo ($df_req && empty($df_opts)) ? 'required' : ''; ?> />
-                                    <span><?php echo esc_html($df_other_label); ?></span>
+                                    <span class="mj-dynfield-option-media-label"><?php if ($df_other_image_url !== '') : ?><img class="mj-dynfield-option-media-thumb" src="<?php echo esc_url($df_other_image_url); ?>" alt="" loading="lazy" /><?php endif; ?><span><?php echo esc_html($df_other_label); ?></span></span>
                                 </label>
                                 <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
                             <?php endif; ?>
@@ -1071,13 +1101,13 @@ if (!function_exists('mj_render_child_form_block')) {
                             <?php foreach ($df_opts as $opt) : ?>
                                 <label class="mj-checkbox">
                                     <input type="checkbox" name="<?php echo $df_name; ?>[]" value="<?php echo esc_attr($opt); ?>" <?php checked(in_array($opt, $df_checked_arr, true)); ?> />
-                                    <span><?php echo esc_html($opt); ?></span>
+                                    <span class="mj-dynfield-option-media-label"><?php if (!empty($df_opt_images[$opt])) : ?><img class="mj-dynfield-option-media-thumb" src="<?php echo esc_url($df_opt_images[$opt]); ?>" alt="" loading="lazy" /><?php endif; ?><span><?php echo esc_html($opt); ?></span></span>
                                 </label>
                             <?php endforeach; ?>
                             <?php if ($df_allow_other) : ?>
                                 <label class="mj-checkbox">
                                     <input type="checkbox" name="<?php echo $df_name; ?>[]" value="__other" <?php checked($df_is_other); ?> />
-                                    <span><?php echo esc_html($df_other_label); ?></span>
+                                    <span class="mj-dynfield-option-media-label"><?php if ($df_other_image_url !== '') : ?><img class="mj-dynfield-option-media-thumb" src="<?php echo esc_url($df_other_image_url); ?>" alt="" loading="lazy" /><?php endif; ?><span><?php echo esc_html($df_other_label); ?></span></span>
                                 </label>
                                 <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
                             <?php endif; ?>

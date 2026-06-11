@@ -303,6 +303,39 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             $builder->where_raw('(wp_user_id IS NOT NULL AND wp_user_id > 0)');
         }
 
+        if (!empty($filters['missing_birth_date'])) {
+            $builder->where_raw('(birth_date IS NULL OR birth_date = %s OR birth_date = %s)', array('0000-00-00', '0000-00-00 00:00:00'));
+        }
+
+        if (!empty($filters['missing_email'])) {
+            $builder->where_raw('(email IS NULL OR TRIM(email) = %s)', array(''));
+        }
+
+        if (!empty($filters['missing_dynamic_field_ids']) && is_array($filters['missing_dynamic_field_ids'])) {
+            $field_ids = array_values(array_filter(array_map('intval', $filters['missing_dynamic_field_ids']), static function ($id) {
+                return $id > 0;
+            }));
+
+            if (!empty($field_ids)) {
+                $values_table = self::getTableName(MjDynamicFieldValues::TABLE_NAME);
+                $members_table = self::getTableName(self::TABLE_NAME);
+                $placeholders = implode(', ', array_fill(0, count($field_ids), '%d'));
+
+                $builder->where_raw(
+                    "NOT EXISTS (
+                        SELECT 1
+                        FROM {$values_table} dv
+                        WHERE dv.member_id = {$members_table}.id
+                          AND dv.field_id IN ({$placeholders})
+                          AND dv.field_value IS NOT NULL
+                          AND TRIM(dv.field_value) <> ''
+                          AND TRIM(dv.field_value) <> '[]'
+                    )",
+                    $field_ids
+                );
+            }
+        }
+
         if (!empty($filters['status'])) {
             $status = self::normalizeStatus($filters['status']);
             $builder->where_equals('status', $status, 'sanitize_text_field');

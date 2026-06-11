@@ -228,6 +228,9 @@ final class DynamicFieldsController implements AjaxHandlerInterface
         if (isset($_POST['show_in_account'])) {
             $data['show_in_account'] = (int) $_POST['show_in_account'];
         }
+        if (isset($_POST['show_in_manager_list'])) {
+            $data['show_in_manager_list'] = (int) $_POST['show_in_manager_list'];
+        }
         if (isset($_POST['is_required'])) {
             $data['is_required'] = (int) $_POST['is_required'];
         }
@@ -284,6 +287,7 @@ final class DynamicFieldsController implements AjaxHandlerInterface
             'description'        => $field->description ?? '',
             'showInRegistration' => (bool) ($field->show_in_registration ?? false),
             'showInAccount'      => (bool) ($field->show_in_account ?? false),
+            'showInManagerList'  => (bool) ($field->show_in_manager_list ?? false),
             'isRequired'         => (bool) ($field->is_required ?? false),
             'allowOther'         => (bool) ($field->allow_other ?? false),
             'otherLabel'         => $field->other_label ?? '',

@@ -2018,24 +2018,42 @@ function mj_member_dashboard_compute_dynfield_stats(array $field_ids): array {
         }
 
         $field_title = $field->title;
+        $is_genre_field = sanitize_key((string) $field_title) === 'genre';
 
-        // Get all non-empty values for active members
-        $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT v.field_value
-             FROM {$values_table} v
-             INNER JOIN {$members_table} m ON m.id = v.member_id
-             WHERE v.field_id = %d AND v.field_value <> '' AND m.status = %s",
-            $fid,
-            MjMembers::STATUS_ACTIVE
-        ));
+        // Get values for active members
+        if ($is_genre_field) {
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT COALESCE(v.field_value, '') AS field_value
+                 FROM {$members_table} m
+                 LEFT JOIN {$values_table} v ON v.member_id = m.id AND v.field_id = %d
+                 WHERE m.status = %s AND m.role = %s",
+                $fid,
+                MjMembers::STATUS_ACTIVE,
+                MjRoles::JEUNE
+            ));
+        } else {
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT v.field_value
+                 FROM {$values_table} v
+                 INNER JOIN {$members_table} m ON m.id = v.member_id
+                 WHERE v.field_id = %d AND v.field_value <> '' AND m.status = %s",
+                $fid,
+                MjMembers::STATUS_ACTIVE
+            ));
+        }
 
         $counts = array();
+        $undefined_count = 0;
 
         if ($field->field_type === MjDynamicFields::TYPE_CHECKBOX) {
             // Simple yes/no
             $yes = 0;
             $no  = 0;
             foreach ($rows as $r) {
+                if ($is_genre_field && $r->field_value === '') {
+                    $undefined_count++;
+                    continue;
+                }
                 if ($r->field_value === '1') {
                     $yes++;
                 } else {
@@ -2047,11 +2065,22 @@ function mj_member_dashboard_compute_dynfield_stats(array $field_ids): array {
         } elseif ($field->field_type === MjDynamicFields::TYPE_CHECKLIST) {
             // JSON array — each value can contain multiple selections
             foreach ($rows as $r) {
+                if ($is_genre_field && trim((string) $r->field_value) === '') {
+                    $undefined_count++;
+                    continue;
+                }
                 $arr = json_decode($r->field_value, true);
-                if (!is_array($arr)) continue;
+                if (!is_array($arr) || empty($arr)) {
+                    if ($is_genre_field) {
+                        $undefined_count++;
+                    }
+                    continue;
+                }
                 foreach ($arr as $val) {
                     $val = (string) $val;
                     if (strpos($val, '__other:') === 0) {
+                        $val = 'Autre';
+                    } elseif ($is_genre_field && $val === '__other') {
                         $val = 'Autre';
                     }
                     if ($val === '' || $val === '__other') continue;
@@ -2061,13 +2090,23 @@ function mj_member_dashboard_compute_dynfield_stats(array $field_ids): array {
         } else {
             // dropdown / radio — single value
             foreach ($rows as $r) {
-                $val = $r->field_value;
+                $val = trim((string) $r->field_value);
+                if ($is_genre_field && $val === '') {
+                    $undefined_count++;
+                    continue;
+                }
                 if (strpos($val, '__other:') === 0) {
+                    $val = 'Autre';
+                } elseif ($is_genre_field && $val === '__other') {
                     $val = 'Autre';
                 }
                 if ($val === '' || $val === '__other') continue;
                 $counts[$val] = ($counts[$val] ?? 0) + 1;
             }
+        }
+
+        if ($is_genre_field && $undefined_count > 0) {
+            $counts['Non défini'] = ($counts['Non défini'] ?? 0) + $undefined_count;
         }
 
         if (empty($counts)) continue;

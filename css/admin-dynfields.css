@@ -116,6 +116,11 @@
     color: #047857;
 }
 
+.mj-dynfields__badge--manager-list {
+    background: #e0f2fe;
+    color: #0c4a6e;
+}
+
 .mj-dynfields__badge--required {
     background: #fee2e2;
     color: #b91c1c;

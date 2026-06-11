@@ -196,6 +196,7 @@ class MjDynamicFields extends MjTools
             'description'          => sanitize_textarea_field($data['description'] ?? ''),
             'show_in_registration' => !empty($data['show_in_registration']) ? 1 : 0,
             'show_in_account'      => !empty($data['show_in_account']) ? 1 : 0,
+            'show_in_manager_list' => !empty($data['show_in_manager_list']) ? 1 : 0,
             'is_required'          => !empty($data['is_required']) ? 1 : 0,
             'allow_other'          => !empty($data['allow_other']) ? 1 : 0,
             'other_label'          => sanitize_text_field($data['other_label'] ?? ''),
@@ -203,7 +204,7 @@ class MjDynamicFields extends MjTools
             'youth_only'           => !empty($data['youth_only']) ? 1 : 0,
             'options_list'         => $options_json,
             'sort_order'           => isset($data['sort_order']) ? (int) $data['sort_order'] : $max_order + 1,
-        ), array('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%s', '%d', '%d', '%s', '%d'));
+        ), array('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%s', '%d', '%d', '%s', '%d'));
 
         if ($inserted) {
             self::invalidateCache();
@@ -265,6 +266,11 @@ class MjDynamicFields extends MjTools
 
         if (isset($data['show_in_account'])) {
             $fields['show_in_account'] = !empty($data['show_in_account']) ? 1 : 0;
+            $formats[] = '%d';
+        }
+
+        if (isset($data['show_in_manager_list'])) {
+            $fields['show_in_manager_list'] = !empty($data['show_in_manager_list']) ? 1 : 0;
             $formats[] = '%d';
         }
 

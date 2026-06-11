@@ -621,6 +621,20 @@
         };
 
         var volunteerLabel = getString(strings, 'volunteerLabel', 'Bénévole');
+        var listingDynfields = member && Array.isArray(member.listingDynfields) ? member.listingDynfields : [];
+        var listingBadges = [];
+        listingDynfields.forEach(function (field) {
+            var fieldBadges = field && Array.isArray(field.badges) ? field.badges : [];
+            fieldBadges.forEach(function (badge) {
+                if (!badge || !badge.label) return;
+                listingBadges.push({
+                    key: 'dyn-' + (field.id || '0') + '-' + listingBadges.length,
+                    title: field.title || '',
+                    label: badge.label,
+                    imageUrl: badge.imageUrl || '',
+                });
+            });
+        });
         
         return h('div', {
             class: classNames('mj-regmgr-member-card', {
@@ -705,6 +719,21 @@
                         class: 'mj-regmgr-member-card__login-date',
                         title: 'Dernière connexion: ' + formatDate(member.lastLoginAt, true),
                     }, '🔑 ' + formatTimeAgo(member.lastLoginAt)),
+                    listingBadges.length > 0 && h('div', { class: 'mj-regmgr-member-card__dynfields' }, listingBadges.map(function (badge) {
+                        return h('span', {
+                            key: badge.key,
+                            class: 'mj-regmgr-member-card__dyn-badge',
+                            title: badge.title ? (badge.title + ': ' + badge.label) : badge.label,
+                        }, [
+                            badge.imageUrl ? h('img', {
+                                class: 'mj-regmgr-member-card__dyn-badge-thumb',
+                                src: badge.imageUrl,
+                                alt: '',
+                                loading: 'lazy',
+                            }) : null,
+                            h('span', null, badge.label),
+                        ]);
+                    })),
                 ]),
                 h('div', { class: 'mj-regmgr-member-card__footer' }, [
                     member.createdAt && h('div', {
@@ -3279,6 +3308,28 @@
             updateValue(df.id, JSON.stringify(arr));
         }
 
+        function getOptionImageUrl(df, optionValue) {
+            var detailed = Array.isArray(df.optionsDetailed) ? df.optionsDetailed : [];
+            for (var i = 0; i < detailed.length; i++) {
+                if ((detailed[i] && detailed[i].value) === optionValue) {
+                    return detailed[i].imageUrl || '';
+                }
+            }
+            return '';
+        }
+
+        function getOtherOptionImageUrl(df) {
+            if (!df || !df.otherOptionImage) return '';
+            return df.otherOptionImage.imageUrl || '';
+        }
+
+        function renderOptionLabelWithImage(imageUrl, labelText) {
+            return h('span', { class: 'mj-regmgr-dyndata-field__option-media-label' }, [
+                imageUrl ? h('img', { class: 'mj-regmgr-dyndata-field__option-media-thumb', src: imageUrl, alt: '' }) : null,
+                h('span', null, ' ' + labelText),
+            ]);
+        }
+
         // Render a single field
         function renderField(df) {
             var val = values[df.id] !== undefined ? values[df.id] : '';
@@ -3315,6 +3366,7 @@
                 var options = df.options || [];
                 var isOther = isOtherSelected(df);
                 var selectVal = isOther ? '__other' : val;
+                var hasOptionImages = options.some(function (opt) { return !!getOptionImageUrl(df, opt); }) || (df.allowOther && !!getOtherOptionImageUrl(df));
                 return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
                     h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
                     h('select', { class: 'mj-regmgr-dyndata-field__input', value: selectVal, onChange: function (e) { updateValue(df.id, e.target.value); } }, [
@@ -3322,6 +3374,19 @@
                     ].concat(options.map(function (opt) {
                         return h('option', { value: opt, key: opt }, opt);
                     })).concat(df.allowOther ? [h('option', { value: '__other', key: '__other' }, 'Autre…')] : [])),
+                    hasOptionImages ? h('div', { class: 'mj-regmgr-dyndata-field__option-media-list' }, options.map(function (opt) {
+                        var imageUrl = getOptionImageUrl(df, opt);
+                        if (!imageUrl) return null;
+                        return h('div', { class: 'mj-regmgr-dyndata-field__option-media-item', key: 'img-' + df.id + '-' + opt }, [
+                            h('img', { class: 'mj-regmgr-dyndata-field__option-media-thumb', src: imageUrl, alt: '' }),
+                            h('span', null, opt),
+                        ]);
+                    }).concat(df.allowOther && getOtherOptionImageUrl(df) ? [
+                        h('div', { class: 'mj-regmgr-dyndata-field__option-media-item', key: 'img-' + df.id + '-other' }, [
+                            h('img', { class: 'mj-regmgr-dyndata-field__option-media-thumb', src: getOtherOptionImageUrl(df), alt: '' }),
+                            h('span', null, df.otherLabel || 'Autre'),
+                        ]),
+                    ] : [])) : null,
                     df.allowOther && isOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
                     desc,
                 ]);
@@ -3334,15 +3399,19 @@
                 return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
                     h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
                     h('div', { class: 'mj-regmgr-dyndata-field__options' }, options.map(function (opt) {
+                        var imageUrl = getOptionImageUrl(df, opt);
                         return h('label', { class: 'mj-regmgr-dyndata-field__radio', key: opt }, [
                             h('input', { type: 'radio', name: 'dyndata_' + df.id, value: opt, checked: radioVal === opt, onChange: function () { updateValue(df.id, opt); } }),
-                            h('span', null, ' ' + opt),
+                            renderOptionLabelWithImage(imageUrl, opt),
                         ]);
                     }).concat(df.allowOther ? [
-                        h('label', { class: 'mj-regmgr-dyndata-field__radio', key: '__other' }, [
-                            h('input', { type: 'radio', name: 'dyndata_' + df.id, value: '__other', checked: isOther, onChange: function () { updateValue(df.id, '__other'); } }),
-                            h('span', null, ' ' + (df.otherLabel || 'Autre')),
-                        ]),
+                        (function () {
+                            var otherImageUrl = getOtherOptionImageUrl(df);
+                            return h('label', { class: 'mj-regmgr-dyndata-field__radio', key: '__other' }, [
+                                h('input', { type: 'radio', name: 'dyndata_' + df.id, value: '__other', checked: isOther, onChange: function () { updateValue(df.id, '__other'); } }),
+                                renderOptionLabelWithImage(otherImageUrl, df.otherLabel || 'Autre'),
+                            ]);
+                        })(),
                     ] : [])),
                     df.allowOther && isOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
                     desc,
@@ -3356,15 +3425,19 @@
                 return h('div', { class: 'mj-regmgr-dyndata-field mj-regmgr-dyndata-field--full', key: df.id }, [
                     h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
                     h('div', { class: 'mj-regmgr-dyndata-field__options' }, options.map(function (opt) {
+                        var imageUrl = getOptionImageUrl(df, opt);
                         return h('label', { class: 'mj-regmgr-dyndata-field__checkbox', key: opt }, [
                             h('input', { type: 'checkbox', checked: checkedArr.indexOf(opt) !== -1, onChange: function () { toggleChecklistValue(df, opt); } }),
-                            h('span', null, ' ' + opt),
+                            renderOptionLabelWithImage(imageUrl, opt),
                         ]);
                     }).concat(df.allowOther ? [
-                        h('label', { class: 'mj-regmgr-dyndata-field__checkbox', key: '__other' }, [
-                            h('input', { type: 'checkbox', checked: hasOther, onChange: function () { toggleChecklistValue(df, '__other'); } }),
-                            h('span', null, ' ' + (df.otherLabel || 'Autre')),
-                        ]),
+                        (function () {
+                            var otherImageUrl = getOtherOptionImageUrl(df);
+                            return h('label', { class: 'mj-regmgr-dyndata-field__checkbox', key: '__other' }, [
+                                h('input', { type: 'checkbox', checked: hasOther, onChange: function () { toggleChecklistValue(df, '__other'); } }),
+                                renderOptionLabelWithImage(otherImageUrl, df.otherLabel || 'Autre'),
+                            ]);
+                        })(),
                     ] : [])),
                     df.allowOther && hasOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
                     desc,
@@ -3732,9 +3805,6 @@
             if (!initialTabAppliedRef.current && initialTab && validMemberTabs.indexOf(initialTab) !== -1) {
                 setActiveTab(initialTab);
                 initialTabAppliedRef.current = true;
-            } else if (initialTabAppliedRef.current) {
-                // Après le premier chargement, réinitialiser à 'information'
-                setActiveTab('information');
             }
             setEditingNoteId(null);
             setEditingNoteContent('');
@@ -5242,6 +5312,15 @@
             memberTabs.push({ key: 'nc-photos', label: getString(strings, 'tabNcPhotos', 'Photos'), icon: tabIcons.photos });
             memberTabs.push({ key: 'nc-documents', label: getString(strings, 'tabNcDocuments', 'Documents'), icon: tabIcons.documents });
         }
+
+        useEffect(function () {
+            var hasActiveTab = memberTabs.some(function (tab) {
+                return tab && tab.key === activeTab;
+            });
+            if (!hasActiveTab) {
+                setActiveTab('information');
+            }
+        }, [memberTabs, activeTab, setActiveTab]);
 
         var newsletterLabel = getString(strings, 'chipNewsletter', 'Newsletter');
         var smsLabel = getString(strings, 'chipSMS', 'SMS');

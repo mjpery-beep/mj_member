@@ -490,6 +490,9 @@
             { key: 'coordinateur', label: getString(strings, 'filterCoordinateur', 'Coordinateurs'), emoji: '👑' },
             { key: 'membership_due', label: getString(strings, 'filterMembershipDue', 'Cotisation due'), emoji: '💳' },
             { key: 'has_login', label: getString(strings, 'filterHasLogin', 'Avec login'), emoji: '🔑' },
+            { key: 'missing_gender', label: getString(strings, 'filterMissingGender', 'Sans genre'), emoji: '⚧️' },
+            { key: 'missing_birth_date', label: getString(strings, 'filterMissingBirthDate', 'Sans date de naissance'), emoji: '🎂' },
+            { key: 'missing_email', label: getString(strings, 'filterMissingEmail', 'Sans email'), emoji: '📭' },
         ];
 
         var currentFilters = sidebarMode === 'events' ? eventFilters : memberFilters;

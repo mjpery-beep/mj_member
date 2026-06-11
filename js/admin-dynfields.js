@@ -85,6 +85,7 @@
         if (!isTitle) {
             if (field.showInRegistration) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--registration">Inscription</span>');
             if (field.showInAccount) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--account">Mon compte</span>');
+            if (field.showInManagerList) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--manager-list">Listing gestionnaire</span>');
             if (field.showInNotes) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--notes">Notes</span>');
             if (field.youthOnly) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--youth">Jeunes</span>');
             if (field.isRequired) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--required">Requis</span>');
@@ -154,6 +155,7 @@
         html += '<div class="mj-dynfields-form__checkboxes">';
         html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-registration" /> Afficher dans le formulaire d\'inscription</label>';
         html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-account" /> Afficher dans Mes informations</label>';
+        html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-manager-list" /> Afficher dans le listing gestionnaire</label>';
         html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-notes" /> Afficher dans les notes</label>';
         html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-youth-only" /> Uniquement pour les jeunes</label>';
         html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-required" /> Champ obligatoire</label>';
@@ -328,6 +330,7 @@
         };
         document.getElementById('mj-dynfield-registration').checked = !!field.showInRegistration;
         document.getElementById('mj-dynfield-account').checked = !!field.showInAccount;
+        document.getElementById('mj-dynfield-manager-list').checked = !!field.showInManagerList;
         document.getElementById('mj-dynfield-notes').checked = !!field.showInNotes;
         document.getElementById('mj-dynfield-youth-only').checked = !!field.youthOnly;
         document.getElementById('mj-dynfield-required').checked = !!field.isRequired;
@@ -347,6 +350,7 @@
         otherOptionImage = { imageId: 0, imageUrl: '' };
         document.getElementById('mj-dynfield-registration').checked = false;
         document.getElementById('mj-dynfield-account').checked = false;
+        document.getElementById('mj-dynfield-manager-list').checked = false;
         document.getElementById('mj-dynfield-notes').checked = false;
         document.getElementById('mj-dynfield-youth-only').checked = false;
         document.getElementById('mj-dynfield-required').checked = false;
@@ -400,6 +404,7 @@
             field_type: type,
             show_in_registration: document.getElementById('mj-dynfield-registration').checked ? 1 : 0,
             show_in_account: document.getElementById('mj-dynfield-account').checked ? 1 : 0,
+            show_in_manager_list: document.getElementById('mj-dynfield-manager-list').checked ? 1 : 0,
             show_in_notes: document.getElementById('mj-dynfield-notes').checked ? 1 : 0,
             youth_only: document.getElementById('mj-dynfield-youth-only').checked ? 1 : 0,
             is_required: type === 'title' ? 0 : (document.getElementById('mj-dynfield-required').checked ? 1 : 0),

@@ -43,6 +43,24 @@ if (isset($widget) && method_exists($widget, 'get_settings_for_display')) {
     }
 }
 
+// Always include the dynamic field named "Genre" when available.
+if (class_exists('\\Mj\\Member\\Classes\\Crud\\MjDynamicFields')) {
+    $all_dynamic_fields = MjDynamicFields::getAll();
+    foreach ($all_dynamic_fields as $dynamic_field) {
+        if (!isset($dynamic_field->id, $dynamic_field->title)) {
+            continue;
+        }
+
+        if (strcasecmp(trim((string) $dynamic_field->title), 'Genre') === 0) {
+            $genre_field_id = (int) $dynamic_field->id;
+            if ($genre_field_id > 0 && !in_array($genre_field_id, $selected_dynfield_ids, true)) {
+                $selected_dynfield_ids[] = $genre_field_id;
+            }
+            break;
+        }
+    }
+}
+
 // ── Gather data ─────────────────────────────────────────────────
 
 if ($isPreview) {

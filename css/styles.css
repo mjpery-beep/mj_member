@@ -6457,3 +6457,33 @@ textarea.mj-contact-form__textarea {
     border-radius: 6px;
     box-sizing: border-box;
 }
+
+.mj-dynfield-option-media-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mj-dynfield-option-media-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    object-fit: cover;
+    border: 1px solid #d1d5db;
+    flex-shrink: 0;
+}
+
+.mj-dynfield-option-media-list {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mj-dynfield-option-media-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #4b5563;
+}
