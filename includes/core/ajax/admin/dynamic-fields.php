@@ -252,6 +252,15 @@ final class DynamicFieldsController implements AjaxHandlerInterface
                 $data['options_list'] = is_array($raw) ? $raw : array();
             }
         }
+        if (isset($_POST['other_option_image'])) {
+            $raw = wp_unslash($_POST['other_option_image']);
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                $data['other_option_image'] = is_array($decoded) ? $decoded : array();
+            } else {
+                $data['other_option_image'] = is_array($raw) ? $raw : array();
+            }
+        }
         if (isset($_POST['sort_order'])) {
             $data['sort_order'] = absint($_POST['sort_order']);
         }
@@ -281,6 +290,8 @@ final class DynamicFieldsController implements AjaxHandlerInterface
             'showInNotes'        => (bool) ($field->show_in_notes ?? false),
             'youthOnly'          => (bool) ($field->youth_only ?? false),
             'optionsList'        => MjDynamicFields::decodeOptions($field),
+            'optionsDetailed'    => MjDynamicFields::decodeOptionsDetailed($field),
+            'otherOptionImage'   => MjDynamicFields::decodeOtherOptionImage($field),
             'sortOrder'          => (int) ($field->sort_order ?? 0),
         );
     }

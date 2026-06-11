@@ -3036,38 +3036,86 @@
 
         var _s1 = useState(false); var saving = _s1[0]; var setSaving = _s1[1];
         var _s2 = useState(''); var statusMsg = _s2[0]; var setStatusMsg = _s2[1];
+        var saveTimeoutRef = useRef(null);
+        var saveAbortControllerRef = useRef(null);
+        var lastSavedSignatureRef = useRef('');
 
-        // Build local editable state from dynFields
-        var initValues = {};
-        dynFields.forEach(function (df) {
-            if (df.type === 'title') return;
-            initValues[df.id] = df.value || '';
-        });
-        var _s3 = useState(initValues); var values = _s3[0]; var setValues = _s3[1];
+        function buildInitialState() {
+            var initValues = {};
+            var initOther = {};
 
-        // Other text inputs state (for allow_other fields)
-        var initOther = {};
-        dynFields.forEach(function (df) {
-            if (df.type === 'title' || !df.allowOther) return;
-            var val = df.value || '';
-            if (df.type === 'checklist') {
-                try {
-                    var arr = JSON.parse(val || '[]');
-                    if (Array.isArray(arr)) {
-                        for (var i = 0; i < arr.length; i++) {
-                            if (typeof arr[i] === 'string' && arr[i].indexOf('__other:') === 0) {
-                                initOther[df.id] = arr[i].substring(8);
-                                break;
+            dynFields.forEach(function (df) {
+                if (df.type === 'title') return;
+
+                initValues[df.id] = df.value || '';
+
+                if (!df.allowOther) {
+                    return;
+                }
+
+                var val = df.value || '';
+                if (df.type === 'checklist') {
+                    try {
+                        var arr = JSON.parse(val || '[]');
+                        if (Array.isArray(arr)) {
+                            for (var i = 0; i < arr.length; i++) {
+                                if (typeof arr[i] === 'string' && arr[i].indexOf('__other:') === 0) {
+                                    initOther[df.id] = arr[i].substring(8);
+                                    break;
+                                }
                             }
                         }
-                    }
-                } catch (e) {}
-            } else if (typeof val === 'string' && val.indexOf('__other:') === 0) {
-                initOther[df.id] = val.substring(8);
-            }
-            if (!initOther[df.id]) initOther[df.id] = '';
-        });
-        var _s4 = useState(initOther); var otherTexts = _s4[0]; var setOtherTexts = _s4[1];
+                    } catch (e) {}
+                } else if (typeof val === 'string' && val.indexOf('__other:') === 0) {
+                    initOther[df.id] = val.substring(8);
+                }
+
+                if (!initOther[df.id]) initOther[df.id] = '';
+            });
+
+            return {
+                values: initValues,
+                otherTexts: initOther,
+            };
+        }
+
+        function buildPayload(currentValues, currentOtherTexts) {
+            var payload = [];
+
+            dynFields.forEach(function (df) {
+                if (df.type === 'title') return;
+
+                var val = currentValues[df.id] !== undefined ? currentValues[df.id] : '';
+
+                if (df.type === 'checklist' && df.allowOther) {
+                    try {
+                        var arr = JSON.parse(val || '[]');
+                        if (Array.isArray(arr)) {
+                            var otherText = currentOtherTexts[df.id] || '';
+                            arr = arr.map(function (v) {
+                                return v === '__other' && otherText ? '__other:' + otherText : v;
+                            });
+                            arr = arr.filter(function (v) { return v !== '__other'; });
+                            val = JSON.stringify(arr);
+                        }
+                    } catch (e) {}
+                } else if (df.allowOther && val === '__other') {
+                    var ot = currentOtherTexts[df.id] || '';
+                    val = ot ? '__other:' + ot : '';
+                }
+
+                payload.push({ id: df.id, value: val });
+            });
+
+            return payload;
+        }
+
+        // Build local editable state from dynFields
+        var initialState = buildInitialState();
+        var _s3 = useState(initialState.values); var values = _s3[0]; var setValues = _s3[1];
+
+        // Other text inputs state (for allow_other fields)
+        var _s4 = useState(initialState.otherTexts); var otherTexts = _s4[0]; var setOtherTexts = _s4[1];
 
         function updateValue(id, val) {
             var next = {}; Object.keys(values).forEach(function (k) { next[k] = values[k]; });
@@ -3081,36 +3129,47 @@
             setOtherTexts(next);
         }
 
+        function clearSaveTimeout() {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+        }
+
+        function syncInitialState() {
+            var nextState = buildInitialState();
+            clearSaveTimeout();
+
+            if (saveAbortControllerRef.current && typeof saveAbortControllerRef.current.abort === 'function') {
+                saveAbortControllerRef.current.abort();
+            }
+
+            lastSavedSignatureRef.current = JSON.stringify(buildPayload(nextState.values, nextState.otherTexts));
+            setSaving(false);
+            setStatusMsg('');
+            setValues(nextState.values);
+            setOtherTexts(nextState.otherTexts);
+        }
+
         function handleSave() {
+            if (!member || !member.id) {
+                return;
+            }
+
+            var payload = buildPayload(values, otherTexts);
+            var signature = JSON.stringify(payload);
+            if (signature === lastSavedSignatureRef.current) {
+                return;
+            }
+
+            if (saveAbortControllerRef.current && typeof saveAbortControllerRef.current.abort === 'function') {
+                saveAbortControllerRef.current.abort();
+            }
+
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            saveAbortControllerRef.current = controller;
             setSaving(true);
             setStatusMsg('');
-
-            // Build payload — merge __other text into values
-            var payload = [];
-            dynFields.forEach(function (df) {
-                if (df.type === 'title') return;
-                var val = values[df.id] !== undefined ? values[df.id] : '';
-
-                if (df.type === 'checklist' && df.allowOther) {
-                    // Replace __other placeholder with actual text
-                    try {
-                        var arr = JSON.parse(val || '[]');
-                        if (Array.isArray(arr)) {
-                            var otherText = otherTexts[df.id] || '';
-                            arr = arr.map(function (v) {
-                                return v === '__other' && otherText ? '__other:' + otherText : v;
-                            });
-                            arr = arr.filter(function (v) { return v !== '__other'; });
-                            val = JSON.stringify(arr);
-                        }
-                    } catch (e) {}
-                } else if (df.allowOther && val === '__other') {
-                    var ot = otherTexts[df.id] || '';
-                    val = ot ? '__other:' + ot : '';
-                }
-
-                payload.push({ id: df.id, value: val });
-            });
 
             var formData = new FormData();
             formData.append('action', 'mj_regmgr_save_member_dynfields');
@@ -3118,11 +3177,20 @@
             formData.append('member_id', member.id);
             formData.append('values', JSON.stringify(payload));
 
-            fetch(config.ajaxUrl || '', { method: 'POST', body: formData, credentials: 'same-origin' })
+            fetch(config.ajaxUrl || '', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                signal: controller && controller.signal ? controller.signal : undefined,
+            })
                 .then(function (res) { return res.json(); })
                 .then(function (response) {
+                    if (saveAbortControllerRef.current === controller) {
+                        saveAbortControllerRef.current = null;
+                    }
                     setSaving(false);
                     if (response.success) {
+                        lastSavedSignatureRef.current = signature;
                         setStatusMsg('Enregistré ✓');
                         setTimeout(function () { setStatusMsg(''); }, 3000);
                         if (onRefresh) onRefresh();
@@ -3130,11 +3198,50 @@
                         setStatusMsg('Erreur : ' + (response.data && response.data.message ? response.data.message : 'inconnue'));
                     }
                 })
-                .catch(function () {
+                .catch(function (error) {
+                    if (error && error.name === 'AbortError') {
+                        return;
+                    }
+                    if (saveAbortControllerRef.current === controller) {
+                        saveAbortControllerRef.current = null;
+                    }
                     setSaving(false);
                     setStatusMsg('Erreur réseau.');
                 });
         }
+
+        useEffect(function () {
+            syncInitialState();
+
+            return function () {
+                clearSaveTimeout();
+                if (saveAbortControllerRef.current && typeof saveAbortControllerRef.current.abort === 'function') {
+                    saveAbortControllerRef.current.abort();
+                }
+            };
+        }, [member && member.id]);
+
+        useEffect(function () {
+            if (!member || !member.id) {
+                return;
+            }
+
+            var payload = buildPayload(values, otherTexts);
+            var signature = JSON.stringify(payload);
+            if (signature === lastSavedSignatureRef.current) {
+                return;
+            }
+
+            clearSaveTimeout();
+            saveTimeoutRef.current = setTimeout(function () {
+                saveTimeoutRef.current = null;
+                handleSave();
+            }, 500);
+
+            return function () {
+                clearSaveTimeout();
+            };
+        }, [values, otherTexts, member && member.id]);
 
         // Helper: is __other selected for a field?
         function isOtherSelected(df) {
@@ -3293,13 +3400,7 @@
             h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Données dynamiques'),
         ].concat(groups).concat([
             h('div', { class: 'mj-regmgr-dyndata-actions' }, [
-                h('button', {
-                    type: 'button',
-                    class: 'mj-btn mj-btn--primary mj-btn--small',
-                    disabled: saving,
-                    onClick: handleSave,
-                }, saving ? 'Enregistrement…' : 'Enregistrer'),
-                statusMsg ? h('span', { class: 'mj-regmgr-dyndata-status' }, statusMsg) : null,
+                (saving || statusMsg) ? h('span', { class: 'mj-regmgr-dyndata-status' }, saving ? 'Enregistrement…' : statusMsg) : null,
             ]),
         ]));
     }

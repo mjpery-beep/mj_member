@@ -2016,6 +2016,7 @@ if (!defined('ABSPATH')) {
                         $dynJsFile  = \Mj\Member\Core\Config::path() . '/js/admin-dynfields.js';
                         $dynCssVer  = file_exists($dynCssFile) ? filemtime($dynCssFile) : \Mj\Member\Core\Config::version();
                         $dynJsVer   = file_exists($dynJsFile)  ? filemtime($dynJsFile)  : \Mj\Member\Core\Config::version();
+                        wp_enqueue_media();
                         wp_enqueue_style('mj-admin-dynfields', \Mj\Member\Core\Config::url() . '/css/admin-dynfields.css', array(), $dynCssVer);
                         wp_enqueue_script('mj-admin-dynfields', \Mj\Member\Core\Config::url() . '/js/admin-dynfields.js', array('jquery'), $dynJsVer, true);
                         wp_localize_script('mj-admin-dynfields', 'mjDynfieldsConfig', array(

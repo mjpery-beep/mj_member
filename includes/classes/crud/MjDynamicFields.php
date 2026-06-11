@@ -16,6 +16,7 @@ if (!defined('ABSPATH')) {
 class MjDynamicFields extends MjTools
 {
     const TABLE_NAME = 'mj_dynamic_fields';
+    const OTHER_OPTION_META_KEY = '__mj_other_option_meta__';
 
     const TYPE_TEXT      = 'text';
     const TYPE_TEXTAREA  = 'textarea';
@@ -178,7 +179,10 @@ class MjDynamicFields extends MjTools
 
         $options_json = '';
         if (isset($data['options_list']) && is_array($data['options_list'])) {
-            $options_json = wp_json_encode(array_values(array_filter(array_map('sanitize_text_field', $data['options_list']))));
+            $options_json = self::encodeOptionsList(
+                $data['options_list'],
+                isset($data['other_option_image']) && is_array($data['other_option_image']) ? $data['other_option_image'] : array()
+            );
         } elseif (isset($data['options_list']) && is_string($data['options_list'])) {
             $options_json = $data['options_list'];
         }
@@ -291,10 +295,18 @@ class MjDynamicFields extends MjTools
 
         if (isset($data['options_list'])) {
             if (is_array($data['options_list'])) {
-                $fields['options_list'] = wp_json_encode(array_values(array_filter(array_map('sanitize_text_field', $data['options_list']))));
+                $fields['options_list'] = self::encodeOptionsList(
+                    $data['options_list'],
+                    isset($data['other_option_image']) && is_array($data['other_option_image']) ? $data['other_option_image'] : array()
+                );
             } else {
                 $fields['options_list'] = sanitize_text_field($data['options_list']);
             }
+            $formats[] = '%s';
+        } elseif (isset($data['other_option_image']) && is_array($data['other_option_image'])) {
+            $existing = self::getById((int) $id);
+            $existing_options = self::decodeOptionsDetailed($existing ?? '');
+            $fields['options_list'] = self::encodeOptionsList($existing_options, $data['other_option_image']);
             $formats[] = '%s';
         }
 
@@ -373,13 +385,131 @@ class MjDynamicFields extends MjTools
      */
     public static function decodeOptions($field): array
     {
+        $detailed = self::decodeOptionsDetailed($field);
+        if (empty($detailed)) {
+            return array();
+        }
+
+        $values = array();
+        foreach ($detailed as $option) {
+            $values[] = $option['value'];
+        }
+
+        return $values;
+    }
+
+    /**
+     * Decode options_list JSON for a field and return full option data.
+     *
+     * @param object|string $field  A field row object, or the raw JSON string.
+     * @return array<int,array{value:string,imageId:int,imageUrl:string}>
+     */
+    public static function decodeOptionsDetailed($field): array
+    {
         $raw = is_object($field) ? ($field->options_list ?? '') : (string) $field;
         if ($raw === '' || $raw === '[]') {
             return array();
         }
 
         $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return array();
+        }
 
-        return is_array($decoded) ? $decoded : array();
+        return self::normalizeOptionsList($decoded);
+    }
+
+    /**
+     * Decode image metadata for the "other" option.
+     *
+     * @param object|string $field
+     * @return array{imageId:int,imageUrl:string}
+     */
+    public static function decodeOtherOptionImage($field): array
+    {
+        $raw = is_object($field) ? ($field->options_list ?? '') : (string) $field;
+        if ($raw === '' || $raw === '[]') {
+            return array('imageId' => 0, 'imageUrl' => '');
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return array('imageId' => 0, 'imageUrl' => '');
+        }
+
+        foreach ($decoded as $option) {
+            if (!is_array($option)) {
+                continue;
+            }
+            if (($option['metaKey'] ?? '') !== self::OTHER_OPTION_META_KEY) {
+                continue;
+            }
+
+            return array(
+                'imageId' => isset($option['imageId']) ? absint($option['imageId']) : absint($option['image_id'] ?? 0),
+                'imageUrl' => esc_url_raw((string) ($option['imageUrl'] ?? $option['image_url'] ?? '')),
+            );
+        }
+
+        return array('imageId' => 0, 'imageUrl' => '');
+    }
+
+    /**
+     * @param array<int,mixed> $options
+     * @return array<int,array{value:string,imageId:int,imageUrl:string}>
+     */
+    private static function normalizeOptionsList(array $options): array
+    {
+        $normalized = array();
+
+        foreach ($options as $option) {
+            $value = '';
+            $image_id = 0;
+            $image_url = '';
+
+            if (is_string($option)) {
+                $value = sanitize_text_field($option);
+            } elseif (is_array($option)) {
+                if (($option['metaKey'] ?? '') === self::OTHER_OPTION_META_KEY) {
+                    continue;
+                }
+                $value = sanitize_text_field((string) ($option['value'] ?? $option['label'] ?? $option['text'] ?? ''));
+                $image_id = isset($option['imageId']) ? absint($option['imageId']) : absint($option['image_id'] ?? 0);
+                $image_url = esc_url_raw((string) ($option['imageUrl'] ?? $option['image_url'] ?? ''));
+            }
+
+            if ($value === '') {
+                continue;
+            }
+
+            $normalized[] = array(
+                'value' => $value,
+                'imageId' => $image_id,
+                'imageUrl' => $image_url,
+            );
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<int,mixed> $options
+     */
+    private static function encodeOptionsList(array $options, array $otherOptionImage = array()): string
+    {
+        $normalized = self::normalizeOptionsList($options);
+
+        $other_image_id = isset($otherOptionImage['imageId']) ? absint($otherOptionImage['imageId']) : absint($otherOptionImage['image_id'] ?? 0);
+        $other_image_url = esc_url_raw((string) ($otherOptionImage['imageUrl'] ?? $otherOptionImage['image_url'] ?? ''));
+        if ($other_image_id > 0 || $other_image_url !== '') {
+            $normalized[] = array(
+                'metaKey' => self::OTHER_OPTION_META_KEY,
+                'value' => self::OTHER_OPTION_META_KEY,
+                'imageId' => $other_image_id,
+                'imageUrl' => $other_image_url,
+            );
+        }
+
+        return wp_json_encode($normalized);
     }
 }

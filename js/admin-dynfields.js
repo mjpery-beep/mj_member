@@ -27,6 +27,8 @@
 
     var fields = [];
     var editingId = null;
+    var optionImagesByIndex = {};
+    var otherOptionImage = { imageId: 0, imageUrl: '' };
 
     function esc(str) {
         var div = document.createElement('div');
@@ -146,6 +148,7 @@
         html += '<div class="mj-dynfields-form__row mj-dynfields-form__row--options" id="mj-dynfield-options-row" style="display:none;">';
         html += '<label for="mj-dynfield-options">Liste de valeurs <small>(une par ligne)</small></label>';
         html += '<textarea id="mj-dynfield-options" rows="4" placeholder="Valeur 1&#10;Valeur 2&#10;Valeur 3"></textarea>';
+        html += '<div id="mj-dynfield-options-images" class="mj-dynfields-options-images"></div>';
         html += '</div>';
 
         html += '<div class="mj-dynfields-form__checkboxes">';
@@ -158,6 +161,10 @@
         html += '<div class="mj-dynfields-form__row" id="mj-dynfield-other-label-row" style="display:none;">';
         html += '<label for="mj-dynfield-other-label">Libellé de l\'option Autre</label>';
         html += '<input type="text" id="mj-dynfield-other-label" placeholder="Autre" />';
+        html += '<div id="mj-dynfield-other-image" class="mj-dynfields-other-image" style="display:none;">';
+        html += '<div class="mj-dynfields-other-image__label">Image pour l\'option « Autre » (optionnel)</div>';
+        html += '<div class="mj-dynfields-other-image__content" id="mj-dynfields-other-image-content"></div>';
+        html += '</div>';
         html += '</div>';
         html += '</div>';
 
@@ -184,6 +191,11 @@
         var typeSelect = document.getElementById('mj-dynfield-type');
         if (typeSelect) typeSelect.addEventListener('change', toggleOptionsRow);
 
+        var optionsTextarea = document.getElementById('mj-dynfield-options');
+        if (optionsTextarea) {
+            optionsTextarea.addEventListener('input', renderOptionImageRows);
+        }
+
         var allowOtherCb = document.getElementById('mj-dynfield-allow-other');
         if (allowOtherCb) allowOtherCb.addEventListener('change', toggleOtherLabelRow);
 
@@ -202,6 +214,42 @@
             });
         }
 
+        var optionsImagesContainer = document.getElementById('mj-dynfield-options-images');
+        if (optionsImagesContainer) {
+            optionsImagesContainer.addEventListener('click', function (event) {
+                var target = event.target;
+                if (!target || !target.classList) return;
+
+                if (target.classList.contains('mj-dynfield-option-image-select')) {
+                    event.preventDefault();
+                    openMediaForOption(parseInt(target.getAttribute('data-index'), 10));
+                }
+
+                if (target.classList.contains('mj-dynfield-option-image-remove')) {
+                    event.preventDefault();
+                    removeImageForOption(parseInt(target.getAttribute('data-index'), 10));
+                }
+            });
+        }
+
+        var otherImageContainer = document.getElementById('mj-dynfields-other-image-content');
+        if (otherImageContainer) {
+            otherImageContainer.addEventListener('click', function (event) {
+                var target = event.target;
+                if (!target || !target.classList) return;
+
+                if (target.classList.contains('mj-dynfield-other-image-select')) {
+                    event.preventDefault();
+                    openMediaForOtherOption();
+                }
+
+                if (target.classList.contains('mj-dynfield-other-image-remove')) {
+                    event.preventDefault();
+                    clearOtherOptionImage();
+                }
+            });
+        }
+
         // Drag & drop re-ordering
         initSortable();
     }
@@ -214,6 +262,10 @@
         if (row) {
             row.style.display = hasOptions ? '' : 'none';
         }
+        if (!hasOptions) {
+            optionImagesByIndex = {};
+        }
+        renderOptionImageRows();
         // Hide 'required' checkbox for title type
         var reqCheckbox = document.getElementById('mj-dynfield-required');
         if (reqCheckbox && reqCheckbox.closest) {
@@ -237,6 +289,9 @@
         var checked = document.getElementById('mj-dynfield-allow-other').checked;
         var row = document.getElementById('mj-dynfield-other-label-row');
         if (row) row.style.display = checked ? '' : 'none';
+        var imageWrap = document.getElementById('mj-dynfield-other-image');
+        if (imageWrap) imageWrap.style.display = checked ? '' : 'none';
+        renderOtherOptionImage();
     }
 
     function openAddModal() {
@@ -259,6 +314,18 @@
         document.getElementById('mj-dynfield-description').value = field.description || '';
         document.getElementById('mj-dynfield-type').value = field.fieldType || 'text';
         document.getElementById('mj-dynfield-options').value = (field.optionsList || []).join('\n');
+        optionImagesByIndex = {};
+        var detailed = Array.isArray(field.optionsDetailed) ? field.optionsDetailed : [];
+        for (var i = 0; i < detailed.length; i++) {
+            optionImagesByIndex[i] = {
+                imageId: detailed[i].imageId || 0,
+                imageUrl: detailed[i].imageUrl || ''
+            };
+        }
+        otherOptionImage = {
+            imageId: field.otherOptionImage && field.otherOptionImage.imageId ? field.otherOptionImage.imageId : 0,
+            imageUrl: field.otherOptionImage && field.otherOptionImage.imageUrl ? field.otherOptionImage.imageUrl : ''
+        };
         document.getElementById('mj-dynfield-registration').checked = !!field.showInRegistration;
         document.getElementById('mj-dynfield-account').checked = !!field.showInAccount;
         document.getElementById('mj-dynfield-notes').checked = !!field.showInNotes;
@@ -276,6 +343,8 @@
         document.getElementById('mj-dynfield-description').value = '';
         document.getElementById('mj-dynfield-type').value = 'text';
         document.getElementById('mj-dynfield-options').value = '';
+        optionImagesByIndex = {};
+        otherOptionImage = { imageId: 0, imageUrl: '' };
         document.getElementById('mj-dynfield-registration').checked = false;
         document.getElementById('mj-dynfield-account').checked = false;
         document.getElementById('mj-dynfield-notes').checked = false;
@@ -314,6 +383,15 @@
         var type = document.getElementById('mj-dynfield-type').value;
         var optionsRaw = document.getElementById('mj-dynfield-options').value.trim();
         var optionsList = optionsRaw ? optionsRaw.split('\n').map(function (v) { return v.trim(); }).filter(Boolean) : [];
+        var allowOther = document.getElementById('mj-dynfield-allow-other').checked;
+        var optionsPayload = optionsList.map(function (value, index) {
+            var image = optionImagesByIndex[index] || {};
+            return {
+                value: value,
+                imageId: image.imageId || 0,
+                imageUrl: image.imageUrl || ''
+            };
+        });
 
         var payload = {
             _nonce: nonce,
@@ -325,9 +403,10 @@
             show_in_notes: document.getElementById('mj-dynfield-notes').checked ? 1 : 0,
             youth_only: document.getElementById('mj-dynfield-youth-only').checked ? 1 : 0,
             is_required: type === 'title' ? 0 : (document.getElementById('mj-dynfield-required').checked ? 1 : 0),
-            allow_other: document.getElementById('mj-dynfield-allow-other').checked ? 1 : 0,
+            allow_other: allowOther ? 1 : 0,
             other_label: document.getElementById('mj-dynfield-other-label').value.trim(),
-            options_list: JSON.stringify(optionsList)
+            options_list: JSON.stringify(optionsPayload),
+            other_option_image: JSON.stringify(allowOther ? otherOptionImage : { imageId: 0, imageUrl: '' })
         };
 
         var action = 'mj_dynfields_create';
@@ -371,6 +450,138 @@
                 alert(resp.data && resp.data.message ? resp.data.message : 'Erreur.');
             }
         });
+    }
+
+    function renderOptionImageRows() {
+        var row = document.getElementById('mj-dynfield-options-row');
+        var containerEl = document.getElementById('mj-dynfield-options-images');
+        var textarea = document.getElementById('mj-dynfield-options');
+        if (!row || !containerEl || !textarea || row.style.display === 'none') {
+            return;
+        }
+
+        var values = textarea.value
+            .split('\n')
+            .map(function (v) { return v.trim(); })
+            .filter(Boolean);
+
+        var nextImages = {};
+        for (var i = 0; i < values.length; i++) {
+            if (optionImagesByIndex[i] && (optionImagesByIndex[i].imageId || optionImagesByIndex[i].imageUrl)) {
+                nextImages[i] = optionImagesByIndex[i];
+            }
+        }
+        optionImagesByIndex = nextImages;
+
+        if (!values.length) {
+            containerEl.innerHTML = '<p class="mj-dynfields-options-images__empty">Ajoutez des valeurs pour associer une image à chaque option.</p>';
+            return;
+        }
+
+        var html = '';
+        html += '<div class="mj-dynfields-options-images__title">Image par valeur (optionnel)</div>';
+        for (var j = 0; j < values.length; j++) {
+            var img = optionImagesByIndex[j] || {};
+            var hasImage = !!(img.imageId || img.imageUrl);
+            html += '<div class="mj-dynfields-options-images__row">';
+            html += '<div class="mj-dynfields-options-images__value">' + esc(values[j]) + '</div>';
+            html += '<div class="mj-dynfields-options-images__actions">';
+            if (hasImage && img.imageUrl) {
+                html += '<img src="' + esc(img.imageUrl) + '" alt="" class="mj-dynfields-options-images__preview" />';
+            }
+            html += '<button type="button" class="button button-small mj-dynfield-option-image-select" data-index="' + j + '">' + (hasImage ? 'Changer l\'image' : 'Choisir une image') + '</button>';
+            if (hasImage) {
+                html += '<button type="button" class="button button-small mj-dynfield-option-image-remove" data-index="' + j + '">Retirer</button>';
+            }
+            html += '</div>';
+            html += '</div>';
+        }
+        containerEl.innerHTML = html;
+    }
+
+    function openMediaForOption(index) {
+        if (typeof wp === 'undefined' || !wp.media) {
+            alert('La médiathèque WordPress n\'est pas disponible sur cette page.');
+            return;
+        }
+
+        var frame = wp.media({
+            title: 'Choisir une image',
+            library: { type: 'image' },
+            button: { text: 'Utiliser cette image' },
+            multiple: false
+        });
+
+        frame.on('select', function () {
+            var selection = frame.state().get('selection').first();
+            if (!selection) return;
+
+            var attachment = selection.toJSON();
+            optionImagesByIndex[index] = {
+                imageId: attachment.id || 0,
+                imageUrl: attachment.url || ''
+            };
+            renderOptionImageRows();
+        });
+
+        frame.open();
+    }
+
+    function removeImageForOption(index) {
+        delete optionImagesByIndex[index];
+        renderOptionImageRows();
+    }
+
+    function renderOtherOptionImage() {
+        var wrap = document.getElementById('mj-dynfield-other-image');
+        var content = document.getElementById('mj-dynfields-other-image-content');
+        if (!wrap || !content || wrap.style.display === 'none') {
+            return;
+        }
+
+        var hasImage = !!(otherOptionImage.imageId || otherOptionImage.imageUrl);
+        var html = '';
+        if (hasImage && otherOptionImage.imageUrl) {
+            html += '<img src="' + esc(otherOptionImage.imageUrl) + '" alt="" class="mj-dynfields-other-image__preview" />';
+        }
+        html += '<button type="button" class="button button-small mj-dynfield-other-image-select">' + (hasImage ? 'Changer l\'image' : 'Choisir une image') + '</button>';
+        if (hasImage) {
+            html += '<button type="button" class="button button-small mj-dynfield-other-image-remove">Retirer</button>';
+        }
+        content.innerHTML = html;
+    }
+
+    function openMediaForOtherOption() {
+        if (typeof wp === 'undefined' || !wp.media) {
+            alert('La médiathèque WordPress n\'est pas disponible sur cette page.');
+            return;
+        }
+
+        var frame = wp.media({
+            title: 'Choisir une image pour « Autre »',
+            library: { type: 'image' },
+            button: { text: 'Utiliser cette image' },
+            multiple: false
+        });
+
+        frame.on('select', function () {
+            var selection = frame.state().get('selection').first();
+            if (!selection) return;
+
+            var attachment = selection.toJSON();
+            otherOptionImage = {
+                imageId: attachment.id || 0,
+                imageUrl: attachment.url || ''
+            };
+            renderOtherOptionImage();
+        });
+
+        frame.open();
+    }
+
+    function clearOtherOptionImage() {
+        otherOptionImage = { imageId: 0, imageUrl: '' };
+        renderOtherOptionImage();
     }
 
     function loadFields() {
