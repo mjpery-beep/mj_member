@@ -201,9 +201,15 @@ class MjAccountPagesExport {
                 continue;
             }
 
-            $slug = sanitize_title($data['slug']);
-            $title = sanitize_text_field($data['title']);
-            $link_key = isset($data['link_key']) ? sanitize_key($data['link_key']) : '';
+            $data = self::normalizeImportedValue($data);
+
+            $slug = sanitize_title((string) $data['slug']);
+            $title = sanitize_text_field((string) $data['title']);
+            $link_key = isset($data['link_key']) ? sanitize_key((string) $data['link_key']) : '';
+            $content = isset($data['content']) ? (string) $data['content'] : '';
+            $status = isset($data['status']) ? sanitize_key((string) $data['status']) : 'publish';
+            $template = isset($data['template']) ? (string) $data['template'] : '';
+            $meta = !empty($data['meta']) && is_array($data['meta']) ? $data['meta'] : array();
 
             // Vérifier si la page existe déjà
             $existing_page = get_page_by_path($slug);
@@ -222,8 +228,8 @@ class MjAccountPagesExport {
                 $page_id = wp_update_post(array(
                     'ID' => $existing_page->ID,
                     'post_title' => $title,
-                    'post_content' => $data['content'] ?? '',
-                    'post_status' => $data['status'] ?? 'publish',
+                    'post_content' => $content,
+                    'post_status' => $status,
                 ));
 
                 if (is_wp_error($page_id)) {
@@ -247,8 +253,8 @@ class MjAccountPagesExport {
                     'post_type' => 'page',
                     'post_title' => $title,
                     'post_name' => $slug,
-                    'post_content' => $data['content'] ?? '',
-                    'post_status' => $data['status'] ?? 'publish',
+                    'post_content' => $content,
+                    'post_status' => $status,
                 ));
 
                 if (is_wp_error($page_id)) {
@@ -268,13 +274,13 @@ class MjAccountPagesExport {
             }
 
             // Appliquer le template si défini
-            if (!empty($data['template'])) {
-                update_post_meta($page_id, '_wp_page_template', $data['template']);
+            if ($template !== '') {
+                update_post_meta($page_id, '_wp_page_template', $template);
             }
 
             // Appliquer les métadonnées Elementor
-            if (!empty($data['meta']) && is_array($data['meta'])) {
-                foreach ($data['meta'] as $meta_key => $meta_value) {
+            if (!empty($meta)) {
+                foreach ($meta as $meta_key => $meta_value) {
                     update_post_meta($page_id, $meta_key, $meta_value);
                 }
             }
@@ -326,5 +332,51 @@ class MjAccountPagesExport {
 
         // Importer sans écraser les pages existantes
         self::importPages(false);
+    }
+
+    /**
+     * Normalise récursivement les données importées pour corriger les anciennes
+     * séquences Unicode littérales (\u00e9) ou partiellement corrompues (Tu00e9moignages).
+     *
+     * @param mixed $value Valeur importée.
+     * @return mixed
+     */
+    private static function normalizeImportedValue($value) {
+        if (is_array($value)) {
+            foreach ($value as $key => $item) {
+                $value[$key] = self::normalizeImportedValue($item);
+            }
+
+            return $value;
+        }
+
+        if (!is_string($value) || $value === '') {
+            return $value;
+        }
+
+        $value = preg_replace_callback(
+            '/\\\\u([0-9a-fA-F]{4})/',
+            static function (array $matches): string {
+                return self::decodeUnicodeSequence($matches[1]);
+            },
+            $value
+        ) ?? $value;
+
+        $value = preg_replace_callback(
+            '/(?<=\p{L})u([0-9a-fA-F]{4})(?=[\p{L}\p{M}])/u',
+            static function (array $matches): string {
+                return self::decodeUnicodeSequence($matches[1]);
+            },
+            $value
+        ) ?? $value;
+
+        return $value;
+    }
+
+    /**
+     * Convertit un code Unicode hexadécimal en caractère UTF-8.
+     */
+    private static function decodeUnicodeSequence(string $hex): string {
+        return html_entity_decode('&#x' . $hex . ';', ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 }

@@ -13,6 +13,7 @@ namespace Mj\Member\Module {
         private const CACHE_KEY = 'mj_member_github_release';
         private const CACHE_TTL = 300;
         private const INSTALLED_COMMIT_OPTION = 'mj_member_installed_github_commit';
+        private const PINNED_COMMIT_OPTION = 'mj_member_github_target_commit';
 
         public function register(): void
         {
@@ -20,6 +21,9 @@ namespace Mj\Member\Module {
             \add_filter('plugins_api', array($this, 'filterPluginInfo'), 20, 3);
             \add_filter('upgrader_source_selection', array($this, 'normalizeInstallSource'), 10, 4);
             \add_action('upgrader_process_complete', array($this, 'purgeCache'), 10, 2);
+            \add_action('wp_ajax_mj_member_fetch_github_commits', array($this, 'handleFetchCommits'));
+            \add_action('wp_ajax_mj_member_set_target_commit', array($this, 'handleSetTargetCommit'));
+            \add_action('wp_ajax_mj_member_clear_target_commit', array($this, 'handleClearTargetCommit'));
         }
 
         public function injectUpdate($transient)
@@ -148,8 +152,109 @@ namespace Mj\Member\Module {
                 \delete_site_option(self::INSTALLED_COMMIT_OPTION . '_pending');
             }
 
+            $pinnedAfterUpdate = \get_site_option(self::PINNED_COMMIT_OPTION, '');
+            if (is_string($pinnedAfterUpdate) && $pinnedAfterUpdate !== '') {
+                \update_site_option(self::INSTALLED_COMMIT_OPTION, $pinnedAfterUpdate);
+                \delete_site_option(self::PINNED_COMMIT_OPTION);
+            }
+
             \delete_site_transient(self::CACHE_KEY);
             \delete_site_transient('update_plugins');
+        }
+
+        public function handleFetchCommits(): void
+        {
+            if (!\current_user_can('manage_options')) {
+                \wp_send_json_error(array('message' => 'Accès refusé.'), 403);
+            }
+            \check_ajax_referer('mj_member_github_updater', 'nonce');
+
+            $branch = isset($_POST['branch']) ? \sanitize_text_field(\wp_unslash($_POST['branch'])) : 'master';
+            if ($branch === '') {
+                $branch = 'master';
+            }
+
+            $repository = $this->repositoryFromPluginUri();
+            if ($repository === null) {
+                \wp_send_json_error(array('message' => 'Dépôt GitHub non configuré.'));
+            }
+
+            $commits = $this->requestGitHubJson(
+                'https://api.github.com/repos/' . $repository . '/commits?sha=' . rawurlencode($branch) . '&per_page=25'
+            );
+
+            if (!is_array($commits)) {
+                \wp_send_json_error(array('message' => 'Impossible de récupérer les commits depuis GitHub. Vérifiez le dépôt et la branche.'));
+            }
+
+            $list = array();
+            foreach ($commits as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $sha = is_string($item['sha'] ?? null) ? $item['sha'] : '';
+                if ($sha === '') {
+                    continue;
+                }
+                $message = is_string($item['commit']['message'] ?? null) ? $item['commit']['message'] : '';
+                $firstLine = (string) strtok($message, "\n");
+                $author = is_string($item['commit']['author']['name'] ?? null) ? $item['commit']['author']['name'] : '';
+                $date = is_string($item['commit']['author']['date'] ?? null) ? $item['commit']['author']['date'] : '';
+                $htmlUrl = is_string($item['html_url'] ?? null) ? $item['html_url'] : '';
+                $list[] = array(
+                    'sha' => $sha,
+                    'short_sha' => substr($sha, 0, 7),
+                    'message' => $firstLine,
+                    'author' => $author,
+                    'date' => $date,
+                    'url' => $htmlUrl,
+                );
+            }
+
+            \wp_send_json_success(array(
+                'commits' => $list,
+                'installed_commit' => (string) \get_site_option(self::INSTALLED_COMMIT_OPTION, ''),
+                'pinned_commit' => (string) \get_site_option(self::PINNED_COMMIT_OPTION, ''),
+                'current_version' => $this->pluginData()['Version'] ?: Config::version(),
+            ));
+        }
+
+        public function handleSetTargetCommit(): void
+        {
+            if (!\current_user_can('manage_options')) {
+                \wp_send_json_error(array('message' => 'Accès refusé.'), 403);
+            }
+            \check_ajax_referer('mj_member_github_updater', 'nonce');
+
+            $sha = isset($_POST['sha']) ? \sanitize_text_field(\wp_unslash($_POST['sha'])) : '';
+            if (!preg_match('/^[0-9a-f]{7,40}$/i', $sha)) {
+                \wp_send_json_error(array('message' => 'SHA de commit invalide.'));
+            }
+
+            \update_site_option(self::PINNED_COMMIT_OPTION, $sha);
+            \delete_site_transient(self::CACHE_KEY);
+            \delete_site_transient('update_plugins');
+
+            \wp_send_json_success(array(
+                'message' => 'Commit cible défini. Le bouton de mise à jour devrait apparaître dans Extensions > Mises à jour.',
+                'pinned_commit' => $sha,
+            ));
+        }
+
+        public function handleClearTargetCommit(): void
+        {
+            if (!\current_user_can('manage_options')) {
+                \wp_send_json_error(array('message' => 'Accès refusé.'), 403);
+            }
+            \check_ajax_referer('mj_member_github_updater', 'nonce');
+
+            \delete_site_option(self::PINNED_COMMIT_OPTION);
+            \delete_site_transient(self::CACHE_KEY);
+            \delete_site_transient('update_plugins');
+
+            \wp_send_json_success(array(
+                'message' => 'Cible effacée. Le système reviendra au dernier commit de la branche.',
+            ));
         }
 
         private function buildUpdatePayload(array $release, string $currentVersion): \stdClass
@@ -185,6 +290,15 @@ namespace Mj\Member\Module {
             $repository = $this->repositoryFromPluginUri();
             if ($repository === null) {
                 return null;
+            }
+
+            $pinnedCommit = \get_site_option(self::PINNED_COMMIT_OPTION, '');
+            if (is_string($pinnedCommit) && $pinnedCommit !== '') {
+                $release = $this->buildPinnedCommitRelease($repository, $pinnedCommit);
+                if ($release !== null) {
+                    \set_site_transient(self::CACHE_KEY, $release, self::CACHE_TTL);
+                    return $release;
+                }
             }
 
             $release = $this->requestBranchSnapshot($repository);
@@ -478,12 +592,23 @@ namespace Mj\Member\Module {
         {
             $source = (string) ($release['source'] ?? '');
             $remoteVersion = (string) ($release['version'] ?? '');
+            $remoteCommit = (string) ($release['commit_sha'] ?? '');
+
+            if ($source === 'pinned') {
+                if ($remoteCommit === '') {
+                    return false;
+                }
+                $installedCommit = \get_site_option(self::INSTALLED_COMMIT_OPTION, '');
+                if (!is_string($installedCommit) || $installedCommit === '') {
+                    return true;
+                }
+                return !hash_equals($installedCommit, $remoteCommit);
+            }
 
             if ($source !== 'branch') {
                 return $remoteVersion !== '' && \version_compare($remoteVersion, $currentVersion, '>');
             }
 
-            $remoteCommit = (string) ($release['commit_sha'] ?? '');
             if ($remoteCommit === '') {
                 return false;
             }
@@ -496,10 +621,42 @@ namespace Mj\Member\Module {
             return !hash_equals($installedCommit, $remoteCommit);
         }
 
+        private function buildPinnedCommitRelease(string $repository, string $sha): ?array
+        {
+            $response = $this->requestGitHubJson(
+                'https://api.github.com/repos/' . $repository . '/commits/' . rawurlencode($sha)
+            );
+            if (!is_array($response)) {
+                return null;
+            }
+
+            $fullSha = is_string($response['sha'] ?? null) ? (string) $response['sha'] : $sha;
+            $message = is_string($response['commit']['message'] ?? null) ? (string) $response['commit']['message'] : '';
+            $firstLine = (string) strtok($message, "\n");
+            $date = is_string($response['commit']['author']['date'] ?? null) ? (string) $response['commit']['author']['date'] : '';
+            $htmlUrl = is_string($response['html_url'] ?? null) ? (string) $response['html_url'] : '';
+            $timestamp = $date !== '' ? (int) strtotime($date) : time();
+
+            $currentVersion = $this->pluginData()['Version'] ?: Config::version();
+
+            return array(
+                'version' => $this->normalizeVersion($currentVersion),
+                'display_version' => $currentVersion . '.' . (string) $timestamp,
+                'package' => 'https://codeload.github.com/' . $repository . '/zip/' . rawurlencode($fullSha),
+                'url' => $htmlUrl !== '' ? $htmlUrl : (rtrim((string) $this->pluginData()['PluginURI'], '/') . '/commit/' . rawurlencode($fullSha)),
+                'body' => $firstLine,
+                'published_at' => $date,
+                'commit_sha' => $fullSha,
+                'source' => 'pinned',
+            );
+        }
+
         private function resolvePayloadVersion(array $release, string $currentVersion): string
         {
             $displayVersion = (string) ($release['display_version'] ?? $release['version'] ?? '');
-            if (($release['source'] ?? '') !== 'branch') {
+            $source = (string) ($release['source'] ?? '');
+
+            if ($source !== 'branch' && $source !== 'pinned') {
                 return $displayVersion !== '' ? $displayVersion : $currentVersion;
             }
 

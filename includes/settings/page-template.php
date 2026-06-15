@@ -35,6 +35,7 @@ if (!defined('ABSPATH')) {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-webpush" data-tab-target="webpush" role="tab" aria-controls="mj-tab-webpush" aria-selected="false">🔔 Web Push</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-widgets" data-tab-target="widgets" role="tab" aria-controls="mj-tab-widgets" aria-selected="false">🧩 Widgets</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-mileage" data-tab-target="mileage" role="tab" aria-controls="mj-tab-mileage" aria-selected="false">🚗 Frais kilométriques</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-updates" data-tab-target="updates" role="tab" aria-controls="mj-tab-updates" aria-selected="false">🔄 Mises à jour</button>
                 </div>
 
                 <div class="mj-settings-tabs__panels">
@@ -2366,6 +2367,235 @@ if (!defined('ABSPATH')) {
                                 Ce message sera affiché dans le formulaire de demande de frais kilométriques.
                             </small>
                         </p>
+                    </div>
+
+                    <div id="mj-tab-updates" class="mj-settings-tabs__panel" data-tab="updates" role="tabpanel" aria-labelledby="mj-tab-button-updates" aria-hidden="true">
+                        <div style="background:#f0fdf4; border-left:4px solid #22c55e; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
+                            <h2 style="margin:0 0 8px 0;">🔄 Mises à jour GitHub</h2>
+                            <p style="margin:0; color:#475569;">
+                                Sélectionnez un commit spécifique du dépôt GitHub comme cible de mise à jour.
+                                Le bouton de mise à jour WordPress apparaîtra dès qu'un commit différent est ciblé.
+                            </p>
+                        </div>
+
+                        <div id="mj-updater-state" style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:16px 20px; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:24px;">
+                            <div>
+                                <strong style="color:#64748b; font-size:12px; text-transform:uppercase; letter-spacing:.05em;">Version installée</strong>
+                                <div style="margin-top:4px; font-size:15px; font-weight:600;"><?php echo esc_html(\Mj\Member\Core\Config::version()); ?></div>
+                            </div>
+                            <div>
+                                <strong style="color:#64748b; font-size:12px; text-transform:uppercase; letter-spacing:.05em;">Commit installé</strong>
+                                <div style="margin-top:4px; font-size:15px; font-family:monospace;">
+                                    <?php echo $github_updater_installed_commit !== '' ? '<span title="' . esc_attr($github_updater_installed_commit) . '">' . esc_html(substr($github_updater_installed_commit, 0, 7)) . '</span>' : '<em style="color:#94a3b8;">non défini</em>'; ?>
+                                </div>
+                            </div>
+                            <div id="mj-updater-pinned-state">
+                                <strong style="color:#64748b; font-size:12px; text-transform:uppercase; letter-spacing:.05em;">Commit ciblé</strong>
+                                <div style="margin-top:4px; font-size:15px; display:flex; align-items:center; gap:8px;">
+                                    <span id="mj-updater-pinned-display" style="font-family:monospace;" title="<?php echo esc_attr($github_updater_pinned_commit); ?>">
+                                        <?php echo $github_updater_pinned_commit !== '' ? esc_html(substr($github_updater_pinned_commit, 0, 7)) : '<em style="color:#94a3b8; font-family:sans-serif;">aucun (dernier commit auto)</em>'; ?>
+                                    </span>
+                                    <?php if ($github_updater_pinned_commit !== '') : ?>
+                                    <button type="button" id="mj-updater-clear-btn" class="button" style="padding:2px 8px; font-size:12px;">✕ Effacer</button>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:12px; align-items:center; margin-bottom:20px; flex-wrap:wrap;">
+                            <div>
+                                <label for="mj-updater-branch-input" style="font-weight:600; margin-right:8px;">Branche :</label>
+                                <input type="text" id="mj-updater-branch-input" value="<?php echo esc_attr($github_updater_branch); ?>" style="width:160px;" placeholder="master" />
+                            </div>
+                            <button type="button" id="mj-updater-load-btn" class="button button-secondary">🔄 Charger les commits</button>
+                            <span id="mj-updater-spinner" style="display:none;">
+                                <span class="spinner is-active" style="float:none; margin:0;"></span>
+                            </span>
+                        </div>
+
+                        <div id="mj-updater-feedback" style="display:none; margin-bottom:14px;"></div>
+
+                        <div id="mj-updater-commits-wrapper" style="display:none;">
+                            <table style="width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden;">
+                                <thead>
+                                    <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+                                        <th style="padding:10px 14px; text-align:left; font-size:12px; color:#64748b; width:32px;"></th>
+                                        <th style="padding:10px 14px; text-align:left; font-size:12px; color:#64748b;">SHA</th>
+                                        <th style="padding:10px 14px; text-align:left; font-size:12px; color:#64748b;">Message</th>
+                                        <th style="padding:10px 14px; text-align:left; font-size:12px; color:#64748b;">Auteur</th>
+                                        <th style="padding:10px 14px; text-align:left; font-size:12px; color:#64748b;">Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mj-updater-commits-tbody"></tbody>
+                            </table>
+
+                            <div style="margin-top:16px; display:flex; gap:12px; align-items:center;">
+                                <button type="button" id="mj-updater-apply-btn" class="button button-primary" disabled>✅ Définir comme cible de mise à jour</button>
+                                <span id="mj-updater-apply-feedback" style="display:none; font-size:13px;"></span>
+                            </div>
+                        </div>
+
+                        <script>
+                        (function() {
+                            var ajaxUrl = <?php echo json_encode(admin_url('admin-ajax.php')); ?>;
+                            var nonce   = <?php echo json_encode(wp_create_nonce('mj_member_github_updater')); ?>;
+                            var pinnedCommit = <?php echo json_encode($github_updater_pinned_commit); ?>;
+
+                            var loadBtn     = document.getElementById('mj-updater-load-btn');
+                            var applyBtn    = document.getElementById('mj-updater-apply-btn');
+                            var clearBtn    = document.getElementById('mj-updater-clear-btn');
+                            var branchInput = document.getElementById('mj-updater-branch-input');
+                            var spinner     = document.getElementById('mj-updater-spinner');
+                            var wrapper     = document.getElementById('mj-updater-commits-wrapper');
+                            var tbody       = document.getElementById('mj-updater-commits-tbody');
+                            var feedback    = document.getElementById('mj-updater-feedback');
+                            var applyFb     = document.getElementById('mj-updater-apply-feedback');
+                            var pinnedDisp  = document.getElementById('mj-updater-pinned-display');
+
+                            var selectedSha = '';
+
+                            function setFeedback(el, msg, ok) {
+                                el.style.display = 'block';
+                                el.style.color = ok ? '#16a34a' : '#dc2626';
+                                el.textContent = msg;
+                            }
+
+                            function postAjax(action, data, cb) {
+                                var body = new URLSearchParams();
+                                body.set('action', action);
+                                body.set('nonce', nonce);
+                                for (var k in data) body.set(k, data[k]);
+                                fetch(ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body })
+                                    .then(function(r) { return r.json(); })
+                                    .then(cb)
+                                    .catch(function(e) { cb({ success: false, data: { message: e.message } }); });
+                            }
+
+                            loadBtn.addEventListener('click', function() {
+                                var branch = branchInput.value.trim() || 'master';
+                                wrapper.style.display = 'none';
+                                feedback.style.display = 'none';
+                                applyBtn.disabled = true;
+                                selectedSha = '';
+                                spinner.style.display = 'inline-block';
+                                loadBtn.disabled = true;
+
+                                postAjax('mj_member_fetch_github_commits', { branch: branch }, function(res) {
+                                    spinner.style.display = 'none';
+                                    loadBtn.disabled = false;
+                                    if (!res.success) {
+                                        setFeedback(feedback, '❌ ' + (res.data && res.data.message ? res.data.message : 'Erreur inconnue'), false);
+                                        return;
+                                    }
+                                    var commits = res.data.commits || [];
+                                    var installed = res.data.installed_commit || '';
+                                    var pinned = res.data.pinned_commit || '';
+                                    pinnedCommit = pinned;
+
+                                    tbody.innerHTML = '';
+                                    commits.forEach(function(c) {
+                                        var tr = document.createElement('tr');
+                                        tr.style.borderBottom = '1px solid #f1f5f9';
+                                        tr.style.cursor = 'pointer';
+                                        var isInstalled = installed && installed.indexOf(c.sha) === 0;
+                                        var isPinned    = pinned && pinned.indexOf(c.sha) === 0;
+                                        if (isInstalled) tr.style.background = '#f0fdf4';
+                                        if (isPinned)    tr.style.background = '#eff6ff';
+                                        tr.innerHTML =
+                                            '<td style="padding:10px 14px;"><input type="radio" name="mj-updater-commit" value="' + c.sha + '" /></td>' +
+                                            '<td style="padding:10px 14px; font-family:monospace; white-space:nowrap;">' +
+                                                '<a href="' + (c.url || '#') + '" target="_blank" title="' + c.sha + '">' + c.short_sha + '</a>' +
+                                                (isInstalled ? ' <span style="background:#dcfce7;color:#166534;font-size:11px;padding:1px 5px;border-radius:3px;">installé</span>' : '') +
+                                                (isPinned    ? ' <span style="background:#dbeafe;color:#1e40af;font-size:11px;padding:1px 5px;border-radius:3px;">ciblé</span>' : '') +
+                                            '</td>' +
+                                            '<td style="padding:10px 14px; max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + (c.message || '') + '">' + (c.message || '') + '</td>' +
+                                            '<td style="padding:10px 14px; color:#64748b; white-space:nowrap;">' + (c.author || '') + '</td>' +
+                                            '<td style="padding:10px 14px; color:#64748b; white-space:nowrap;">' + (c.date ? c.date.replace('T', ' ').replace('Z', '') : '') + '</td>';
+                                        tr.addEventListener('click', function() {
+                                            var radio = tr.querySelector('input[type=radio]');
+                                            if (radio) {
+                                                radio.checked = true;
+                                                selectedSha = radio.value;
+                                                applyBtn.disabled = false;
+                                                tbody.querySelectorAll('tr').forEach(function(r) { r.style.outline = ''; });
+                                                tr.style.outline = '2px solid #3b82f6';
+                                            }
+                                        });
+                                        tbody.appendChild(tr);
+                                    });
+                                    wrapper.style.display = 'block';
+                                });
+                            });
+
+                            applyBtn.addEventListener('click', function() {
+                                if (!selectedSha) return;
+                                applyBtn.disabled = true;
+                                applyFb.style.display = 'none';
+                                postAjax('mj_member_set_target_commit', { sha: selectedSha }, function(res) {
+                                    applyBtn.disabled = false;
+                                    if (!res.success) {
+                                        setFeedback(applyFb, '❌ ' + (res.data && res.data.message ? res.data.message : 'Erreur'), false);
+                                        return;
+                                    }
+                                    var short = selectedSha.substring(0, 7);
+                                    pinnedCommit = selectedSha;
+                                    if (pinnedDisp) {
+                                        pinnedDisp.innerHTML = '<span style="font-family:monospace;" title="' + selectedSha + '">' + short + '</span>';
+                                        var existingClear = document.getElementById('mj-updater-clear-btn');
+                                        if (!existingClear) {
+                                            var btn = document.createElement('button');
+                                            btn.type = 'button';
+                                            btn.id = 'mj-updater-clear-btn';
+                                            btn.className = 'button';
+                                            btn.style.cssText = 'padding:2px 8px;font-size:12px;';
+                                            btn.textContent = '✕ Effacer';
+                                            btn.addEventListener('click', doClear);
+                                            pinnedDisp.parentNode.appendChild(btn);
+                                        }
+                                    }
+                                    var link = '<a href="' + <?php echo json_encode(admin_url('update-core.php')); ?> + '" target="_blank">Aller aux mises à jour WordPress →</a>';
+                                    applyFb.innerHTML = '✅ ' + (res.data.message || 'Commit ciblé.') + ' ' + link;
+                                    applyFb.style.color = '#16a34a';
+                                    applyFb.style.display = 'block';
+                                    // rafraîchir le tableau
+                                    tbody.querySelectorAll('tr').forEach(function(tr) {
+                                        var radio = tr.querySelector('input[type=radio]');
+                                        if (!radio) return;
+                                        var existingBadge = tr.querySelector('.mj-pinned-badge');
+                                        if (existingBadge) existingBadge.remove();
+                                        if (radio.value.indexOf(selectedSha) === 0 || selectedSha.indexOf(radio.value.substring(0, 7)) === 0) {
+                                            tr.style.background = '#eff6ff';
+                                            var shaCell = tr.cells[1];
+                                            if (shaCell) {
+                                                var badge = document.createElement('span');
+                                                badge.className = 'mj-pinned-badge';
+                                                badge.style.cssText = 'background:#dbeafe;color:#1e40af;font-size:11px;padding:1px 5px;border-radius:3px;margin-left:4px;';
+                                                badge.textContent = 'ciblé';
+                                                shaCell.appendChild(badge);
+                                            }
+                                        }
+                                    });
+                                });
+                            });
+
+                            function doClear() {
+                                postAjax('mj_member_clear_target_commit', {}, function(res) {
+                                    if (pinnedDisp) {
+                                        pinnedDisp.innerHTML = '<em style="color:#94a3b8; font-family:sans-serif;">aucun (dernier commit auto)</em>';
+                                    }
+                                    var clearBtnEl = document.getElementById('mj-updater-clear-btn');
+                                    if (clearBtnEl) clearBtnEl.remove();
+                                    tbody.querySelectorAll('.mj-pinned-badge').forEach(function(b) { b.remove(); });
+                                    tbody.querySelectorAll('tr').forEach(function(tr) {
+                                        if (tr.style.background === 'rgb(239, 246, 255)') tr.style.background = '';
+                                    });
+                                    setFeedback(applyFb, '✅ Cible effacée. Mode : dernier commit automatique.', true);
+                                });
+                            }
+
+                            if (clearBtn) clearBtn.addEventListener('click', doClear);
+                        })();
+                        </script>
                     </div>
                 </div>
             </div>
