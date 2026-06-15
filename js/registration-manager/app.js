@@ -510,6 +510,15 @@
         var setViewMode = _viewMode[1];
 
         var occurrenceEditorModal = useModal();
+        var occurrenceGeneratorModal = useModal();
+        var modalReopenGuardUntilRef = useRef(0);
+
+        var openOccurrenceEditor = useCallback(function (dateIso) {
+            if (Date.now() < modalReopenGuardUntilRef.current) {
+                return;
+            }
+            occurrenceEditorModal.open({ date: dateIso });
+        }, [occurrenceEditorModal.open]);
 
         var occurrencesByDate = useMemo(function () {
             var map = {};
@@ -738,8 +747,8 @@
                 next.reason = '';
                 return next;
             });
-            occurrenceEditorModal.open({ date: day.iso });
-        }, [occurrenceEditorModal.open, weekOverview, weekTimeScale, weekTimelineRange, setSelectedOccurrenceId, setEditorState]);
+            openOccurrenceEditor(day.iso);
+        }, [openOccurrenceEditor, weekOverview, weekTimeScale, weekTimelineRange, setSelectedOccurrenceId, setEditorState]);
 
         var _generatorState = useState(createGeneratorState(initialPivotDate));
         var generatorState = _generatorState[0];
@@ -1691,11 +1700,6 @@
                             flexWrap: 'wrap',
                             gap: '8px',
                         };
-                        var lotFlagsStyle = {
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                            gap: '12px',
-                        };
                         var lotMetaGridStyle = {
                             display: 'grid',
                             gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
@@ -1773,41 +1777,41 @@
                                 ]),
                                 lotSchedulePreview && h('div', { class: 'mj-regmgr-occurrence__batch-card__preview', style: { fontSize: '0.96rem', lineHeight: 1.6, color: '#0f172a' } }, lotSchedulePreview),
                             ]),
-                            h('div', { class: 'mj-regmgr-occurrence__batch-card__flags', style: lotFlagsStyle }, [
-                                apiPost && h('label', { class: 'mj-regmgr-occurrence__history-item-flag mj-regmgr-occurrence__batch-card__flag', style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '16px', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(148, 163, 184, 0.16)' } }, [
-                                    h('input', {
-                                        type: 'checkbox',
-                                        checked: includeInGlobalSchedule,
-                                        disabled: isProcessing,
-                                        onChange: function (e) {
-                                            handleToggleBatchScheduleFlag(batchId, e.currentTarget.checked);
-                                        },
-                                    }),
-                                    h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationAddToGlobalSchedule', 'Ajouter à l\'horaire global')),
-                                ]),
-                                apiPost && h('label', { class: 'mj-regmgr-occurrence__history-item-flag mj-regmgr-occurrence__batch-card__flag', style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '16px', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(148, 163, 184, 0.16)' } }, [
-                                    h('input', {
-                                        type: 'checkbox',
-                                        checked: includeDatesInSchedulePreview,
-                                        disabled: isProcessing,
-                                        onChange: function (e) {
-                                            handleToggleBatchPreviewDatesFlag(batchId, e.currentTarget.checked);
-                                        },
-                                    }),
-                                    h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationIncludeDatesInPreview', 'Ajouter date début/fin dans l\'aperçu horaire')),
-                                ]),
-                            ]),
                             apiPost && h('details', {
                                 class: 'mj-regmgr-occurrence__history-item-assignment mj-regmgr-occurrence__history-item-config-fold mj-regmgr-occurrence__batch-card__config',
                                 open: false,
                             }, [
                                 h('summary', { class: 'mj-regmgr-occurrence__fold-summary mj-regmgr-occurrence__history-config-summary' }, [
                                     h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
-                                        h('span', { class: 'mj-regmgr-occurrence__history-config-title' }, getString(strings, 'occurrenceGenerationBatchConfigTitle', 'Configuration du lot')),
+                                        h('span', { class: 'mj-regmgr-occurrence__history-config-title' }, getString(strings, 'occurrenceGenerationBatchConfigTitle', 'Configuration')),
                                     ]),
                                     h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
                                 ]),
                                 h('div', { class: 'mj-regmgr-occurrence__fold-body mj-regmgr-occurrence__batch-card__config-body' }, [
+                                    h('div', { class: 'mj-regmgr-occurrence__batch-card__flags', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' } }, [
+                                        h('label', { class: 'mj-regmgr-occurrence__history-item-flag mj-regmgr-occurrence__batch-card__flag', style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '16px', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(148, 163, 184, 0.16)' } }, [
+                                            h('input', {
+                                                type: 'checkbox',
+                                                checked: includeInGlobalSchedule,
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    handleToggleBatchScheduleFlag(batchId, e.currentTarget.checked);
+                                                },
+                                            }),
+                                            h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationAddToGlobalSchedule', 'Ajouter à l\'horaire global')),
+                                        ]),
+                                        h('label', { class: 'mj-regmgr-occurrence__history-item-flag mj-regmgr-occurrence__batch-card__flag', style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '16px', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(148, 163, 184, 0.16)' } }, [
+                                            h('input', {
+                                                type: 'checkbox',
+                                                checked: includeDatesInSchedulePreview,
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    handleToggleBatchPreviewDatesFlag(batchId, e.currentTarget.checked);
+                                                },
+                                            }),
+                                            h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationIncludeDatesInPreview', 'Ajouter date début/fin dans l\'aperçu horaire')),
+                                        ]),
+                                    ]),
                                     h('div', { class: 'mj-regmgr-occurrence__form-row mj-regmgr-occurrence__batch-card__grid' }, [
                                         h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
                                             h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorModeLabel', 'Mode')),
@@ -1820,7 +1824,7 @@
                                                     updateBatchConfigDraft({ mode: nextMode });
                                                 },
                                             }, [
-                                                h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Ajoute date unique')),
+                                                h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Date unique')),
                                                 h('option', { value: 'range' }, getString(strings, 'occurrenceGeneratorModeRange', 'Plage de dates')),
                                                 h('option', { value: 'weekly' }, getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')),
                                                 h('option', { value: 'monthly' }, getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')),
@@ -1980,7 +1984,11 @@
             ),
             shouldShowEditorCard && h(Modals.Modal, {
                 isOpen: occurrenceEditorModal.isOpen,
-                onClose: handleCancelEdit,
+                onClose: function (event) {
+                    if (typeof handleCancelEdit === 'function') {
+                        handleCancelEdit(event);
+                    }
+                },
                 title: editorCardTitle,
                 size: 'large',
             }, [
@@ -2090,18 +2098,20 @@
                 ]),
                 ]),
             ]),
-            canShowGeneratorForm && h('details', {
-                class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--fold',
-                open: true,
+            canShowGeneratorForm && h('div', { class: 'mj-regmgr-occurrence__actions' }, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--secondary',
+                    onClick: function () { occurrenceGeneratorModal.open(); },
+                }, getString(strings, 'occurrenceGeneratorTitle', 'Générer des occurrences')),
+            ]),
+            canShowGeneratorForm && h(Modals.Modal, {
+                isOpen: occurrenceGeneratorModal.isOpen,
+                onClose: function () { occurrenceGeneratorModal.close(); },
+                title: getString(strings, 'occurrenceGeneratorTitle', 'Générer des occurrences'),
+                size: 'large',
             }, [
-                h('summary', { class: 'mj-regmgr-occurrence__fold-summary' }, [
-                    h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
-                        h('span', { class: 'mj-regmgr-occurrence__fold-eyebrow' }, getString(strings, 'occurrenceGeneratorEyebrow', 'Récurrence automatique')),
-                        h('strong', null, getString(strings, 'occurrenceGeneratorTitle', 'Générer des occurrences')),
-                    ]),
-                    h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
-                ]),
-                h('div', { class: 'mj-regmgr-occurrence__fold-body' }, [
+                h('div', { class: 'mj-regmgr-occurrence__card' }, [
                     h('p', { class: 'mj-regmgr-occurrence__description' },
                         getString(strings, 'occurrenceGeneratorDescription', 'Planifiez la récurrence automatique de cet événement.')
                     ),
@@ -2112,7 +2122,7 @@
                             value: generatorMode,
                             onInput: function (event) { handleGeneratorChange('mode', event.currentTarget.value); },
                         }, [
-                            h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Ajoute date unique')),
+                            h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Date unique')),
                             h('option', { value: 'range' }, getString(strings, 'occurrenceGeneratorModeRange', 'Plage de dates')),
                             h('option', { value: 'weekly' }, getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')),
                             h('option', { value: 'monthly' }, getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')),
@@ -2372,8 +2382,8 @@
                 baseState.date = day.iso;
                 setEditorState(baseState);
             }
-            occurrenceEditorModal.open({ date: day.iso });
-        }, [occurrenceEditorModal.open, setEditorState, setSelectedOccurrenceId]);
+            openOccurrenceEditor(day.iso);
+        }, [openOccurrenceEditor, setEditorState, setSelectedOccurrenceId]);
 
         var handleEditorChange = useCallback(function (field, value) {
             setEditorState(function (prev) {
@@ -2384,6 +2394,7 @@
         }, []);
 
         var handleCancelEdit = useCallback(function () {
+            modalReopenGuardUntilRef.current = Date.now() + 300;
             occurrenceEditorModal.close();
             var reset = createEditorState(selectedOccurrence);
             if (!selectedOccurrence && editorState && editorState.date) {
@@ -3077,7 +3088,7 @@
                                                 onClick: function (event) {
                                                     event.stopPropagation();
                                                     setSelectedOccurrenceId(occurrence.id);
-                                                    occurrenceEditorModal.open({ date: occurrence.date });
+                                                    openOccurrenceEditor(occurrence.date);
                                                 },
                                                 'aria-label': ariaLabel,
                                             }, [

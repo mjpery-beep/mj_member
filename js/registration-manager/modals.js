@@ -125,6 +125,7 @@
         var children = props.children;
         var footer = props.footer;
         var size = props.size || 'medium';
+        var safeOnClose = typeof onClose === 'function' ? onClose : function () {};
 
         useEffect(function () {
             if (isOpen) {
@@ -139,29 +140,43 @@
         useEffect(function () {
             function handleKeyDown(e) {
                 if (e.key === 'Escape' && isOpen) {
-                    onClose();
+                    safeOnClose();
                 }
             }
             document.addEventListener('keydown', handleKeyDown);
             return function () {
                 document.removeEventListener('keydown', handleKeyDown);
             };
-        }, [isOpen, onClose]);
+        }, [isOpen, safeOnClose]);
 
         if (!isOpen) return null;
+
+        function handleOverlayClick(event) {
+            if (!event || event.target !== event.currentTarget) {
+                return;
+            }
+            safeOnClose();
+        }
 
         return h('div', { class: 'mj-regmgr-modal' }, [
             h('div', { 
                 class: 'mj-regmgr-modal__overlay',
-                onClick: onClose,
+                onClick: handleOverlayClick,
             }),
-            h('div', { class: classNames('mj-regmgr-modal__container', 'mj-regmgr-modal__container--' + size) }, [
+            h('div', {
+                class: classNames('mj-regmgr-modal__container', 'mj-regmgr-modal__container--' + size),
+                onClick: function (event) {
+                    if (event && typeof event.stopPropagation === 'function') {
+                        event.stopPropagation();
+                    }
+                },
+            }, [
                 h('div', { class: 'mj-regmgr-modal__header' }, [
                     h('h2', { class: 'mj-regmgr-modal__title' }, title),
                     h('button', {
                         type: 'button',
                         class: 'mj-regmgr-modal__close',
-                        onClick: onClose,
+                        onClick: safeOnClose,
                         'aria-label': 'Fermer',
                     }, [
                         h('svg', {
