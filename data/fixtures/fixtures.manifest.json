@@ -1,0 +1,36 @@
+{
+    "generated_at": "2026-06-15 21:47:15",
+    "tables": {
+        "mj_badges": {
+            "table": "wp_mj_mj_badges",
+            "file": "mj_badges.jsonl",
+            "rows": 5
+        },
+        "mj_trophies": {
+            "table": "wp_mj_mj_trophies",
+            "file": "mj_trophies.jsonl",
+            "rows": 14
+        },
+        "mj_levels": {
+            "table": "wp_mj_mj_levels",
+            "file": "mj_levels.jsonl",
+            "rows": 10
+        },
+        "mj_action_types": {
+            "table": "wp_mj_mj_action_types",
+            "file": "mj_action_types.jsonl",
+            "rows": 25
+        },
+        "mj_event_locations": {
+            "table": "wp_mj_mj_event_locations",
+            "file": "mj_event_locations.jsonl",
+            "rows": 18
+        },
+        "mj_members": {
+            "table": "wp_mj_mj_members",
+            "file": "mj_members.jsonl",
+            "rows": 216
+        }
+    },
+    "format": "jsonl"
+}

@@ -18,6 +18,7 @@ namespace {
     use Mj\Member\Classes\MjManualActionLog;
     use Mj\Member\Classes\MjMediaBackup;
     use Mj\Member\Classes\MjNextcloudPhotoImporter;
+    use Mj\Member\Classes\MjFixturesManager;
     use Mj\Member\Core\Config;
 
     if (!defined('ABSPATH')) { exit; }
@@ -270,6 +271,72 @@ function mj_settings_page() {
             if (check_admin_referer('mj_manual_action_logs_clear') && class_exists(MjManualActionLog::class)) {
                 MjManualActionLog::clear();
                 $backup_notices[] = array('type' => 'success', 'message' => '✅ Journal des actions de sauvegarde vidé.');
+            }
+        }
+    }
+
+    if (!$is_main_settings_submit && isset($_POST['mj_fixtures_action']) && current_user_can('manage_options')) {
+        $fixturesAction = sanitize_key((string) wp_unslash($_POST['mj_fixtures_action']));
+
+        if (in_array($fixturesAction, array('create', 'restore', 'import', 'export'), true)
+            && !check_admin_referer('mj_fixtures_action', 'mj_fixtures_nonce')) {
+            $backup_notices[] = array(
+                'type' => 'error',
+                'message' => '❌ Vérification de sécurité fixtures invalide.',
+            );
+        } elseif ($fixturesAction === 'create' && class_exists(MjFixturesManager::class)) {
+            $selectedTables = isset($_POST['mj_fixtures_tables']) && is_array($_POST['mj_fixtures_tables'])
+                ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_tables']))
+                : array();
+            $result = MjFixturesManager::createFixtures($selectedTables);
+            if (!empty($result['success'])) {
+                $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures créées dans data/fixtures.');
+            } else {
+                $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la création.';
+                $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
+            }
+        } elseif ($fixturesAction === 'restore' && class_exists(MjFixturesManager::class)) {
+            $selectedTables = isset($_POST['mj_fixtures_restore_tables']) && is_array($_POST['mj_fixtures_restore_tables'])
+                ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_restore_tables']))
+                : array();
+            $result = MjFixturesManager::restoreFixtures($selectedTables);
+            if (!empty($result['success'])) {
+                $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures restaurées depuis data/fixtures.');
+            } else {
+                $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la restauration.';
+                $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
+            }
+        } elseif ($fixturesAction === 'import' && class_exists(MjFixturesManager::class)) {
+            $file = isset($_FILES['mj_fixtures_zip']) && is_array($_FILES['mj_fixtures_zip']) ? $_FILES['mj_fixtures_zip'] : array();
+            $importResult = MjFixturesManager::importArchive($file);
+            if (is_wp_error($importResult)) {
+                $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($importResult->get_error_message()));
+            } else {
+                $filesCount = !empty($importResult['files']) ? count((array) $importResult['files']) : 0;
+                $backup_notices[] = array(
+                    'type' => !empty($importResult['success']) ? 'success' : 'warning',
+                    'message' => !empty($importResult['success'])
+                        ? sprintf('✅ Import fixtures terminé (%d fichier(s) copié(s)).', $filesCount)
+                        : '⚠️ Import terminé sans fichier exploitable.',
+                );
+            }
+        } elseif ($fixturesAction === 'export' && class_exists(MjFixturesManager::class)) {
+            $archive = MjFixturesManager::buildExportArchive();
+            if (is_wp_error($archive)) {
+                $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($archive->get_error_message()));
+            } else {
+                $downloadName = isset($archive['filename']) ? (string) $archive['filename'] : 'mj-member-fixtures.zip';
+                $archivePath = isset($archive['path']) ? (string) $archive['path'] : '';
+                if ($archivePath !== '' && is_readable($archivePath)) {
+                    nocache_headers();
+                    header('Content-Type: application/zip');
+                    header('Content-Disposition: attachment; filename="' . sanitize_file_name($downloadName) . '"');
+                    header('Content-Length: ' . (string) filesize($archivePath));
+                    readfile($archivePath);
+                    @unlink($archivePath);
+                    exit;
+                }
+                $backup_notices[] = array('type' => 'error', 'message' => '❌ Archive export introuvable après génération.');
             }
         }
     }
@@ -1083,6 +1150,10 @@ function mj_settings_page() {
     $backup_table_count = class_exists(MjDatabaseBackup::class) ? count(MjDatabaseBackup::getMjTables()) : 0;
     $manual_action_logs = class_exists(MjManualActionLog::class) ? MjManualActionLog::getAll(50) : array();
 
+    $fixtures_tables_status = class_exists(MjFixturesManager::class) ? MjFixturesManager::getManagedTablesStatus() : array();
+    $fixtures_files = class_exists(MjFixturesManager::class) ? MjFixturesManager::listFixtureFiles() : array();
+    $fixtures_manifest = class_exists(MjFixturesManager::class) ? MjFixturesManager::getManifest() : array();
+
     $google_sync_enabled_flag = get_option('mj_events_google_sync_enabled', '0') === '1';
     $google_sync_token_display = '';
     $google_sync_feed_url = '';
@@ -1196,6 +1267,11 @@ function mj_settings_page() {
 
     $settings_template_path = __DIR__ . '/settings/page-template.php';
     if (is_readable($settings_template_path)) {
+        $github_updater_installed_commit = (string) \get_site_option('mj_member_installed_github_commit', '');
+        $github_updater_pinned_commit    = (string) \get_site_option('mj_member_github_target_commit', '');
+        $github_updater_branch           = defined('MJ_MEMBER_GITHUB_BRANCH') && trim((string) constant('MJ_MEMBER_GITHUB_BRANCH')) !== ''
+            ? trim((string) constant('MJ_MEMBER_GITHUB_BRANCH'))
+            : 'master';
         include $settings_template_path;
         return;
     }

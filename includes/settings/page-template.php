@@ -35,6 +35,7 @@ if (!defined('ABSPATH')) {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-webpush" data-tab-target="webpush" role="tab" aria-controls="mj-tab-webpush" aria-selected="false">🔔 Web Push</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-widgets" data-tab-target="widgets" role="tab" aria-controls="mj-tab-widgets" aria-selected="false">🧩 Widgets</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-mileage" data-tab-target="mileage" role="tab" aria-controls="mj-tab-mileage" aria-selected="false">🚗 Frais kilométriques</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-fixtures" data-tab-target="fixtures" role="tab" aria-controls="mj-tab-fixtures" aria-selected="false">🧪 Fixtures</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-updates" data-tab-target="updates" role="tab" aria-controls="mj-tab-updates" aria-selected="false">🔄 Mises à jour</button>
                 </div>
 
@@ -2369,7 +2370,141 @@ if (!defined('ABSPATH')) {
                         </p>
                     </div>
 
+                    <div id="mj-tab-fixtures" class="mj-settings-tabs__panel" data-tab="fixtures" role="tabpanel" aria-labelledby="mj-tab-button-fixtures" aria-hidden="true">
+                        <div style="background:#f8fafc; border-left:4px solid #0f766e; padding:18px 20px; border-radius:10px; margin-bottom:20px;">
+                            <h2 style="margin:0 0 8px 0;">🧪 Fixtures de données</h2>
+                            <p style="margin:0; color:#475569;">
+                                Sauvegarde et restauration des tables clés du plugin (gamification, lieux, membres).
+                                Format utilisé: <strong>JSON Lines</strong> (<code>.jsonl</code>), un format texte robuste et efficace pour l'import/export.
+                            </p>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin-bottom:20px;">
+                            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+                                <h3 style="margin:0 0 8px 0;">1) Créer les fixtures</h3>
+                                <p style="margin:0 0 10px 0; color:#64748b;">Écrit/actualise les fichiers dans <code>data/fixtures</code>.</p>
+                                <form id="mj-fixtures-create-form" method="post">
+                                    <?php wp_nonce_field('mj_fixtures_action', 'mj_fixtures_nonce'); ?>
+                                    <input type="hidden" name="mj_fixtures_action" value="create" />
+                                    <div style="display:grid; gap:6px; margin-bottom:10px; max-height:160px; overflow:auto; border:1px solid #e2e8f0; border-radius:6px; padding:8px; background:#f8fafc;">
+                                        <?php foreach ((array) $fixtures_tables_status as $fixture_table) : ?>
+                                            <label style="display:flex; align-items:center; gap:8px; color:#334155;">
+                                                <input
+                                                    type="checkbox"
+                                                    name="mj_fixtures_tables[]"
+                                                    value="<?php echo esc_attr((string) ($fixture_table['slug'] ?? '')); ?>"
+                                                    <?php checked(!empty($fixture_table['exists'])); ?>
+                                                />
+                                                <span><?php echo esc_html((string) ($fixture_table['label'] ?? '')); ?></span>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <button type="submit" class="button button-primary">Mettre à jour les fixtures</button>
+                                </form>
+                            </div>
+
+                            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+                                <h3 style="margin:0 0 8px 0;">2) Exporter</h3>
+                                <p style="margin:0 0 10px 0; color:#64748b;">Télécharge une archive ZIP de <code>data/fixtures</code>.</p>
+                                <button type="submit" class="button" form="mj-fixtures-export-form">Exporter les fixtures</button>
+                            </div>
+
+                            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+                                <h3 style="margin:0 0 8px 0;">3) Importer</h3>
+                                <p style="margin:0 0 10px 0; color:#64748b;">Importe une archive ZIP dans <code>data/fixtures</code>.</p>
+                                <form id="mj-fixtures-import-form" method="post" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                    <?php wp_nonce_field('mj_fixtures_action', 'mj_fixtures_nonce'); ?>
+                                    <input type="hidden" name="mj_fixtures_action" value="import" />
+                                    <input type="file" name="mj_fixtures_zip" accept=".zip" required />
+                                    <button type="submit" class="button">Importer</button>
+                                </form>
+                            </div>
+
+                            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+                                <h3 style="margin:0 0 8px 0;">4) Restaurer</h3>
+                                <p style="margin:0 0 10px 0; color:#64748b;">Recharge les données en base depuis les fichiers du dossier <code>data/fixtures</code>.</p>
+                                <form id="mj-fixtures-restore-form" method="post">
+                                    <?php wp_nonce_field('mj_fixtures_action', 'mj_fixtures_nonce'); ?>
+                                    <input type="hidden" name="mj_fixtures_action" value="restore" />
+                                    <div style="display:grid; gap:6px; margin-bottom:10px; max-height:160px; overflow:auto; border:1px solid #e2e8f0; border-radius:6px; padding:8px; background:#f8fafc;">
+                                        <?php foreach ((array) $fixtures_tables_status as $fixture_table) : ?>
+                                            <label style="display:flex; align-items:center; gap:8px; color:#334155;">
+                                                <input
+                                                    type="checkbox"
+                                                    name="mj_fixtures_restore_tables[]"
+                                                    value="<?php echo esc_attr((string) ($fixture_table['slug'] ?? '')); ?>"
+                                                    <?php checked(!empty($fixture_table['exists'])); ?>
+                                                />
+                                                <span><?php echo esc_html((string) ($fixture_table['label'] ?? '')); ?></span>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="button button-secondary"
+                                        onclick="return confirm('Restaurer va remplacer les données actuelles des tables ciblées. Continuer ?');"
+                                    >
+                                        Restaurer depuis data/fixtures
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px;">
+                            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+                                <h3 style="margin:0 0 10px 0;">Tables gérées</h3>
+                                <ul style="margin:0; padding-left:18px; color:#334155;">
+                                    <?php foreach ((array) $fixtures_tables_status as $fixture_table) : ?>
+                                        <li>
+                                            <strong><?php echo esc_html((string) ($fixture_table['label'] ?? '')); ?></strong>
+                                            (<code><?php echo esc_html((string) ($fixture_table['table'] ?? '')); ?></code>)
+                                            <?php if (!empty($fixture_table['exists'])) : ?>
+                                                <span style="color:#15803d;">- présente</span>
+                                            <?php else : ?>
+                                                <span style="color:#b45309;">- absente</span>
+                                            <?php endif; ?>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+
+                            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+                                <h3 style="margin:0 0 10px 0;">Fichiers présents dans data/fixtures</h3>
+                                <?php if (!empty($fixtures_manifest['generated_at'])) : ?>
+                                    <p style="margin:0 0 8px 0; color:#64748b;">Dernière génération: <?php echo esc_html((string) $fixtures_manifest['generated_at']); ?></p>
+                                <?php endif; ?>
+                                <?php if (!empty($fixtures_files)) : ?>
+                                    <ul style="margin:0; padding-left:18px; color:#334155; max-height:220px; overflow:auto;">
+                                        <?php foreach ((array) $fixtures_files as $fixture_file) : ?>
+                                            <li>
+                                                <code><?php echo esc_html((string) ($fixture_file['filename'] ?? '')); ?></code>
+                                                <?php if (isset($fixture_file['rows']) && $fixture_file['rows'] !== null) : ?>
+                                                    - <?php echo esc_html((string) (int) $fixture_file['rows']); ?> ligne(s)
+                                                <?php endif; ?>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php else : ?>
+                                    <p style="margin:0; color:#64748b;">Aucun fichier fixtures détecté.</p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+
                     <div id="mj-tab-updates" class="mj-settings-tabs__panel" data-tab="updates" role="tabpanel" aria-labelledby="mj-tab-button-updates" aria-hidden="true">
+                        <?php
+                        if (!isset($github_updater_installed_commit)) {
+                            $github_updater_installed_commit = (string) \get_site_option('mj_member_installed_github_commit', '');
+                        }
+                        if (!isset($github_updater_pinned_commit)) {
+                            $github_updater_pinned_commit = (string) \get_site_option('mj_member_github_target_commit', '');
+                        }
+                        if (!isset($github_updater_branch)) {
+                            $github_updater_branch = defined('MJ_MEMBER_GITHUB_BRANCH') && trim((string) constant('MJ_MEMBER_GITHUB_BRANCH')) !== ''
+                                ? trim((string) constant('MJ_MEMBER_GITHUB_BRANCH'))
+                                : 'master';
+                        }
+                        ?>
                         <div style="background:#f0fdf4; border-left:4px solid #22c55e; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
                             <h2 style="margin:0 0 8px 0;">🔄 Mises à jour GitHub</h2>
                             <p style="margin:0; color:#475569;">
@@ -2614,6 +2749,10 @@ if (!defined('ABSPATH')) {
             <?php wp_nonce_field('mj_create_webhook_nonce'); ?>
             <input type="hidden" name="mj_create_webhook" value="1" />
             <input type="hidden" name="mj_webhook_mode" value="test" />
+        </form>
+        <form method="post" id="mj-fixtures-export-form" style="display:none;">
+            <?php wp_nonce_field('mj_fixtures_action', 'mj_fixtures_nonce'); ?>
+            <input type="hidden" name="mj_fixtures_action" value="export" />
         </form>
         <style>
         .mj-settings-tabs__nav {
@@ -2972,7 +3111,7 @@ if (!defined('ABSPATH')) {
 
                 if (saveActions) {
                     // Backup tab already has dedicated action forms; hide the global save there.
-                    saveActions.style.display = tabName === 'backup' ? 'none' : '';
+                    saveActions.style.display = (tabName === 'backup' || tabName === 'fixtures') ? 'none' : '';
                 }
 
                 if (matched && !skipPersist && window.localStorage) {
