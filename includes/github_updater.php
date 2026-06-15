@@ -11,7 +11,8 @@ namespace Mj\Member\Module {
     final class GitHubUpdaterModule implements ModuleInterface
     {
         private const CACHE_KEY = 'mj_member_github_release';
-        private const CACHE_TTL = 21600;
+        private const CACHE_TTL = 300;
+        private const INSTALLED_COMMIT_OPTION = 'mj_member_installed_github_commit';
 
         public function register(): void
         {
@@ -35,13 +36,18 @@ namespace Mj\Member\Module {
                 return $transient;
             }
 
-            if (\version_compare($release['version'], $currentVersion, '<=')) {
+            $shouldOfferUpdate = $this->shouldOfferUpdate($release, $currentVersion);
+
+            if (!$shouldOfferUpdate) {
                 if (!isset($transient->no_update) || !is_array($transient->no_update)) {
                     $transient->no_update = array();
                 }
 
                 $transient->no_update[$pluginFile] = $this->buildUpdatePayload($release, $currentVersion);
                 unset($transient->response[$pluginFile]);
+                if (($release['source'] ?? '') === 'branch') {
+                    \delete_site_option(self::INSTALLED_COMMIT_OPTION . '_pending');
+                }
 
                 return $transient;
             }
@@ -52,6 +58,9 @@ namespace Mj\Member\Module {
 
             $transient->response[$pluginFile] = $this->buildUpdatePayload($release, $currentVersion);
             unset($transient->no_update[$pluginFile]);
+            if (($release['source'] ?? '') === 'branch' && !empty($release['commit_sha'])) {
+                \update_site_option(self::INSTALLED_COMMIT_OPTION . '_pending', (string) $release['commit_sha']);
+            }
 
             return $transient;
         }
@@ -72,7 +81,7 @@ namespace Mj\Member\Module {
             $info = new \stdClass();
             $info->name = $pluginData['Name'] ?: 'MJ Member';
             $info->slug = $this->pluginSlug();
-            $info->version = $release['version'];
+            $info->version = $release['display_version'] ?? $release['version'];
             $info->author = $pluginData['Author'] ?: 'Simon';
             $info->author_profile = $pluginData['AuthorURI'] ?: '';
             $info->homepage = $release['url'];
@@ -133,6 +142,12 @@ namespace Mj\Member\Module {
                 return;
             }
 
+            $pendingCommit = \get_site_option(self::INSTALLED_COMMIT_OPTION . '_pending', '');
+            if (is_string($pendingCommit) && $pendingCommit !== '') {
+                \update_site_option(self::INSTALLED_COMMIT_OPTION, $pendingCommit);
+                \delete_site_option(self::INSTALLED_COMMIT_OPTION . '_pending');
+            }
+
             \delete_site_transient(self::CACHE_KEY);
             \delete_site_transient('update_plugins');
         }
@@ -140,11 +155,12 @@ namespace Mj\Member\Module {
         private function buildUpdatePayload(array $release, string $currentVersion): \stdClass
         {
             $pluginData = $this->pluginData();
+            $targetVersion = $this->resolvePayloadVersion($release, $currentVersion);
             $payload = new \stdClass();
             $payload->id = $release['url'];
             $payload->slug = $this->pluginSlug();
             $payload->plugin = $this->pluginBasename();
-            $payload->new_version = $release['version'];
+            $payload->new_version = $targetVersion;
             $payload->url = $release['url'];
             $payload->package = $release['package'];
             $payload->tested = $pluginData['TestedUpTo'] ?: '';
@@ -171,12 +187,12 @@ namespace Mj\Member\Module {
                 return null;
             }
 
-            $release = $this->requestLatestRelease($repository);
+            $release = $this->requestBranchSnapshot($repository);
             if ($release === null) {
-                $release = $this->requestLatestTag($repository);
-            }
-            if ($release === null) {
-                $release = $this->requestBranchSnapshot($repository);
+                $release = $this->requestLatestRelease($repository);
+                if ($release === null) {
+                    $release = $this->requestLatestTag($repository);
+                }
             }
 
             if ($release !== null) {
@@ -205,6 +221,7 @@ namespace Mj\Member\Module {
 
             return array(
                 'version' => $this->normalizeVersion($tag),
+                'display_version' => $this->normalizeVersion($tag),
                 'package' => $package,
                 'url' => isset($response['html_url']) && is_string($response['html_url']) ? $response['html_url'] : $this->pluginData()['PluginURI'],
                 'body' => isset($response['body']) && is_string($response['body']) ? $response['body'] : '',
@@ -232,6 +249,7 @@ namespace Mj\Member\Module {
 
             return array(
                 'version' => $this->normalizeVersion($tag),
+                'display_version' => $this->normalizeVersion($tag),
                 'package' => $package,
                 'url' => rtrim((string) $this->pluginData()['PluginURI'], '/') . '/tree/' . rawurlencode($tag),
                 'body' => '',
@@ -243,25 +261,71 @@ namespace Mj\Member\Module {
         private function requestBranchSnapshot(string $repository): ?array
         {
             foreach ($this->branchCandidates() as $branch) {
+                $head = $this->requestBranchHead($repository, $branch);
+                if ($head === null) {
+                    continue;
+                }
+
                 $version = $this->requestBranchVersion($repository, $branch);
                 if ($version === null) {
                     continue;
                 }
 
+                $version = $this->normalizeVersion($version);
+                $displayVersion = $version;
+                if (!empty($head['timestamp'])) {
+                    $displayVersion .= '.' . (string) $head['timestamp'];
+                }
+
                 return array(
                     'version' => $version,
+                    'display_version' => $displayVersion,
                     'package' => 'https://codeload.github.com/' . $repository . '/zip/refs/heads/' . rawurlencode($branch),
-                    'url' => rtrim((string) $this->pluginData()['PluginURI'], '/') . '/tree/' . rawurlencode($branch),
+                    'url' => isset($head['url']) && is_string($head['url']) && $head['url'] !== ''
+                        ? $head['url']
+                        : (rtrim((string) $this->pluginData()['PluginURI'], '/') . '/tree/' . rawurlencode($branch)),
                     'body' => sprintf(
                         __('Mise a jour basee sur la branche GitHub %s.', 'mj-member'),
                         esc_html($branch)
                     ),
-                    'published_at' => '',
+                    'published_at' => isset($head['published_at']) && is_string($head['published_at']) ? $head['published_at'] : '',
+                    'commit_sha' => $head['sha'],
+                    'branch' => $branch,
                     'source' => 'branch',
                 );
             }
 
             return null;
+        }
+
+        private function requestBranchHead(string $repository, string $branch): ?array
+        {
+            $response = $this->requestGitHubJson('https://api.github.com/repos/' . $repository . '/commits/' . rawurlencode($branch));
+            if (!is_array($response)) {
+                return null;
+            }
+
+            $sha = isset($response['sha']) && is_string($response['sha']) ? trim($response['sha']) : '';
+            if ($sha === '') {
+                return null;
+            }
+
+            $publishedAt = '';
+            if (isset($response['commit']['author']['date']) && is_string($response['commit']['author']['date'])) {
+                $publishedAt = $response['commit']['author']['date'];
+            }
+
+            $timestamp = 0;
+            if ($publishedAt !== '') {
+                $timestamp = (int) strtotime($publishedAt);
+            }
+
+            return array(
+                'sha' => $sha,
+                'published_at' => $publishedAt,
+                'timestamp' => $timestamp > 0 ? $timestamp : time(),
+                'url' => isset($response['html_url']) && is_string($response['html_url']) ? $response['html_url'] : '',
+            );
         }
 
         private function requestBranchVersion(string $repository, string $branch): ?string
@@ -408,6 +472,50 @@ namespace Mj\Member\Module {
         private function normalizeVersion(string $version): string
         {
             return ltrim(trim($version), "vV \t\n\r\0\x0B");
+        }
+
+        private function shouldOfferUpdate(array $release, string $currentVersion): bool
+        {
+            $source = (string) ($release['source'] ?? '');
+            $remoteVersion = (string) ($release['version'] ?? '');
+
+            if ($source !== 'branch') {
+                return $remoteVersion !== '' && \version_compare($remoteVersion, $currentVersion, '>');
+            }
+
+            $remoteCommit = (string) ($release['commit_sha'] ?? '');
+            if ($remoteCommit === '') {
+                return false;
+            }
+
+            $installedCommit = \get_site_option(self::INSTALLED_COMMIT_OPTION, '');
+            if (!is_string($installedCommit) || $installedCommit === '') {
+                return true;
+            }
+
+            return !hash_equals($installedCommit, $remoteCommit);
+        }
+
+        private function resolvePayloadVersion(array $release, string $currentVersion): string
+        {
+            $displayVersion = (string) ($release['display_version'] ?? $release['version'] ?? '');
+            if (($release['source'] ?? '') !== 'branch') {
+                return $displayVersion !== '' ? $displayVersion : $currentVersion;
+            }
+
+            if ($displayVersion !== '' && \version_compare($displayVersion, $currentVersion, '>')) {
+                return $displayVersion;
+            }
+
+            $timestamp = 0;
+            if (!empty($release['published_at'])) {
+                $timestamp = (int) strtotime((string) $release['published_at']);
+            }
+            if ($timestamp <= 0) {
+                $timestamp = time();
+            }
+
+            return $currentVersion . '.' . (string) $timestamp;
         }
 
         private function branchCandidates(): array
