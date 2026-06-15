@@ -6333,6 +6333,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                     'config_snapshot' => $batch_config_snapshot,
                     'summary' => array(
                         'schedule_summary' => $submitted_schedule_summary,
+                        'include_in_global_schedule' => true,
+                        'include_dates_in_schedule_preview' => false,
                         'schedule_mode' => isset($event->schedule_mode) && $event->schedule_mode !== ''
                             ? sanitize_key((string) $event->schedule_mode)
                             : 'fixed',
@@ -6371,6 +6373,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                     ),
                     'summary' => array(
                         'schedule_summary' => $manual_summary,
+                        'include_in_global_schedule' => true,
+                        'include_dates_in_schedule_preview' => false,
                         'schedule_mode' => 'manual',
                     ),
                     'occurrences_count' => 1,

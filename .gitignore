@@ -1,3 +1,4 @@
 # Generated dependencies
 /vendor/
 /user-grimlins/
+data/fixtures/mj_members.jsonl

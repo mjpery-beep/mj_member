@@ -107,8 +107,12 @@ class CreateEventModalRenderer
         echo '</div>';
         echo '</div>'; // end step 2
 
-        // ── Step 3 – Date & time ──
+        // ── Step 3 – Date & time / Occurrence encoder ──
         echo '<div class="ccm__panel" data-ccm-panel="3" hidden>';
+        echo '<div class="ccm__occurrence" data-ccm-occurrence-encoder></div>';
+
+        // Legacy fallback (used when occurrence-encoder runtime is unavailable)
+        echo '<div class="ccm__legacy-schedule" data-ccm-legacy-schedule>';
         echo '<div class="ccm__date-display" data-ccm-date-display hidden></div>';
         echo '<div class="ccm__field">';
         echo '<label class="ccm__label" for="ccm-date-input-' . esc_attr($instance_id) . '">' . esc_html__('Date', 'mj-member') . '</label>';
@@ -123,6 +127,7 @@ class CreateEventModalRenderer
         echo '<div class="ccm__field ccm__field--half">';
         echo '<label class="ccm__label">' . esc_html__('Fin', 'mj-member') . '</label>';
         echo '<input class="ccm__input" type="time" data-ccm-end value="17:00" />';
+        echo '</div>';
         echo '</div>';
         echo '</div>';
         echo '</div>'; // end step 3

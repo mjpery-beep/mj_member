@@ -38,6 +38,11 @@ body.ccm-open { overflow: hidden; }
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 4px 16px rgba(0, 0, 0, 0.08);
     animation: ccm-enter 0.2s ease-out;
 }
+
+/* Step 3 (Horaires) uses the occurrence encoder: expand modal to maximum width */
+.ccm.ccm--wide .ccm__dialog {
+    width: min(1600px, calc(100vw - 32px));
+}
 @keyframes ccm-enter {
     from { opacity: 0; transform: translateY(12px) scale(0.97); }
     to { opacity: 1; transform: translateY(0) scale(1); }

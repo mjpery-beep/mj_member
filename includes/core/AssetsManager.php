@@ -441,6 +441,7 @@ final class AssetsManager
         self::registerScript('mj-member-regmgr-modals', 'js/registration-manager/modals.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-modal-ia', 'js/registration-manager/modal-ia.js', array('mj-member-regmgr-hooks', 'mj-member-regmgr-modals'));
         self::registerScript('mj-member-regmgr-tabs', 'js/registration-manager/tabs.js', array('mj-member-regmgr-hooks', 'mj-member-utils'));
+        self::registerScript('mj-member-regmgr-occurrence-editor', 'js/registration-manager/occurrence-editor.js', array('mj-member-regmgr-hooks', 'mj-member-utils'));
         self::registerStyle('mj-member-regmgr-nextcloud-files', 'css/nextcloud-files.css', array('mj-member-registration-manager'));
         self::registerScript('mj-member-regmgr-nextcloud-files', 'js/registration-manager/nextcloud-files.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-app', 'js/registration-manager/app.js', array(
@@ -454,6 +455,7 @@ final class AssetsManager
             'mj-member-regmgr-modals',
             'mj-member-regmgr-modal-ia',
             'mj-member-regmgr-tabs',
+            'mj-member-regmgr-occurrence-editor',
             'mj-member-regmgr-nextcloud-files',
             'mj-member-create-event-modal',
         ));

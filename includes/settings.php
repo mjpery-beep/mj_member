@@ -278,17 +278,18 @@ function mj_settings_page() {
     if (!$is_main_settings_submit && isset($_POST['mj_fixtures_action']) && current_user_can('manage_options')) {
         $fixturesAction = sanitize_key((string) wp_unslash($_POST['mj_fixtures_action']));
 
-        if (in_array($fixturesAction, array('create', 'restore', 'import', 'export'), true)
+        if (in_array($fixturesAction, array('create', 'restore', 'import', 'export', 'save_options'), true)
             && !check_admin_referer('mj_fixtures_action', 'mj_fixtures_nonce')) {
             $backup_notices[] = array(
                 'type' => 'error',
                 'message' => '❌ Vérification de sécurité fixtures invalide.',
             );
         } elseif ($fixturesAction === 'create' && class_exists(MjFixturesManager::class)) {
-            $selectedTables = isset($_POST['mj_fixtures_tables']) && is_array($_POST['mj_fixtures_tables'])
+            $selectedSources = isset($_POST['mj_fixtures_tables']) && is_array($_POST['mj_fixtures_tables'])
                 ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_tables']))
                 : array();
-            $result = MjFixturesManager::createFixtures($selectedTables);
+            MjFixturesManager::saveSelection(MjFixturesManager::OPTION_CREATE_SELECTED, $selectedSources);
+            $result = MjFixturesManager::createFixtures($selectedSources);
             if (!empty($result['success'])) {
                 $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures créées dans data/fixtures.');
             } else {
@@ -296,19 +297,64 @@ function mj_settings_page() {
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
             }
         } elseif ($fixturesAction === 'restore' && class_exists(MjFixturesManager::class)) {
-            $selectedTables = isset($_POST['mj_fixtures_restore_tables']) && is_array($_POST['mj_fixtures_restore_tables'])
+            $selectedSources = isset($_POST['mj_fixtures_restore_tables']) && is_array($_POST['mj_fixtures_restore_tables'])
                 ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_restore_tables']))
                 : array();
-            $cleanBeforeTables = isset($_POST['mj_fixtures_clean_before_tables']) && is_array($_POST['mj_fixtures_clean_before_tables'])
+            $cleanBeforeSources = isset($_POST['mj_fixtures_clean_before_tables']) && is_array($_POST['mj_fixtures_clean_before_tables'])
                 ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_clean_before_tables']))
                 : array();
-            $result = MjFixturesManager::restoreFixtures($selectedTables, $cleanBeforeTables);
+            $useOnInstallSources = isset($_POST['mj_fixtures_use_on_install_tables']) && is_array($_POST['mj_fixtures_use_on_install_tables'])
+                ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_use_on_install_tables']))
+                : array();
+
+            MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_SELECTED, $selectedSources);
+            MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_CLEAN, $cleanBeforeSources);
+            MjFixturesManager::saveSelection(MjFixturesManager::OPTION_USE_ON_INSTALL, $useOnInstallSources);
+
+            $result = MjFixturesManager::restoreFixtures($selectedSources, $cleanBeforeSources);
             if (!empty($result['success'])) {
                 $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures restaurées depuis data/fixtures.');
             } else {
                 $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la restauration.';
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
             }
+        } elseif ($fixturesAction === 'save_options' && class_exists(MjFixturesManager::class)) {
+            $selectedCreate = isset($_POST['mj_fixtures_tables']) && is_array($_POST['mj_fixtures_tables'])
+                ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_tables']))
+                : array();
+            $selectedRestore = isset($_POST['mj_fixtures_restore_tables']) && is_array($_POST['mj_fixtures_restore_tables'])
+                ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_restore_tables']))
+                : array();
+            $cleanBefore = isset($_POST['mj_fixtures_clean_before_tables']) && is_array($_POST['mj_fixtures_clean_before_tables'])
+                ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_clean_before_tables']))
+                : array();
+            $useOnInstall = isset($_POST['mj_fixtures_use_on_install_tables']) && is_array($_POST['mj_fixtures_use_on_install_tables'])
+                ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_use_on_install_tables']))
+                : array();
+
+            $imageSettings = array(
+                'overwrite_existing' => !empty($_POST['mj_fixtures_img_overwrite']),
+                'image_quality' => isset($_POST['mj_fixtures_img_quality']) ? (int) $_POST['mj_fixtures_img_quality'] : 90,
+                'max_file_size_mb' => isset($_POST['mj_fixtures_img_max_size']) ? (int) $_POST['mj_fixtures_img_max_size'] : 10,
+            );
+
+            $configSelection = array(
+                'mj_member' => isset($_POST['mj_fixtures_config_mj_member']) && is_array($_POST['mj_fixtures_config_mj_member'])
+                    ? array_map('sanitize_text_field', array_map('wp_unslash', $_POST['mj_fixtures_config_mj_member']))
+                    : array('mj_*'),
+                'supertool' => isset($_POST['mj_fixtures_config_supertool']) && is_array($_POST['mj_fixtures_config_supertool'])
+                    ? array_map('sanitize_text_field', array_map('wp_unslash', $_POST['mj_fixtures_config_supertool']))
+                    : array('mjet_*', 'elementor_cpt_support'),
+            );
+
+            MjFixturesManager::saveSelection(MjFixturesManager::OPTION_CREATE_SELECTED, $selectedCreate);
+            MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_SELECTED, $selectedRestore);
+            MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_CLEAN, $cleanBefore);
+            MjFixturesManager::saveSelection(MjFixturesManager::OPTION_USE_ON_INSTALL, $useOnInstall);
+            MjFixturesManager::saveImageImportSettings($imageSettings);
+            MjFixturesManager::saveConfigSelection($configSelection);
+
+            $backup_notices[] = array('type' => 'success', 'message' => '✅ Préférences fixtures enregistrées.');
         } elseif ($fixturesAction === 'import' && class_exists(MjFixturesManager::class)) {
             $file = isset($_FILES['mj_fixtures_zip']) && is_array($_FILES['mj_fixtures_zip']) ? $_FILES['mj_fixtures_zip'] : array();
             $importResult = MjFixturesManager::importArchive($file);
@@ -1153,9 +1199,28 @@ function mj_settings_page() {
     $backup_table_count = class_exists(MjDatabaseBackup::class) ? count(MjDatabaseBackup::getMjTables()) : 0;
     $manual_action_logs = class_exists(MjManualActionLog::class) ? MjManualActionLog::getAll(50) : array();
 
+    $fixtures_sources_status = class_exists(MjFixturesManager::class) ? MjFixturesManager::getAllSourcesStatus() : array();
     $fixtures_tables_status = class_exists(MjFixturesManager::class) ? MjFixturesManager::getManagedTablesStatus() : array();
     $fixtures_files = class_exists(MjFixturesManager::class) ? MjFixturesManager::listFixtureFiles() : array();
     $fixtures_manifest = class_exists(MjFixturesManager::class) ? MjFixturesManager::getManifest() : array();
+    $fixtures_selected_create = class_exists(MjFixturesManager::class)
+        ? MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_CREATE_SELECTED, array_column((array) $fixtures_sources_status, 'slug'))
+        : array();
+    $fixtures_selected_restore = class_exists(MjFixturesManager::class)
+        ? MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_RESTORE_SELECTED, array_column((array) $fixtures_sources_status, 'slug'))
+        : array();
+    $fixtures_selected_clean_before = class_exists(MjFixturesManager::class)
+        ? MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_RESTORE_CLEAN, array())
+        : array();
+    $fixtures_selected_use_install = class_exists(MjFixturesManager::class)
+        ? MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_USE_ON_INSTALL, array())
+        : array();
+    $fixtures_image_settings = class_exists(MjFixturesManager::class)
+        ? MjFixturesManager::getImageImportSettings()
+        : array('overwrite_existing' => false, 'image_quality' => 90, 'max_file_size_mb' => 10);
+    $fixtures_config_selection = class_exists(MjFixturesManager::class)
+        ? MjFixturesManager::getConfigSelection()
+        : array('mj_member' => array('mj_*'), 'supertool' => array('mjet_*', 'elementor_cpt_support'));
 
     $google_sync_enabled_flag = get_option('mj_events_google_sync_enabled', '0') === '1';
     $google_sync_token_display = '';

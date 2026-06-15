@@ -90,11 +90,140 @@
         var coverPreview    = modal.querySelector('[data-ccm-cover-preview]');
         var coverImg        = modal.querySelector('[data-ccm-cover-img]');
         var coverRemove     = modal.querySelector('[data-ccm-cover-remove]');
+        var occurrenceMount = modal.querySelector('[data-ccm-occurrence-encoder]');
+        var legacyScheduleWrap = modal.querySelector('[data-ccm-legacy-schedule]');
         var stepperDots     = toArray(modal.querySelectorAll('[data-ccm-step-dot]'));
 
         var descriptionInput = modal.querySelector('[data-ccm-description]');
         var coverFile       = null;
         var stepValidated   = [false, false, false, false, false];
+        var occurrenceEditorEnabled = false;
+        var occurrenceEditorSession = 0;
+        var occurrenceState = {
+            mode: 'fixed',
+            occurrences: [],
+            summary: '',
+            generator: null,
+            options: null
+        };
+
+        function normalizeLegacyMode(mode) {
+            var m = typeof mode === 'string' ? mode : '';
+            if (m === 'fixed' || m === 'range' || m === 'recurring' || m === 'series') {
+                return m;
+            }
+            return 'series';
+        }
+
+        function normalizeOccurrenceDateTime(value) {
+            if (!value) return '';
+            var raw = String(value).trim();
+            if (!raw) return '';
+            return raw.replace('T', ' ');
+        }
+
+        function normalizeOccurrenceList(list) {
+            if (!Array.isArray(list)) return [];
+            return list.map(function (item) {
+                var occ = item && typeof item === 'object' ? item : {};
+                var start = normalizeOccurrenceDateTime(occ.start);
+                var end = normalizeOccurrenceDateTime(occ.end);
+                return {
+                    id: occ.id ? String(occ.id) : '',
+                    date: occ.date ? String(occ.date) : (start ? String(start).slice(0, 10) : ''),
+                    start: start,
+                    end: end,
+                    status: occ.status ? String(occ.status) : 'planned'
+                };
+            }).filter(function (occ) {
+                return !!(occ.start && occ.end);
+            });
+        }
+
+        function mapLocationsForOccurrenceEditor(raw) {
+            var mapped = [];
+            var src = raw && typeof raw === 'object' ? raw : {};
+            Object.keys(src).forEach(function (id) {
+                var num = parseInt(id, 10);
+                if (!num) return;
+                mapped.push({ id: num, name: String(src[id] || ('Lieu #' + id)) });
+            });
+            return mapped;
+        }
+
+        function mapMembersForOccurrenceEditor(raw) {
+            var mapped = [];
+            var src = raw && typeof raw === 'object' ? raw : {};
+            Object.keys(src).forEach(function (id) {
+                var num = parseInt(id, 10);
+                if (!num) return;
+                mapped.push({ id: num, firstName: '', lastName: String(src[id] || ('Membre #' + id)) });
+            });
+            return mapped;
+        }
+
+        function updateScheduleViewMode() {
+            if (legacyScheduleWrap) {
+                legacyScheduleWrap.hidden = !!occurrenceEditorEnabled;
+            }
+            if (occurrenceMount) {
+                occurrenceMount.hidden = !occurrenceEditorEnabled;
+            }
+        }
+
+        function mountOccurrenceEncoder() {
+            var app = window.MjRegMgrApp || {};
+            var OccurrenceEncoderPanel = app.OccurrenceEncoderPanel;
+            var preact = window.preact;
+            if (!occurrenceMount || !OccurrenceEncoderPanel || !preact || typeof preact.h !== 'function' || typeof preact.render !== 'function') {
+                occurrenceEditorEnabled = false;
+                updateScheduleViewMode();
+                return;
+            }
+
+            occurrenceEditorEnabled = true;
+            updateScheduleViewMode();
+
+            var strings = (config && config.strings && typeof config.strings === 'object') ? config.strings : {};
+            var eventSkeleton = {
+                id: 0,
+                scheduleMode: occurrenceState.mode || 'series',
+                schedule_mode: occurrenceState.mode || 'series',
+                occurrenceScheduleSummary: occurrenceState.summary || '',
+                inlineSchedulePreview: null,
+                occurrenceGenerator: occurrenceState.generator || null,
+                occurrenceGenerationBatches: []
+            };
+
+            preact.render(
+                preact.h(OccurrenceEncoderPanel, {
+                    key: 'ccm-occurrence-' + occurrenceEditorSession,
+                    event: eventSkeleton,
+                    occurrences: normalizeOccurrenceList(occurrenceState.occurrences),
+                    strings: strings,
+                    locale: (config && config.locale) ? config.locale : 'fr',
+                    apiPost: null,
+                    globalLocationOptions: mapLocationsForOccurrenceEditor(config.createLocations || {}),
+                    globalMemberOptions: mapMembersForOccurrenceEditor(config.createAnimateurs || {}),
+                    onPersistOccurrences: function (nextList, summaryPayload, generatorPayload, optionsPayload) {
+                        occurrenceState.occurrences = normalizeOccurrenceList(nextList);
+                        occurrenceState.summary = summaryPayload && summaryPayload.value ? String(summaryPayload.value) : '';
+                        occurrenceState.generator = generatorPayload || null;
+                        occurrenceState.options = optionsPayload || null;
+                        if (generatorPayload && generatorPayload.mode) {
+                            occurrenceState.mode = normalizeLegacyMode(generatorPayload.mode);
+                        } else if (occurrenceState.occurrences.length > 1) {
+                            occurrenceState.mode = 'series';
+                        } else if (occurrenceState.occurrences.length === 1) {
+                            occurrenceState.mode = 'fixed';
+                        }
+                        return Promise.resolve();
+                    },
+                    onBatchesUpdate: function () {}
+                }),
+                occurrenceMount
+            );
+        }
 
         // ---- Date picker sync ----
         if (dateInput && dateInput.type === 'date') {
@@ -307,6 +436,14 @@
             }
             // Step 2 (Description) – no mandatory validation
             if (step === 3) {
+                if (occurrenceEditorEnabled) {
+                    if (!Array.isArray(occurrenceState.occurrences) || occurrenceState.occurrences.length === 0) {
+                        setFeedback('Ajoutez au moins une occurrence.', 'error');
+                        return false;
+                    }
+                    setFeedback('', '');
+                    return true;
+                }
                 var sv = startInput ? String(startInput.value || '').trim() : '';
                 var ev = endInput ? String(endInput.value || '').trim() : '';
                 var needDate = config.dateRequired !== false;
@@ -329,11 +466,19 @@
             var emoji = selectedEmoji || '';
             var dl = formatDate(selectedDay);
             var esc = Utils.escapeHtml || function (s) { return String(s); };
+            var scheduleLine = esc(dl) + ' &middot; ' + esc(sv) + ' \u2192 ' + esc(ev);
+            if (occurrenceEditorEnabled) {
+                var occCount = Array.isArray(occurrenceState.occurrences) ? occurrenceState.occurrences.length : 0;
+                var summaryText = occurrenceState.summary ? String(occurrenceState.summary) : '';
+                scheduleLine = summaryText
+                    ? esc(summaryText)
+                    : (occCount > 0 ? (occCount + ' occurrence' + (occCount > 1 ? 's' : '')) : esc('Aucune occurrence'));
+            }
             summary.innerHTML = '<div class="ccm__summary-emoji">' + (emoji || '\uD83D\uDCC5') + '</div>'
                 + '<div class="ccm__summary-info">'
                 + '<strong>' + esc(t) + '</strong>'
                 + '<span>' + esc(typeLabel) + '</span>'
-                + '<span>' + esc(dl) + ' &middot; ' + esc(sv) + ' \u2192 ' + esc(ev) + '</span>'
+                + '<span>' + scheduleLine + '</span>'
                 + '</div>';
         }
 
@@ -345,6 +490,9 @@
                 if (active) panel.removeAttribute('hidden');
                 else panel.setAttribute('hidden', 'hidden');
             });
+            if (modal && modal.classList) {
+                modal.classList.toggle('ccm--wide', currentStep === 3);
+            }
             stepperDots.forEach(function (dot) {
                 var ds = parseInt(dot.getAttribute('data-ccm-step-dot') || '0', 10);
                 dot.classList.toggle('is-active', ds === currentStep);
@@ -396,6 +544,15 @@
                 toArray(teamGrid.querySelectorAll('input[type="checkbox"]')).forEach(function (cb) { cb.checked = false; });
             }
             stepValidated = [false, false, false, false, false];
+            occurrenceState = {
+                mode: 'fixed',
+                occurrences: [],
+                summary: '',
+                generator: null,
+                options: null
+            };
+            occurrenceEditorSession += 1;
+            mountOccurrenceEncoder();
 
             modal.hidden = false;
             modal.setAttribute('aria-hidden', 'false');
@@ -429,8 +586,32 @@
             fd.append('title', tv);
             fd.append('type', tyv);
             fd.append('status', statusSelect ? String(statusSelect.value || 'brouillon') : 'brouillon');
-            if (selectedDay && sv) fd.append('start_date', buildDateTime(selectedDay, sv));
-            if (selectedDay && ev) fd.append('end_date', buildDateTime(selectedDay, ev));
+            if (occurrenceEditorEnabled && Array.isArray(occurrenceState.occurrences) && occurrenceState.occurrences.length > 0) {
+                var mode = normalizeLegacyMode(occurrenceState.mode || (occurrenceState.occurrences.length > 1 ? 'series' : 'fixed'));
+                var payload = {
+                    mode: mode,
+                    occurrences: normalizeOccurrenceList(occurrenceState.occurrences),
+                    occurrence_summary: occurrenceState.summary || ''
+                };
+                if (occurrenceState.generator && typeof occurrenceState.generator === 'object') {
+                    payload.occurrence_generator = occurrenceState.generator;
+                }
+                if (occurrenceState.options && typeof occurrenceState.options === 'object') {
+                    payload.occurrence_options = occurrenceState.options;
+                }
+                fd.append('schedule_mode', mode);
+                fd.append('schedule_payload', JSON.stringify(payload));
+                fd.append('event_occurrences_payload', JSON.stringify(payload.occurrences));
+
+                var firstOccurrence = payload.occurrences[0];
+                if (firstOccurrence && firstOccurrence.start && firstOccurrence.end) {
+                    fd.append('start_date', String(firstOccurrence.start));
+                    fd.append('end_date', String(firstOccurrence.end));
+                }
+            } else {
+                if (selectedDay && sv) fd.append('start_date', buildDateTime(selectedDay, sv));
+                if (selectedDay && ev) fd.append('end_date', buildDateTime(selectedDay, ev));
+            }
             if (selectedEmoji) fd.append('emoji', selectedEmoji);
             if (coverFile) fd.append('cover_image', coverFile);
             var desc = descriptionInput ? String(descriptionInput.value || '').trim() : '';
@@ -512,6 +693,7 @@
         populateTypeGrid();
         populateLocations();
         populateTeam();
+        mountOccurrenceEncoder();
 
         // ---- Event listeners ----
         if (prevButton) {

@@ -5138,6 +5138,11 @@ function mj_install()
         \Mj\Member\Classes\MjAccountPagesExport::onPluginActivation();
     }
 
+    // Apply selected fixtures on plugin installation if configured from settings.
+    if (class_exists('Mj\\Member\\Classes\\MjFixturesManager')) {
+        \Mj\Member\Classes\MjFixturesManager::restoreInstallEnabled();
+    }
+
     flush_rewrite_rules(false);
 }
 

@@ -165,6 +165,9 @@ class EventsManagerHandlers
 
         // Schedule mode and payload
         $schedule_mode = !empty($_POST['schedule_mode']) ? sanitize_key($_POST['schedule_mode']) : 'fixed';
+        if (!in_array($schedule_mode, ['fixed', 'range', 'recurring', 'series'], true)) {
+            $schedule_mode = 'fixed';
+        }
         $schedule_payload = '';
         $decoded = [];
         if (!empty($_POST['schedule_payload'])) {
@@ -172,6 +175,27 @@ class EventsManagerHandlers
             if (is_array($decoded)) {
                 $schedule_payload = wp_json_encode($decoded);
             }
+        }
+
+        $occurrence_payload_items = [];
+        if (!empty($_POST['event_occurrences_payload'])) {
+            $decoded_occurrence_payload = json_decode(wp_unslash($_POST['event_occurrences_payload']), true);
+            if (is_array($decoded_occurrence_payload)) {
+                $occurrence_payload_items = $decoded_occurrence_payload;
+            }
+        }
+        if (empty($occurrence_payload_items) && isset($decoded['occurrences']) && is_array($decoded['occurrences'])) {
+            $occurrence_payload_items = $decoded['occurrences'];
+        }
+        if (empty($occurrence_payload_items) && isset($decoded['items']) && is_array($decoded['items'])) {
+            $occurrence_payload_items = $decoded['items'];
+        }
+        $occurrence_rows = self::normalizeOccurrencesFromPayload($occurrence_payload_items);
+
+        if ((!$start_date || !$end_date) && !empty($occurrence_rows)) {
+            $first_occurrence = $occurrence_rows[0];
+            $start_date = isset($first_occurrence['start']) ? (string) $first_occurrence['start'] : $start_date;
+            $end_date = isset($first_occurrence['end']) ? (string) $first_occurrence['end'] : $end_date;
         }
 
         // Calculate recurrence_until from payload if recurring
@@ -248,8 +272,10 @@ class EventsManagerHandlers
                 throw new \Exception($event_id->get_error_message());
             }
 
-            // Create the initial occurrence at the encoded date
-            if (!empty($start_date) && !empty($end_date)) {
+            if (!empty($occurrence_rows)) {
+                MjEventOccurrences::replace_for_event($event_id, $occurrence_rows);
+            } elseif (!empty($start_date) && !empty($end_date)) {
+                // Legacy fallback: create a single occurrence from date/time fields.
                 MjEventOccurrences::replace_for_event($event_id, [
                     [
                         'start'  => $start_date,
@@ -470,6 +496,78 @@ class EventsManagerHandlers
             error_log('EventsManager Parse DateTime Error: ' . $e->getMessage());
             return '';
         }
+    }
+
+    /**
+     * @param mixed $status
+     */
+    private static function normalizeOccurrenceStatus($status): string
+    {
+        $value = is_string($status) ? sanitize_key($status) : '';
+        if ($value === 'cancelled') {
+            return MjEventOccurrences::STATUS_ANNULE;
+        }
+        if ($value === 'confirmed') {
+            return MjEventOccurrences::STATUS_A_CONFIRMER;
+        }
+        if ($value === 'postponed') {
+            return MjEventOccurrences::STATUS_REPORTE;
+        }
+        return MjEventOccurrences::STATUS_ACTIVE;
+    }
+
+    /**
+     * @param array<int,mixed> $items
+     * @return array<int,array<string,mixed>>
+     */
+    private static function normalizeOccurrencesFromPayload(array $items): array
+    {
+        $rows = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $start_raw = '';
+            if (!empty($item['start'])) {
+                $start_raw = (string) $item['start'];
+            } elseif (!empty($item['date']) && !empty($item['startTime'])) {
+                $start_raw = (string) $item['date'] . ' ' . (string) $item['startTime'];
+            }
+
+            $end_raw = '';
+            if (!empty($item['end'])) {
+                $end_raw = (string) $item['end'];
+            } elseif (!empty($item['date']) && !empty($item['endTime'])) {
+                $end_raw = (string) $item['date'] . ' ' . (string) $item['endTime'];
+            }
+
+            $start = self::parseDateTime($start_raw);
+            $end = self::parseDateTime($end_raw);
+            if ($start === '' || $end === '') {
+                continue;
+            }
+            if (strtotime($end) <= strtotime($start)) {
+                continue;
+            }
+
+            $rows[] = [
+                'start' => $start,
+                'end' => $end,
+                'status' => self::normalizeOccurrenceStatus($item['status'] ?? ''),
+                'source' => MjEventOccurrences::SOURCE_MANUAL,
+            ];
+        }
+
+        if (count($rows) <= 1) {
+            return $rows;
+        }
+
+        usort($rows, static function (array $a, array $b): int {
+            return strcmp((string) $a['start'], (string) $b['start']);
+        });
+
+        return $rows;
     }
 
     private static function sanitizeEmoji($value): string
