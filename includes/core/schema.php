@@ -30,11 +30,13 @@ function mj_member_ensure_nextcloud_credentials_columns() {
     }
 
     if (!mj_member_column_exists($members_table, 'member_nextcloud_login')) {
-        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN member_nextcloud_login VARCHAR(191) DEFAULT NULL AFTER member_account_login");
+        $after = mj_member_column_exists($members_table, 'member_account_login') ? ' AFTER member_account_login' : '';
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN member_nextcloud_login VARCHAR(191) DEFAULT NULL{$after}");
     }
 
     if (!mj_member_column_exists($members_table, 'member_nextcloud_password')) {
-        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN member_nextcloud_password VARCHAR(255) DEFAULT NULL AFTER member_nextcloud_login");
+        $after = mj_member_column_exists($members_table, 'member_nextcloud_login') ? ' AFTER member_nextcloud_login' : '';
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN member_nextcloud_password VARCHAR(255) DEFAULT NULL{$after}");
     }
 }
 
@@ -54,11 +56,13 @@ function mj_member_ensure_nextcloud_tracking_columns() {
     }
 
     if (!mj_member_column_exists($members_table, 'nextcloud_last_creation_date')) {
-        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nextcloud_last_creation_date DATETIME DEFAULT NULL AFTER member_nextcloud_password");
+        $after = mj_member_column_exists($members_table, 'member_nextcloud_password') ? ' AFTER member_nextcloud_password' : '';
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nextcloud_last_creation_date DATETIME DEFAULT NULL{$after}");
     }
 
     if (!mj_member_column_exists($members_table, 'nextcloud_last_connexion_date')) {
-        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nextcloud_last_connexion_date DATETIME DEFAULT NULL AFTER nextcloud_last_creation_date");
+        $after = mj_member_column_exists($members_table, 'nextcloud_last_creation_date') ? ' AFTER nextcloud_last_creation_date' : '';
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nextcloud_last_connexion_date DATETIME DEFAULT NULL{$after}");
     }
 }
 
