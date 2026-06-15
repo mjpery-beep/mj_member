@@ -1526,9 +1526,7 @@ a.mj-header-gest-favs-col__title--link:hover {
 
 /* Ligne d'un item */
 .mj-header-gest-fav-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
+    display: block;
     border-radius: 8px;
     padding: 3px 4px;
     transition: background 0.15s;
@@ -1552,7 +1550,7 @@ a.mj-header-gest-fav-link {
     display: flex;
     align-items: center;
     gap: 9px;
-    flex: 1;
+    width: 100%;
     text-decoration: none;
     color: #1e293b;
     min-width: 0;
@@ -1625,6 +1623,7 @@ a.mj-header-gest-fav-link:hover {
     grid-auto-rows: 24px;
     align-items: center;
     gap: 2px;
+    margin: 2px 0 2px 43px;
     flex-shrink: 0;
 }
 
@@ -1636,44 +1635,59 @@ a.mj-header-gest-fav-link:hover {
     display: grid;
 }
 
-.mj-header-gest-fav-unfav {
+.mj-header .mj-header-dropdown--gestionnaire button.mj-header-gest-fav-unfav {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    font: inherit !important;
+    font-family: inherit !important;
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    line-height: 1 !important;
+    text-decoration: none !important;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
-    border: none;
-    background: transparent;
-    border-radius: 999px;
-    color: #ef4444;
-    font-size: 0.8rem;
-    line-height: 1;
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    min-height: 22px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 1px solid rgba(239, 68, 68, 0.42) !important;
+    background: rgba(239, 68, 68, 0.12) !important;
+    box-shadow: none !important;
+    border-radius: 7px !important;
+    color: #ef4444 !important;
     cursor: pointer;
     flex-shrink: 0;
     transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
-.mj-header-gest-fav-unfav:hover {
-    background: rgba(239, 68, 68, 0.12);
-    transform: scale(1.08);
+.mj-header .mj-header-dropdown--gestionnaire button.mj-header-gest-fav-unfav:hover {
+    background: rgba(239, 68, 68, 0.2) !important;
+    border-color: rgba(239, 68, 68, 0.75) !important;
+    color: #dc2626 !important;
+    transform: scale(1.08) !important;
 }
 
-.mj-header-gest-fav-unfav:focus-visible {
-    outline: 2px solid #ef4444;
-    outline-offset: 1px;
+.mj-header .mj-header-dropdown--gestionnaire button.mj-header-gest-fav-unfav:focus-visible {
+    outline: 2px solid #ef4444 !important;
+    outline-offset: 1px !important;
 }
 
-.mj-header-gest-fav-unfav[disabled] {
-    opacity: 0.55;
-    cursor: default;
-    transform: none;
+    font-size: 0.72rem !important;
+    opacity: 0.55 !important;
+    cursor: default !important;
+    transform: none !important;
 }
 
 .mj-header-gest-fav-actions a {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    min-height: 24px !important;
     height: 24px;
     border-radius: 6px;
     font-size: 0.875rem;
