@@ -165,8 +165,8 @@ final class MjFixturesManager
 
         $wpdb->query('SET FOREIGN_KEY_CHECKS = 0');
 
-        $targetSlugs = self::normalizeSelectedSlugs($selectedSlugs);
-        $cleanBeforeLookup = array_fill_keys(self::normalizeSelectedSlugs($cleanBeforeSlugs), true);
+        $targetSlugs = self::normalizeSelectedSlugs($selectedSlugs, true);
+        $cleanBeforeLookup = array_fill_keys(self::normalizeSelectedSlugs($cleanBeforeSlugs, false), true);
 
         foreach ($targetSlugs as $slug) {
             $table = $wpdb->prefix . $slug;
@@ -455,10 +455,10 @@ final class MjFixturesManager
         return $columns;
     }
 
-    private static function normalizeSelectedSlugs(array $selectedSlugs): array
+    private static function normalizeSelectedSlugs(array $selectedSlugs, bool $fallbackAll = true): array
     {
         if (empty($selectedSlugs)) {
-            return self::TABLE_SLUGS;
+            return $fallbackAll ? self::TABLE_SLUGS : array();
         }
 
         $normalized = array();
@@ -471,7 +471,7 @@ final class MjFixturesManager
         }
 
         if (empty($normalized)) {
-            return self::TABLE_SLUGS;
+            return $fallbackAll ? self::TABLE_SLUGS : array();
         }
 
         return array_values(array_unique($normalized));
