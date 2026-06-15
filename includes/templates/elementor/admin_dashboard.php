@@ -106,6 +106,22 @@ if ($isPreview) {
                 array('key' => 'age_26_35', 'label' => '26-35 ans', 'count' => 5, 'percent' => 12),
                 array('key' => 'unknown', 'label' => 'Non communiqué', 'count' => 2, 'percent' => 4),
             ),
+            'age_genre' => array(
+                'headers' => array(
+                    array('key' => 'fille', 'label' => 'Fille', 'total' => 16),
+                    array('key' => 'garcon', 'label' => 'Garçon', 'total' => 15),
+                    array('key' => 'other', 'label' => 'Autre', 'total' => 6),
+                    array('key' => 'undefined', 'label' => 'Non défini', 'total' => 5),
+                ),
+                'rows' => array(
+                    array('key' => 'under_12', 'label' => 'Moins de 12 ans', 'total' => 5, 'counts' => array('fille' => 2, 'garcon' => 2, 'other' => 0, 'undefined' => 1)),
+                    array('key' => 'age_12_17', 'label' => '12 à 17 ans', 'total' => 20, 'counts' => array('fille' => 7, 'garcon' => 8, 'other' => 3, 'undefined' => 2)),
+                    array('key' => 'age_18_25', 'label' => '18 à 25 ans', 'total' => 10, 'counts' => array('fille' => 4, 'garcon' => 3, 'other' => 2, 'undefined' => 1)),
+                    array('key' => 'age_26_35', 'label' => '26 à 35 ans', 'total' => 5, 'counts' => array('fille' => 2, 'garcon' => 1, 'other' => 1, 'undefined' => 1)),
+                    array('key' => 'unknown', 'label' => 'Âge non communiqué', 'total' => 2, 'counts' => array('fille' => 1, 'garcon' => 1, 'other' => 0, 'undefined' => 0)),
+                ),
+                'total' => 42,
+            ),
         ),
         'eventStats' => array(
             'total_events'           => 15,
@@ -194,6 +210,7 @@ if ($isPreview) {
     $event_stats        = function_exists('mj_member_get_event_statistics') ? mj_member_get_event_statistics() : array();
     $membership_summary = function_exists('mj_member_get_membership_due_summary') ? mj_member_get_membership_due_summary() : array();
     $recent_members     = function_exists('mj_member_get_recent_members') ? mj_member_get_recent_members() : array();
+    $age_genre_stats    = function_exists('mj_member_dashboard_compute_age_genre_stats') ? mj_member_dashboard_compute_age_genre_stats() : array();
 
     // Testimonial stats
     $testimonial_total    = class_exists('\Mj\Member\Classes\Crud\MjTestimonials') ? \Mj\Member\Classes\Crud\MjTestimonials::count() : 0;
@@ -233,6 +250,7 @@ if ($isPreview) {
             'age_brackets' => array_values(array_filter(isset($member_stats['age_brackets']) ? $member_stats['age_brackets'] : array(), function ($item) {
                 return (int) $item['count'] > 0;
             })),
+            'age_genre' => is_array($age_genre_stats) ? $age_genre_stats : array(),
         ),
         'eventStats' => array(
             'total_events'            => isset($event_stats['total_events']) ? (int) $event_stats['total_events'] : 0,

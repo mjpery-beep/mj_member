@@ -27,6 +27,71 @@ final class HeaderWidgetController implements AjaxHandlerInterface
         add_action('wp_ajax_nopriv_mj_header_upcoming_events', [$this, 'headerUpcomingEvents']);
         add_action('wp_ajax_mj_header_archive_link_notifications', [$this, 'headerArchiveLinkNotifications']);
         add_action('wp_ajax_mj_header_nextcloud_navigation', [$this, 'headerNextcloudNavigation']);
+        add_action('wp_ajax_mj_header_toggle_favorite', [$this, 'headerToggleFavorite']);
+    }
+
+    /**
+     * Ajoute/retire un favori du gestionnaire depuis le dropdown du header.
+     */
+    public function headerToggleFavorite(): void
+    {
+        check_ajax_referer('mj-header-widget', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(array('message' => __('Vous devez être connecté.', 'mj-member')), 401);
+        }
+
+        if (!current_user_can(Config::capability())) {
+            wp_send_json_error(array('message' => __('Accès non autorisé.', 'mj-member')), 403);
+        }
+
+        $type = isset($_POST['type']) ? sanitize_key((string) wp_unslash($_POST['type'])) : '';
+        $target_id = isset($_POST['target_id']) ? absint($_POST['target_id']) : 0;
+        $operation = isset($_POST['operation']) ? sanitize_key((string) wp_unslash($_POST['operation'])) : 'toggle';
+
+        if (!in_array($type, array('member', 'event'), true) || $target_id <= 0) {
+            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')), 400);
+        }
+
+        $meta_key = $type === 'member' ? '_mj_regmgr_fav_members' : '_mj_regmgr_fav_events';
+        $user_id = get_current_user_id();
+
+        $favorites = get_user_meta($user_id, $meta_key, true);
+        if (!is_array($favorites)) {
+            $favorites = array();
+        }
+        $favorites = array_values(array_unique(array_map('intval', $favorites)));
+
+        $is_favorite = in_array($target_id, $favorites, true);
+
+        if ($operation === 'remove') {
+            $favorites = array_values(array_diff($favorites, array($target_id)));
+            $is_favorite = false;
+        } elseif ($operation === 'add') {
+            if (!$is_favorite) {
+                $favorites[] = $target_id;
+            }
+            $favorites = array_values(array_unique(array_map('intval', $favorites)));
+            $is_favorite = true;
+        } else {
+            if ($is_favorite) {
+                $favorites = array_values(array_diff($favorites, array($target_id)));
+                $is_favorite = false;
+            } else {
+                $favorites[] = $target_id;
+                $favorites = array_values(array_unique(array_map('intval', $favorites)));
+                $is_favorite = true;
+            }
+        }
+
+        update_user_meta($user_id, $meta_key, $favorites);
+
+        wp_send_json_success(array(
+            'type'       => $type,
+            'targetId'   => $target_id,
+            'isFavorite' => $is_favorite,
+            'favorites'  => $favorites,
+        ));
     }
 
     /**

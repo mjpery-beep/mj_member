@@ -126,26 +126,402 @@ class MjEventOccurrences {
     }
 
     /**
+     * Ensure generation batch id is persisted on freshly inserted generated rows.
+     *
+     * @param int $event_id
+     * @param string $generation_batch_id
+     * @param array<int,array<string,mixed>> $occurrences
+     * @return void
+     */
+    public static function enforce_generation_batch_for_rows($event_id, $generation_batch_id, array $occurrences) {
+        $event_id = (int) $event_id;
+        $batch_lookup = self::resolve_generation_batch_lookup($generation_batch_id);
+        $generation_batch_storage_id = $batch_lookup['storage_id'];
+        $generation_batch_uuid = $batch_lookup['uuid'];
+        if ($event_id <= 0 || $generation_batch_storage_id === null || empty($occurrences) || !self::table_ready()) {
+            return;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+
+        if (self::has_generation_batch_column() && $generation_batch_uuid !== null) {
+            $batch_like = '%' . $wpdb->esc_like($generation_batch_uuid) . '%';
+            $updated_from_meta = $wpdb->query(
+                $wpdb->prepare(
+                    "UPDATE {$table} SET generation_batch_id = %s WHERE event_id = %d AND source = %s AND meta LIKE %s",
+                    $generation_batch_storage_id,
+                    $event_id,
+                    self::SOURCE_GENERATED,
+                    $batch_like
+                )
+            );
+            error_log('[MjEventOccurrences::enforce_generation_batch_for_rows] Updated from meta count=' . (string) $updated_from_meta . ' for event_id=' . $event_id . ', batch_id=' . $generation_batch_storage_id . ', batch_uuid=' . $generation_batch_uuid);
+        }
+
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+
+            $start = isset($occurrence['start']) ? trim((string) $occurrence['start']) : '';
+            $end = isset($occurrence['end']) ? trim((string) $occurrence['end']) : '';
+            if ($start === '' || $end === '') {
+                continue;
+            }
+
+            if (self::has_generation_batch_column()) {
+                $matched_before = (int) $wpdb->get_var(
+                    $wpdb->prepare(
+                        "SELECT COUNT(*) FROM {$table} WHERE event_id = %d AND source = %s AND start_at = %s AND end_at = %s AND (generation_batch_id IS NULL OR generation_batch_id = '' OR generation_batch_id = %s)",
+                        $event_id,
+                        self::SOURCE_GENERATED,
+                        $start,
+                        $end,
+                        $generation_batch_storage_id
+                    )
+                );
+                $null_before = (int) $wpdb->get_var(
+                    $wpdb->prepare(
+                        "SELECT COUNT(*) FROM {$table} WHERE event_id = %d AND source = %s AND start_at = %s AND end_at = %s AND (generation_batch_id IS NULL OR generation_batch_id = '')",
+                        $event_id,
+                        self::SOURCE_GENERATED,
+                        $start,
+                        $end
+                    )
+                );
+                $updated_precise = $wpdb->query(
+                    $wpdb->prepare(
+                        "UPDATE {$table} SET generation_batch_id = %s WHERE event_id = %d AND source = %s AND start_at = %s AND end_at = %s AND (generation_batch_id IS NULL OR generation_batch_id = '' OR generation_batch_id = %s)",
+                        $generation_batch_storage_id,
+                        $event_id,
+                        self::SOURCE_GENERATED,
+                        $start,
+                        $end,
+                        $generation_batch_storage_id
+                    )
+                );
+                $null_after = (int) $wpdb->get_var(
+                    $wpdb->prepare(
+                        "SELECT COUNT(*) FROM {$table} WHERE event_id = %d AND source = %s AND start_at = %s AND end_at = %s AND (generation_batch_id IS NULL OR generation_batch_id = '')",
+                        $event_id,
+                        self::SOURCE_GENERATED,
+                        $start,
+                        $end
+                    )
+                );
+                error_log('[MjEventOccurrences::enforce_generation_batch_for_rows] Precise update for event_id=' . $event_id . ', start=' . $start . ', end=' . $end . ', matched_before=' . $matched_before . ', null_before=' . $null_before . ', updated_count=' . (string) $updated_precise . ', null_after=' . $null_after . ', batch_id=' . $generation_batch_storage_id . ', batch_uuid=' . ($generation_batch_uuid ?? ''));
+            }
+        }
+    }
+
+    /**
      * @param int $event_id
      * @param string $generation_batch_id
      * @return void
      */
     public static function delete_for_generation_batch($event_id, $generation_batch_id) {
         $event_id = (int) $event_id;
-        $generation_batch_id = self::normalize_generation_batch_id($generation_batch_id);
-        if ($event_id <= 0 || $generation_batch_id === null || !self::table_ready() || !self::support_generation_batch_column()) {
+        $batch_lookup = self::resolve_generation_batch_lookup($generation_batch_id);
+        $generation_batch_storage_id = $batch_lookup['storage_id'];
+        $generation_batch_uuid = $batch_lookup['uuid'];
+        if ($event_id <= 0 || ($generation_batch_storage_id === null && $generation_batch_uuid === null) || !self::table_ready()) {
+            error_log('[MjEventOccurrences::delete_for_generation_batch] Early return: event_id=' . $event_id . ', batch_id=' . (($generation_batch_storage_id ?? $generation_batch_uuid) ?? 'NULL'));
             return;
         }
 
         global $wpdb;
         $table = self::table_name();
-        $wpdb->query(
-            $wpdb->prepare(
+        error_log('[MjEventOccurrences::delete_for_generation_batch] support_generation_batch_column=' . (self::support_generation_batch_column() ? 'true' : 'false'));
+        
+        if (self::support_generation_batch_column() && $generation_batch_storage_id !== null) {
+            $query = $wpdb->prepare(
                 "DELETE FROM {$table} WHERE event_id = %d AND generation_batch_id = %s",
                 $event_id,
-                $generation_batch_id
+                $generation_batch_storage_id
+            );
+            error_log('[MjEventOccurrences::delete_for_generation_batch] SQL column query: ' . $query);
+            $result = $wpdb->query($query);
+            error_log('[MjEventOccurrences::delete_for_generation_batch] Column delete result: ' . $result);
+        }
+
+        // Legacy fallback when generation_batch_id is stored inside the meta JSON payload.
+        // Use broad LIKE conditions to tolerate JSON spacing/format differences.
+        if ($generation_batch_uuid !== null) {
+            $meta_key_like = '%' . $wpdb->esc_like('generation_batch_id') . '%';
+            $meta_value_like = '%' . $wpdb->esc_like($generation_batch_uuid) . '%';
+            $query = $wpdb->prepare(
+                "DELETE FROM {$table} WHERE event_id = %d AND source = %s AND meta LIKE %s AND meta LIKE %s",
+                $event_id,
+                self::SOURCE_GENERATED,
+                $meta_key_like,
+                $meta_value_like
+            );
+            error_log('[MjEventOccurrences::delete_for_generation_batch] SQL meta query: ' . $query);
+            $result = $wpdb->query($query);
+            error_log('[MjEventOccurrences::delete_for_generation_batch] Meta delete result: ' . $result);
+        }
+    }
+
+    /**
+     * Delete generated occurrences for an event matching a set of start/end pairs.
+     *
+     * @param int $event_id
+     * @param array<int,array<string,mixed>> $occurrences
+     * @return void
+     */
+    public static function delete_generated_matching_rows($event_id, array $occurrences) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || empty($occurrences) || !self::table_ready()) {
+            return;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+
+            $start = isset($occurrence['start']) ? trim((string) $occurrence['start']) : '';
+            $end = isset($occurrence['end']) ? trim((string) $occurrence['end']) : '';
+            if ($start === '' || $end === '') {
+                continue;
+            }
+
+            $deleted = $wpdb->query(
+                $wpdb->prepare(
+                    "DELETE FROM {$table} WHERE event_id = %d AND source = %s AND start_at = %s AND end_at = %s",
+                    $event_id,
+                    self::SOURCE_GENERATED,
+                    $start,
+                    $end
+                )
+            );
+            error_log('[MjEventOccurrences::delete_generated_matching_rows] Deleted count=' . (string) $deleted . ' for event_id=' . $event_id . ', start=' . $start . ', end=' . $end);
+        }
+    }
+
+    /**
+     * Delete generated rows that still have NULL/empty generation_batch_id for the given start/end pairs.
+     *
+     * @param int $event_id
+     * @param array<int,array<string,mixed>> $occurrences
+     * @return int
+     */
+    public static function delete_generated_null_matching_rows($event_id, array $occurrences) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || empty($occurrences) || !self::table_ready() || !self::has_generation_batch_column()) {
+            return 0;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+        $deleted_total = 0;
+
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+
+            $start = isset($occurrence['start']) ? trim((string) $occurrence['start']) : '';
+            $end = isset($occurrence['end']) ? trim((string) $occurrence['end']) : '';
+            if ($start === '' || $end === '') {
+                continue;
+            }
+
+            $deleted = $wpdb->query(
+                $wpdb->prepare(
+                    "DELETE FROM {$table} WHERE event_id = %d AND source = %s AND start_at = %s AND end_at = %s AND (generation_batch_id IS NULL OR generation_batch_id = '')",
+                    $event_id,
+                    self::SOURCE_GENERATED,
+                    $start,
+                    $end
+                )
+            );
+            $deleted_total += max(0, (int) $deleted);
+            error_log('[MjEventOccurrences::delete_generated_null_matching_rows] Deleted count=' . (string) $deleted . ' for event_id=' . $event_id . ', start=' . $start . ', end=' . $end);
+        }
+
+        return $deleted_total;
+    }
+
+    /**
+     * Count generated rows with NULL/empty generation_batch_id for the given start/end pairs.
+     *
+     * @param int $event_id
+     * @param array<int,array<string,mixed>> $occurrences
+     * @return int
+     */
+    public static function count_generated_null_matching_rows($event_id, array $occurrences) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || empty($occurrences) || !self::table_ready() || !self::has_generation_batch_column()) {
+            return 0;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+        $total = 0;
+
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+
+            $start = isset($occurrence['start']) ? trim((string) $occurrence['start']) : '';
+            $end = isset($occurrence['end']) ? trim((string) $occurrence['end']) : '';
+            if ($start === '' || $end === '') {
+                continue;
+            }
+
+            $count = (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$table} WHERE event_id = %d AND source = %s AND start_at = %s AND end_at = %s AND (generation_batch_id IS NULL OR generation_batch_id = '')",
+                    $event_id,
+                    self::SOURCE_GENERATED,
+                    $start,
+                    $end
+                )
+            );
+            $total += max(0, $count);
+        }
+
+        return $total;
+    }
+
+    /**
+     * Count all generated rows with NULL/empty generation_batch_id for an event.
+     *
+     * @param int $event_id
+     * @return int
+     */
+    public static function count_generated_null_rows_for_event($event_id) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || !self::table_ready() || !self::has_generation_batch_column()) {
+            return 0;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+
+        return (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$table} WHERE event_id = %d AND source = %s AND (generation_batch_id IS NULL OR generation_batch_id = '')",
+                $event_id,
+                self::SOURCE_GENERATED
             )
         );
+    }
+
+    /**
+     * Delete generated rows with NULL/empty generation_batch_id that do not match allowed start/end slots.
+     *
+     * @param int $event_id
+     * @param array<int,string> $allowed_slot_keys format: "YYYY-mm-dd HH:ii:ss|YYYY-mm-dd HH:ii:ss"
+     * @return int
+     */
+    public static function purge_orphan_generated_null_rows($event_id, array $allowed_slot_keys) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || !self::table_ready() || !self::has_generation_batch_column()) {
+            return 0;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, start_at, end_at FROM {$table} WHERE event_id = %d AND source = %s AND (generation_batch_id IS NULL OR generation_batch_id = '')",
+                $event_id,
+                self::SOURCE_GENERATED
+            ),
+            ARRAY_A
+        );
+        if (!is_array($rows) || empty($rows)) {
+            return 0;
+        }
+
+        $allowed_map = array();
+        foreach ($allowed_slot_keys as $slot_key) {
+            if (!is_string($slot_key) || $slot_key === '') {
+                continue;
+            }
+            $allowed_map[$slot_key] = true;
+        }
+
+        $deleted_total = 0;
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $id = isset($row['id']) ? (int) $row['id'] : 0;
+            $start = isset($row['start_at']) ? trim((string) $row['start_at']) : '';
+            $end = isset($row['end_at']) ? trim((string) $row['end_at']) : '';
+            if ($id <= 0 || $start === '' || $end === '') {
+                continue;
+            }
+
+            $slot_key = $start . '|' . $end;
+            if (isset($allowed_map[$slot_key])) {
+                continue;
+            }
+
+            $deleted = $wpdb->delete($table, array('id' => $id), array('%d'));
+            $deleted_total += max(0, (int) $deleted);
+            error_log('[MjEventOccurrences::purge_orphan_generated_null_rows] Deleted orphan row id=' . $id . ' for event_id=' . $event_id . ', start=' . $start . ', end=' . $end);
+        }
+
+        return $deleted_total;
+    }
+
+    /**
+     * @param int $event_id
+     * @param string $generation_batch_id
+     * @param string $status
+     * @return void
+     */
+    public static function update_status_for_generation_batch($event_id, $generation_batch_id, $status) {
+        $event_id = (int) $event_id;
+        $batch_lookup = self::resolve_generation_batch_lookup($generation_batch_id);
+        $generation_batch_storage_id = $batch_lookup['storage_id'];
+        $generation_batch_uuid = $batch_lookup['uuid'];
+        if ($event_id <= 0 || ($generation_batch_storage_id === null && $generation_batch_uuid === null) || !self::table_ready() || !self::support_status_column()) {
+            return;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+        $normalized_status = self::normalize_status($status);
+
+        if (self::support_generation_batch_column() && $generation_batch_storage_id !== null) {
+            $wpdb->query(
+                $wpdb->prepare(
+                    "UPDATE {$table} SET status = %s WHERE event_id = %d AND generation_batch_id = %s",
+                    $normalized_status,
+                    $event_id,
+                    $generation_batch_storage_id
+                )
+            );
+        }
+
+        // Legacy fallback when generation_batch_id is stored inside the meta JSON payload.
+        if ($generation_batch_uuid !== null) {
+            $meta_key_like = '%' . $wpdb->esc_like('generation_batch_id') . '%';
+            $meta_value_like = '%' . $wpdb->esc_like($generation_batch_uuid) . '%';
+
+            $wpdb->query(
+                $wpdb->prepare(
+                    "UPDATE {$table} SET status = %s WHERE event_id = %d AND source = %s AND meta LIKE %s AND meta LIKE %s",
+                    $normalized_status,
+                    $event_id,
+                    self::SOURCE_GENERATED,
+                    $meta_key_like,
+                    $meta_value_like
+                )
+            );
+        }
     }
 
     /**
@@ -168,7 +544,10 @@ class MjEventOccurrences {
             }
 
             $formats = self::get_insert_formats($row);
-            $wpdb->insert($table, $row, $formats);
+            $inserted = $wpdb->insert($table, $row, $formats);
+            if ($inserted === false) {
+                error_log('[MjEventOccurrences::insert_rows] Insert failed: ' . $wpdb->last_error . ' | row=' . wp_json_encode($row));
+            }
         }
     }
 
@@ -231,11 +610,46 @@ class MjEventOccurrences {
             $source = self::SOURCE_MANUAL;
         }
 
-        $generation_batch_id = self::normalize_generation_batch_id(
-            isset($occurrence['generation_batch_id'])
-                ? $occurrence['generation_batch_id']
-                : (isset($occurrence['batch_id']) ? $occurrence['batch_id'] : null)
-        );
+        $generation_batch_uuid_raw = null;
+        if (isset($occurrence['generation_batch_uuid'])) {
+            $generation_batch_uuid_raw = $occurrence['generation_batch_uuid'];
+        } elseif (isset($occurrence['generationBatchUuid'])) {
+            $generation_batch_uuid_raw = $occurrence['generationBatchUuid'];
+        } elseif (isset($occurrence['generation_batch_id'])) {
+            $generation_batch_uuid_raw = $occurrence['generation_batch_id'];
+        } elseif (isset($occurrence['generationBatchId'])) {
+            $generation_batch_uuid_raw = $occurrence['generationBatchId'];
+        } elseif (isset($occurrence['batch_id'])) {
+            $generation_batch_uuid_raw = $occurrence['batch_id'];
+        }
+        $generation_batch_ref_raw = null;
+        if (isset($occurrence['generation_batch_ref'])) {
+            $generation_batch_ref_raw = $occurrence['generation_batch_ref'];
+        } elseif (isset($occurrence['generationBatchRef'])) {
+            $generation_batch_ref_raw = $occurrence['generationBatchRef'];
+        }
+
+        $meta = self::normalize_meta(isset($occurrence['meta']) ? $occurrence['meta'] : null);
+        if ($generation_batch_uuid_raw === null && isset($meta['generation_batch_id']) && $meta['generation_batch_id'] !== '') {
+            $generation_batch_uuid_raw = $meta['generation_batch_id'];
+        }
+        if ($generation_batch_ref_raw === null && isset($meta['generation_batch_ref']) && $meta['generation_batch_ref'] !== '') {
+            $generation_batch_ref_raw = $meta['generation_batch_ref'];
+        }
+
+        $generation_batch_uuid = self::normalize_generation_batch_id($generation_batch_uuid_raw);
+        $generation_batch_storage_id = self::normalize_generation_batch_id($generation_batch_ref_raw);
+        if ($generation_batch_storage_id === null && $generation_batch_uuid !== null) {
+            $batch_lookup = self::resolve_generation_batch_lookup($generation_batch_uuid);
+            $generation_batch_storage_id = $batch_lookup['storage_id'];
+            $generation_batch_uuid = $batch_lookup['uuid'] !== null ? $batch_lookup['uuid'] : $generation_batch_uuid;
+        }
+        if ($source === self::SOURCE_GENERATED && $generation_batch_storage_id === null) {
+            $inferred_batch_storage_id = self::infer_single_active_generation_batch_storage_id($event_id);
+            if ($inferred_batch_storage_id !== null) {
+                $generation_batch_storage_id = $inferred_batch_storage_id;
+            }
+        }
 
         $visibility = self::normalize_visibility(
             isset($occurrence['audience_visibility'])
@@ -243,9 +657,11 @@ class MjEventOccurrences {
                 : (isset($occurrence['visibility']) ? $occurrence['visibility'] : null)
         );
 
-        $meta = self::normalize_meta(isset($occurrence['meta']) ? $occurrence['meta'] : null);
-        if (!self::support_generation_batch_column() && $generation_batch_id !== null) {
-            $meta['generation_batch_id'] = $generation_batch_id;
+        if ($generation_batch_uuid !== null) {
+            $meta['generation_batch_id'] = $generation_batch_uuid;
+        }
+        if ($generation_batch_storage_id !== null) {
+            $meta['generation_batch_ref'] = $generation_batch_storage_id;
         }
         if (!self::support_visibility_column()) {
             $meta['visibility'] = $visibility;
@@ -264,8 +680,8 @@ class MjEventOccurrences {
             $row['status'] = $status;
         }
 
-        if (self::support_generation_batch_column()) {
-            $row['generation_batch_id'] = $generation_batch_id;
+        if (self::has_generation_batch_column()) {
+            $row['generation_batch_id'] = $generation_batch_storage_id;
         }
 
         if (self::support_visibility_column()) {
@@ -345,6 +761,21 @@ class MjEventOccurrences {
     /**
      * @return bool
      */
+    private static function has_generation_batch_column() {
+        if (!self::table_ready()) {
+            return false;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+        $column = $wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$table} LIKE %s", 'generation_batch_id'));
+
+        return !empty($column);
+    }
+
+    /**
+     * @return bool
+     */
     private static function support_visibility_column() {
         if (self::$supports_visibility_column !== null) {
             return self::$supports_visibility_column;
@@ -409,6 +840,62 @@ class MjEventOccurrences {
         }
 
         return substr($candidate, 0, 64);
+    }
+
+    /**
+     * @param mixed $value
+     * @return array{storage_id:?string,uuid:?string}
+     */
+    private static function resolve_generation_batch_lookup($value) {
+        $token = self::normalize_generation_batch_id($value);
+        if ($token === null) {
+            return array('storage_id' => null, 'uuid' => null);
+        }
+
+        if (ctype_digit($token)) {
+            $uuid = null;
+            if (class_exists(MjEventOccurrenceGenerationBatches::class)) {
+                $batch = MjEventOccurrenceGenerationBatches::find_by_id((int) $token);
+                if (is_array($batch) && !empty($batch['batch_uuid'])) {
+                    $uuid = self::normalize_generation_batch_id($batch['batch_uuid']);
+                }
+            }
+
+            return array('storage_id' => $token, 'uuid' => $uuid);
+        }
+
+        $storage_id = null;
+        if (class_exists(MjEventOccurrenceGenerationBatches::class)) {
+            $batch = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($token);
+            if (is_array($batch) && isset($batch['id']) && (int) $batch['id'] > 0) {
+                $storage_id = (string) (int) $batch['id'];
+            }
+        }
+
+        return array('storage_id' => $storage_id, 'uuid' => $token);
+    }
+
+    /**
+     * @param int $event_id
+     * @return string|null
+     */
+    private static function infer_single_active_generation_batch_storage_id($event_id) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || !class_exists(MjEventOccurrenceGenerationBatches::class)) {
+            return null;
+        }
+
+        $rows = MjEventOccurrenceGenerationBatches::get_for_event($event_id, false);
+        if (!is_array($rows) || count($rows) !== 1) {
+            return null;
+        }
+
+        $row = $rows[0];
+        if (!is_array($row) || !isset($row['id']) || (int) $row['id'] <= 0) {
+            return null;
+        }
+
+        return (string) (int) $row['id'];
     }
 
     /**

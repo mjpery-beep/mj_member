@@ -1984,6 +1984,159 @@ function mj_member_render_wp_dashboard_widget() {
 }
 
 /**
+ * Compute age-by-gender matrix for active youth members.
+ *
+ * Uses the dynamic field named "Genre" and groups counts by age brackets.
+ *
+ * @return array{headers:array<int,array<string,mixed>>,rows:array<int,array<string,mixed>>,total:int}
+ */
+function mj_member_dashboard_compute_age_genre_stats(): array {
+    if (!class_exists('\\Mj\\Member\\Classes\\Crud\\MjMembers') || !class_exists('\\Mj\\Member\\Classes\\Crud\\MjDynamicFields')) {
+        return array('headers' => array(), 'rows' => array(), 'total' => 0);
+    }
+
+    global $wpdb;
+
+    $genre_field_id = 0;
+    foreach (MjDynamicFields::getAll() as $field) {
+        if (!isset($field->id, $field->title)) {
+            continue;
+        }
+        if (sanitize_key((string) $field->title) === 'genre') {
+            $genre_field_id = (int) $field->id;
+            break;
+        }
+    }
+
+    if ($genre_field_id <= 0) {
+        return array('headers' => array(), 'rows' => array(), 'total' => 0);
+    }
+
+    $values_table = MjDynamicFieldValues::getTableName(MjDynamicFieldValues::TABLE_NAME);
+    $members_table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT m.birth_date, COALESCE(v.field_value, '') AS field_value
+         FROM {$members_table} m
+         LEFT JOIN {$values_table} v ON v.member_id = m.id AND v.field_id = %d
+         WHERE m.status = %s AND m.role = %s",
+        $genre_field_id,
+        MjMembers::STATUS_ACTIVE,
+        MjRoles::JEUNE
+    ));
+
+    if (!is_array($rows) || empty($rows)) {
+        return array('headers' => array(), 'rows' => array(), 'total' => 0);
+    }
+
+    $age_buckets = array(
+        'under_12' => array('key' => 'under_12', 'label' => __('Moins de 12 ans', 'mj-member')),
+        'age_12_17' => array('key' => 'age_12_17', 'label' => __('12 à 17 ans', 'mj-member')),
+        'age_18_25' => array('key' => 'age_18_25', 'label' => __('18 à 25 ans', 'mj-member')),
+        'age_26_35' => array('key' => 'age_26_35', 'label' => __('26 à 35 ans', 'mj-member')),
+        'age_36_45' => array('key' => 'age_36_45', 'label' => __('36 à 45 ans', 'mj-member')),
+        'age_46_plus' => array('key' => 'age_46_plus', 'label' => __('46 ans et plus', 'mj-member')),
+        'unknown' => array('key' => 'unknown', 'label' => __('Âge non communiqué', 'mj-member')),
+    );
+
+    $row_map = array();
+    foreach ($age_buckets as $bucket_key => $bucket) {
+        $row_map[$bucket_key] = array(
+            'key' => $bucket['key'],
+            'label' => $bucket['label'],
+            'total' => 0,
+            'counts' => array(),
+        );
+    }
+
+    $header_map = array();
+    $total = 0;
+
+    foreach ($rows as $row) {
+        $birth_date = isset($row->birth_date) ? (string) $row->birth_date : '';
+        $age_key = 'unknown';
+
+        if ($birth_date !== '' && $birth_date !== '0000-00-00') {
+            $age = (int) floor((time() - strtotime($birth_date)) / (365.25 * DAY_IN_SECONDS));
+            if ($age < 12) {
+                $age_key = 'under_12';
+            } elseif ($age <= 17) {
+                $age_key = 'age_12_17';
+            } elseif ($age <= 25) {
+                $age_key = 'age_18_25';
+            } elseif ($age <= 35) {
+                $age_key = 'age_26_35';
+            } elseif ($age <= 45) {
+                $age_key = 'age_36_45';
+            } else {
+                $age_key = 'age_46_plus';
+            }
+        }
+
+        $raw_value = trim((string) ($row->field_value ?? ''));
+        if ($raw_value === '') {
+            $genre_key = 'undefined';
+            $genre_label = __('Non défini', 'mj-member');
+        } elseif (strpos($raw_value, '__other:') === 0 || $raw_value === '__other') {
+            $genre_key = 'other';
+            $genre_label = __('Autre', 'mj-member');
+        } else {
+            $genre_label = sanitize_text_field($raw_value);
+            if ($genre_label === '') {
+                $genre_key = 'undefined';
+                $genre_label = __('Non défini', 'mj-member');
+            } else {
+                $genre_key = sanitize_title($genre_label);
+                if ($genre_key === '') {
+                    $genre_key = 'undefined';
+                    $genre_label = __('Non défini', 'mj-member');
+                }
+            }
+        }
+
+        if (!isset($header_map[$genre_key])) {
+            $header_map[$genre_key] = array(
+                'key' => $genre_key,
+                'label' => $genre_label,
+                'total' => 0,
+            );
+        }
+
+        $header_map[$genre_key]['total']++;
+        $row_map[$age_key]['counts'][$genre_key] = ($row_map[$age_key]['counts'][$genre_key] ?? 0) + 1;
+        $row_map[$age_key]['total']++;
+        $total++;
+    }
+
+    if ($total <= 0 || empty($header_map)) {
+        return array('headers' => array(), 'rows' => array(), 'total' => 0);
+    }
+
+    uasort($header_map, function ($a, $b) {
+        $a_total = isset($a['total']) ? (int) $a['total'] : 0;
+        $b_total = isset($b['total']) ? (int) $b['total'] : 0;
+        if ($a_total === $b_total) {
+            return strcmp((string) ($a['label'] ?? ''), (string) ($b['label'] ?? ''));
+        }
+        return $b_total <=> $a_total;
+    });
+
+    $final_rows = array();
+    foreach ($row_map as $entry) {
+        if ((int) $entry['total'] <= 0) {
+            continue;
+        }
+        $final_rows[] = $entry;
+    }
+
+    return array(
+        'headers' => array_values($header_map),
+        'rows' => $final_rows,
+        'total' => $total,
+    );
+}
+
+/**
  * Compute value distributions for selected dynamic fields.
  *
  * Returns an array of chart-ready datasets, one per field.

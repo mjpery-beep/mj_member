@@ -123,6 +123,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_save_event_schedule_preview', [$this, 'saveEventSchedulePreview']);
         add_action('wp_ajax_mj_regmgr_update_batch_title', [$this, 'updateBatchTitle']);
         add_action('wp_ajax_mj_regmgr_update_batch_assignment', [$this, 'updateBatchAssignment']);
+        add_action('wp_ajax_mj_regmgr_update_occurrence_batch_config', [$this, 'updateOccurrenceBatchConfig']);
         add_action('wp_ajax_mj_regmgr_get_location', [$this, 'getLocation']);
         add_action('wp_ajax_mj_regmgr_save_location', [$this, 'saveLocation']);
 
@@ -837,6 +838,106 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return '';
         }
         return wp_date('H:i', $timestamp);
+    }
+
+    private function isAllDayRange($start_time, $end_time) {
+        $start = $this->sanitizeTimeValue((string) $start_time);
+        $end = $this->sanitizeTimeValue((string) $end_time);
+        return $start === '00:00' && $end === '23:59';
+    }
+
+    private function formatBatchSummaryDateLabel($date_value) {
+        if (!is_string($date_value) || $date_value === '') {
+            return '';
+        }
+
+        $timestamp = strtotime($date_value);
+        if ($timestamp === false) {
+            return '';
+        }
+
+        $label = wp_date('l j F', $timestamp);
+        return ucfirst((string) $label);
+    }
+
+    private function formatBatchSummaryHourLabel($time_value) {
+        $time = $this->sanitizeTimeValue((string) $time_value);
+        if ($time === '') {
+            return '';
+        }
+
+        $parts = explode(':', $time);
+        if (count($parts) !== 2) {
+            return $time;
+        }
+
+        $hours = (int) $parts[0];
+        $minutes = (int) $parts[1];
+        if ($minutes === 0) {
+            return (string) $hours . 'h';
+        }
+
+        return (string) $hours . 'h' . str_pad((string) $minutes, 2, '0', STR_PAD_LEFT);
+    }
+
+    private function stripAllDaySuffixFromSummary($summary) {
+        $text = trim((string) $summary);
+        if ($text === '') {
+            return '';
+        }
+
+        $cleaned = preg_replace('/\s+de\s+0{1,2}(?:[:h]00?)\s+à\s+23(?:[:h]59)\s*$/iu', '', $text);
+        if (!is_string($cleaned) || $cleaned === '') {
+            return $text;
+        }
+
+        return trim($cleaned);
+    }
+
+    private function buildBatchScheduleSummary(array $config, array $fallback_rows, $previous_summary = '') {
+        $mode = isset($config['mode']) ? sanitize_key((string) $config['mode']) : '';
+        $start_date = isset($config['startDate']) ? $this->sanitizeDateValue($config['startDate']) : '';
+        $end_date = isset($config['endDate']) ? $this->sanitizeDateValue($config['endDate']) : '';
+        $start_time = isset($config['startTime']) ? $this->sanitizeTimeValue($config['startTime']) : '';
+        $end_time = isset($config['endTime']) ? $this->sanitizeTimeValue($config['endTime']) : '';
+
+        if ($start_date === '' && !empty($fallback_rows[0]['start'])) {
+            $start_date = $this->sanitizeDateValue(substr((string) $fallback_rows[0]['start'], 0, 10));
+        }
+        if ($end_date === '' && !empty($fallback_rows)) {
+            $last_row = $fallback_rows[count($fallback_rows) - 1];
+            if (is_array($last_row) && !empty($last_row['end'])) {
+                $end_date = $this->sanitizeDateValue(substr((string) $last_row['end'], 0, 10));
+            }
+        }
+
+        if ($end_date === '') {
+            $end_date = $start_date;
+        }
+
+        if ($mode === 'range' && $start_date !== '' && $end_date !== '') {
+            $start_label = $this->formatBatchSummaryDateLabel($start_date);
+            $end_label = $this->formatBatchSummaryDateLabel($end_date);
+            if ($start_label !== '' && $end_label !== '') {
+                if ($this->isAllDayRange($start_time, $end_time)) {
+                    return sprintf('Du %s à %s', $start_label, $end_label);
+                }
+
+                $start_hour = $this->formatBatchSummaryHourLabel($start_time);
+                $end_hour = $this->formatBatchSummaryHourLabel($end_time);
+                if ($start_hour !== '' && $end_hour !== '') {
+                    return sprintf('Du %s à %s de %s à %s', $start_label, $end_label, $start_hour, $end_hour);
+                }
+
+                return sprintf('Du %s à %s', $start_label, $end_label);
+            }
+        }
+
+        if ($this->isAllDayRange($start_time, $end_time)) {
+            return $this->stripAllDaySuffixFromSummary($previous_summary);
+        }
+
+        return trim((string) $previous_summary);
     }
 
     private function occurrenceStatusFromFront($status) {
@@ -1568,6 +1669,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $is_all_day = false;
             $note_schedule = '';
             $note_calendar = '';
+            $meta = array();
             if (isset($occurrence['meta'])) {
                 $meta = $occurrence['meta'];
                 if (is_string($meta)) {
@@ -1597,6 +1699,15 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 }
             }
 
+            $generation_batch_id = '';
+            if (isset($occurrence['generation_batch_id']) && $occurrence['generation_batch_id'] !== '') {
+                $generation_batch_id = sanitize_text_field((string) $occurrence['generation_batch_id']);
+            } elseif (is_array($meta) && isset($meta['generation_batch_ref']) && $meta['generation_batch_ref'] !== '') {
+                $generation_batch_id = sanitize_text_field((string) $meta['generation_batch_ref']);
+            } elseif (isset($occurrence['batch_id']) && $occurrence['batch_id'] !== '') {
+                $generation_batch_id = sanitize_text_field((string) $occurrence['batch_id']);
+            }
+
             $id = isset($occurrence['id']) ? $occurrence['id'] : (isset($occurrence['timestamp']) ? $occurrence['timestamp'] : md5($start));
             $start_time = substr($start, 11, 5);
             $end_time = $end !== '' ? substr($end, 11, 5) : '';
@@ -1613,7 +1724,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'reason' => $reason,
                 'source' => isset($occurrence['source']) ? sanitize_key((string) $occurrence['source']) : MjEventOccurrences::SOURCE_MANUAL,
                 'visibility' => isset($occurrence['visibility']) ? sanitize_key((string) $occurrence['visibility']) : MjEventOccurrences::VISIBILITY_TOUS,
-                'generationBatchId' => isset($occurrence['generation_batch_id']) ? sanitize_text_field((string) $occurrence['generation_batch_id']) : '',
+                'generationBatchId' => $generation_batch_id,
                 'noteSchedule' => $note_schedule,
                 'noteCalendar' => $note_calendar,
                 'startFormatted' => $this->formatDate($start, true),
@@ -1648,7 +1759,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
             $formatted[] = array(
                 'id' => isset($row['id']) ? (int) $row['id'] : 0,
-                'batchId' => isset($row['batch_uuid']) ? sanitize_text_field((string) $row['batch_uuid']) : '',
+                'batchId' => isset($row['id']) ? (string) (int) $row['id'] : '',
                 'status' => isset($row['status']) ? sanitize_key((string) $row['status']) : '',
                 'generatedByMemberId' => isset($row['generated_by_member_id']) ? (int) $row['generated_by_member_id'] : 0,
                 'occurrencesCount' => isset($row['occurrences_count']) ? (int) $row['occurrences_count'] : 0,
@@ -1660,6 +1771,28 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         return $formatted;
+    }
+
+    /**
+     * @param string $batch_identifier
+     * @return array<string,mixed>|null
+     */
+    private function findOccurrenceGenerationBatchRecord(string $batch_identifier): ?array
+    {
+        $batch_identifier = sanitize_text_field($batch_identifier);
+        if ($batch_identifier === '') {
+            return null;
+        }
+
+        if (ctype_digit($batch_identifier)) {
+            $row = MjEventOccurrenceGenerationBatches::find_by_id((int) $batch_identifier);
+            if (is_array($row)) {
+                return $row;
+            }
+        }
+
+        $row = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($batch_identifier);
+        return is_array($row) ? $row : null;
     }
 
     private function createOccurrenceGenerationBatchId(): string
@@ -6085,6 +6218,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $submitted_schedule_summary = wp_strip_all_tags($submitted_schedule_summary);
         }
 
+        $purge_batches = isset($_POST['purgeBatches'])
+            && in_array((string) wp_unslash($_POST['purgeBatches']), array('1', 'true'), true);
+
         $generator_plan_input = array();
         $generator_plan_provided = false;
         if (isset($_POST['generatorPlan'])) {
@@ -6352,7 +6488,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
         }
 
-        MjEventOccurrences::replace_for_event($event_id, $normalized['rows']);
+        if ($purge_batches && class_exists(MjEventOccurrenceGenerationBatches::class)) {
+            MjEventOccurrenceGenerationBatches::mark_deleted_for_event($event_id);
+        }
 
         if (!empty($created_batches) && class_exists(MjEventOccurrenceGenerationBatches::class)) {
             foreach ($created_batches as $batch_data) {
@@ -6372,6 +6510,165 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 );
             }
         }
+
+        if (!empty($normalized['rows'])) {
+            $existing_occurrence_rows = MjEventOccurrences::get_for_event($event_id);
+            $existing_generated_batch_by_slot = array();
+
+            if (is_array($existing_occurrence_rows)) {
+                foreach ($existing_occurrence_rows as $existing_row) {
+                    if (!is_array($existing_row)) {
+                        continue;
+                    }
+
+                    $existing_source = isset($existing_row['source']) ? sanitize_key((string) $existing_row['source']) : '';
+                    if ($existing_source !== MjEventOccurrences::SOURCE_GENERATED) {
+                        continue;
+                    }
+
+                    $existing_start = isset($existing_row['start_at']) ? trim((string) $existing_row['start_at']) : '';
+                    $existing_end = isset($existing_row['end_at']) ? trim((string) $existing_row['end_at']) : '';
+                    if ($existing_start === '' || $existing_end === '') {
+                        continue;
+                    }
+
+                    $existing_batch_id = isset($existing_row['generation_batch_id'])
+                        ? sanitize_text_field((string) $existing_row['generation_batch_id'])
+                        : '';
+                    if ($existing_batch_id === '') {
+                        continue;
+                    }
+
+                    $slot_key = $existing_start . '|' . $existing_end;
+                    if (!isset($existing_generated_batch_by_slot[$slot_key])) {
+                        $existing_generated_batch_by_slot[$slot_key] = $existing_batch_id;
+                    }
+                }
+            }
+
+            $batch_generated_by_slot = array();
+            if (class_exists(MjEventOccurrenceGenerationBatches::class)) {
+                $batch_rows = MjEventOccurrenceGenerationBatches::get_for_event($event_id, false);
+                if (is_array($batch_rows)) {
+                    foreach ($batch_rows as $batch_row) {
+                        if (!is_array($batch_row)) {
+                            continue;
+                        }
+
+                        $batch_storage_id = isset($batch_row['id']) && (int) $batch_row['id'] > 0
+                            ? (string) (int) $batch_row['id']
+                            : '';
+                        if ($batch_storage_id === '') {
+                            continue;
+                        }
+
+                        $config_raw = isset($batch_row['config_snapshot']) ? $batch_row['config_snapshot'] : null;
+                        $config_arr = is_array($config_raw)
+                            ? $config_raw
+                            : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+                        if (!is_array($config_arr)) {
+                            continue;
+                        }
+
+                        $sanitized_config = $this->sanitizeOccurrenceGeneratorPlan($config_arr);
+                        if (empty($sanitized_config)) {
+                            continue;
+                        }
+
+                        $summary_raw = isset($batch_row['summary']) ? $batch_row['summary'] : null;
+                        $summary_arr = is_array($summary_raw)
+                            ? $summary_raw
+                            : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
+                        $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+
+                        $occurrence_status_front = 'planned';
+                        if (isset($summary_arr['generated_occurrence_status']) && is_string($summary_arr['generated_occurrence_status'])) {
+                            $candidate = sanitize_key((string) $summary_arr['generated_occurrence_status']);
+                            if (in_array($candidate, array('planned', 'confirmed', 'cancelled'), true)) {
+                                $occurrence_status_front = $candidate;
+                            }
+                        } elseif (isset($sanitized_config['occurrenceStatus']) && is_string($sanitized_config['occurrenceStatus'])) {
+                            $candidate = sanitize_key((string) $sanitized_config['occurrenceStatus']);
+                            if (in_array($candidate, array('planned', 'confirmed', 'cancelled'), true)) {
+                                $occurrence_status_front = $candidate;
+                            }
+                        }
+
+                        $occurrence_status_db = $this->occurrenceStatusFromFront($occurrence_status_front);
+                        $generated_rows = $this->buildGeneratedRowsFromBatchConfig($sanitized_config, $batch_storage_id, $occurrence_status_db);
+                        foreach ($generated_rows as $generated_row) {
+                            if (!is_array($generated_row)) {
+                                continue;
+                            }
+                            $start = isset($generated_row['start']) ? trim((string) $generated_row['start']) : '';
+                            $end = isset($generated_row['end']) ? trim((string) $generated_row['end']) : '';
+                            if ($start === '' || $end === '') {
+                                continue;
+                            }
+
+                            $slot_key = $start . '|' . $end;
+                            if (!isset($batch_generated_by_slot[$slot_key])) {
+                                $batch_generated_by_slot[$slot_key] = $batch_storage_id;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $recovered_generation_batch_ids = 0;
+            $recovered_from_existing_rows = 0;
+            $recovered_from_batch_configs = 0;
+            foreach ($normalized['rows'] as $index => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                $source = isset($row['source']) ? sanitize_key((string) $row['source']) : '';
+                if ($source !== MjEventOccurrences::SOURCE_GENERATED) {
+                    continue;
+                }
+
+                $batch_id = isset($row['generation_batch_id'])
+                    ? sanitize_text_field((string) $row['generation_batch_id'])
+                    : '';
+                if ($batch_id !== '') {
+                    continue;
+                }
+
+                $start = isset($row['start']) ? trim((string) $row['start']) : '';
+                $end = isset($row['end']) ? trim((string) $row['end']) : '';
+                if ($start === '' || $end === '') {
+                    continue;
+                }
+
+                $slot_key = $start . '|' . $end;
+                if (!empty($existing_generated_batch_by_slot[$slot_key])) {
+                    $normalized['rows'][$index]['generation_batch_id'] = (string) $existing_generated_batch_by_slot[$slot_key];
+                    $recovered_generation_batch_ids++;
+                    $recovered_from_existing_rows++;
+                } elseif (!empty($batch_generated_by_slot[$slot_key])) {
+                    $normalized['rows'][$index]['generation_batch_id'] = (string) $batch_generated_by_slot[$slot_key];
+                    $recovered_generation_batch_ids++;
+                    $recovered_from_batch_configs++;
+                }
+            }
+
+            if ($recovered_generation_batch_ids > 0) {
+                error_log('[DEBUG saveEventOccurrences recovered_generation_batch_ids] eventId=' . $event_id
+                    . ', recovered=' . $recovered_generation_batch_ids
+                    . ', from_existing_rows=' . $recovered_from_existing_rows
+                    . ', from_batch_configs=' . $recovered_from_batch_configs);
+            }
+        }
+
+        MjEventOccurrences::replace_for_event($event_id, $normalized['rows']);
+
+        $reconcile_after_replace = $this->reconcileGeneratedBatchIdsForEvent($event_id);
+        error_log('[DEBUG saveEventOccurrences reconcile_after_replace] eventId=' . $event_id
+            . ', batches_processed=' . (int) ($reconcile_after_replace['batches_processed'] ?? 0)
+            . ', slots_expected=' . (int) ($reconcile_after_replace['slots_expected'] ?? 0)
+            . ', orphan_null_deleted=' . (int) ($reconcile_after_replace['orphan_null_deleted'] ?? 0)
+            . ', remaining_null_generated=' . (int) ($reconcile_after_replace['remaining_null_generated'] ?? 0));
 
         $refreshed_event = MjEvents::find($event_id);
         if (!$refreshed_event) {
@@ -6478,8 +6775,16 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return;
         }
 
-        MjEventOccurrences::delete_for_generation_batch($event_id, $batch_id);
-        MjEventOccurrenceGenerationBatches::mark_deleted($event_id, $batch_id);
+        $existing = $this->findOccurrenceGenerationBatchRecord($batch_id);
+        if (!$existing) {
+            wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $storage_batch_id = isset($existing['id']) ? (string) (int) $existing['id'] : $batch_id;
+        $batch_uuid = isset($existing['batch_uuid']) ? sanitize_text_field((string) $existing['batch_uuid']) : '';
+        MjEventOccurrences::delete_for_generation_batch($event_id, $storage_batch_id);
+        MjEventOccurrenceGenerationBatches::mark_deleted($event_id, $batch_uuid);
 
         $updated_batches = $this->getOccurrenceGenerationBatchesForEvent($event_id);
 
@@ -6512,10 +6817,15 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return;
         }
 
-        $existing = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($batch_id);
+        $existing = $this->findOccurrenceGenerationBatchRecord($batch_id);
         if (!$existing) {
             wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
             return;
+        }
+
+        $canonical_batch_id = isset($existing['batch_uuid']) ? sanitize_text_field((string) $existing['batch_uuid']) : $batch_id;
+        if ($canonical_batch_id === '') {
+            $canonical_batch_id = $batch_id;
         }
 
         $summary_raw = isset($existing['summary']) ? $existing['summary'] : null;
@@ -6526,7 +6836,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $config_raw = isset($existing['config_snapshot']) ? $existing['config_snapshot'] : null;
         $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
 
-        MjEventOccurrenceGenerationBatches::create($event_id, $batch_id, array(
+        MjEventOccurrenceGenerationBatches::create($event_id, $canonical_batch_id, array(
             'status' => isset($existing['status']) ? (string) $existing['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
             'generated_by_member_id' => isset($existing['generated_by_member_id']) ? (int) $existing['generated_by_member_id'] : null,
             'config_snapshot' => is_array($config_arr) ? $config_arr : null,
@@ -6566,7 +6876,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return;
         }
 
-        $existing = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($batch_id);
+        $existing = $this->findOccurrenceGenerationBatchRecord($batch_id);
         if (!$existing) {
             wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
             return;
@@ -6580,7 +6890,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $config_raw = isset($existing['config_snapshot']) ? $existing['config_snapshot'] : null;
         $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
 
-        MjEventOccurrenceGenerationBatches::create($event_id, $batch_id, array(
+        $canonical_batch_id = isset($existing['batch_uuid']) ? sanitize_text_field((string) $existing['batch_uuid']) : $batch_id;
+
+        MjEventOccurrenceGenerationBatches::create($event_id, $canonical_batch_id, array(
             'status' => isset($existing['status']) ? (string) $existing['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
             'generated_by_member_id' => isset($existing['generated_by_member_id']) ? (int) $existing['generated_by_member_id'] : null,
             'config_snapshot' => is_array($config_arr) ? $config_arr : null,
@@ -6668,7 +6980,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return;
         }
 
-        $existing = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($batch_id);
+        $existing = $this->findOccurrenceGenerationBatchRecord($batch_id);
         if (!$existing) {
             wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
             return;
@@ -6687,7 +6999,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $config_raw = isset($existing['config_snapshot']) ? $existing['config_snapshot'] : null;
         $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
 
-        MjEventOccurrenceGenerationBatches::create($event_id, $batch_id, array(
+        $canonical_batch_id = isset($existing['batch_uuid']) ? sanitize_text_field((string) $existing['batch_uuid']) : $batch_id;
+
+        MjEventOccurrenceGenerationBatches::create($event_id, $canonical_batch_id, array(
             'status' => isset($existing['status']) ? (string) $existing['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
             'generated_by_member_id' => isset($existing['generated_by_member_id']) ? (int) $existing['generated_by_member_id'] : null,
             'config_snapshot' => is_array($config_arr) ? $config_arr : null,
@@ -6720,6 +7034,11 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
         $batch_id = isset($_POST['batchId']) ? sanitize_text_field((string) $_POST['batchId']) : '';
         $location_id = isset($_POST['locationId']) ? (int) $_POST['locationId'] : 0;
+        $raw_occurrence_status = isset($_POST['occurrenceStatus']) ? sanitize_key((string) wp_unslash($_POST['occurrenceStatus'])) : '';
+        $allowed_front_occurrence_statuses = array('planned', 'confirmed', 'cancelled');
+        $has_occurrence_status = in_array($raw_occurrence_status, $allowed_front_occurrence_statuses, true);
+        $occurrence_status_front = $has_occurrence_status ? $raw_occurrence_status : 'planned';
+        $occurrence_status_db = $this->occurrenceStatusFromFront($occurrence_status_front);
         $member_ids = array();
         if (isset($_POST['memberIds'])) {
             $raw_member_ids = wp_unslash($_POST['memberIds']);
@@ -6756,7 +7075,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return;
         }
 
-        $existing = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($batch_id);
+        $existing = $this->findOccurrenceGenerationBatchRecord($batch_id);
         if (!$existing) {
             wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
             return;
@@ -6809,13 +7128,27 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             unset($summary_arr['assigned_member_name']);
         }
 
+        if ($has_occurrence_status) {
+            $summary_arr['generated_occurrence_status'] = $occurrence_status_front;
+        }
+
         $config_raw = isset($existing['config_snapshot']) ? $existing['config_snapshot'] : null;
         $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+        if (!is_array($config_arr)) {
+            $config_arr = array();
+        }
+        if ($has_occurrence_status) {
+            $config_arr['occurrenceStatus'] = $occurrence_status_front;
+            $storage_batch_id = isset($existing['id']) ? (string) (int) $existing['id'] : $batch_id;
+            MjEventOccurrences::update_status_for_generation_batch($event_id, $storage_batch_id, $occurrence_status_db);
+        }
 
-        MjEventOccurrenceGenerationBatches::create($event_id, $batch_id, array(
+        $canonical_batch_id = isset($existing['batch_uuid']) ? sanitize_text_field((string) $existing['batch_uuid']) : $batch_id;
+
+        MjEventOccurrenceGenerationBatches::create($event_id, $canonical_batch_id, array(
             'status' => isset($existing['status']) ? (string) $existing['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
             'generated_by_member_id' => isset($existing['generated_by_member_id']) ? (int) $existing['generated_by_member_id'] : null,
-            'config_snapshot' => is_array($config_arr) ? $config_arr : null,
+            'config_snapshot' => $config_arr,
             'summary' => $summary_arr,
             'occurrences_count' => isset($existing['occurrences_count']) ? (int) $existing['occurrences_count'] : 0,
         ));
@@ -6825,6 +7158,541 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         wp_send_json_success(array(
             'message' => __('Attribution du lot mise à jour.', 'mj-member'),
             'occurrenceGenerationBatches' => $updated_batches,
+        ));
+    }
+
+    private function buildGeneratedRowsFromBatchConfig(array $config, string $batch_id, string $occurrence_status_db): array
+    {
+        $timezone = function_exists('wp_timezone') ? wp_timezone() : new \DateTimeZone('UTC');
+        $mode = isset($config['mode']) ? sanitize_key((string) $config['mode']) : 'weekly';
+        if (!in_array($mode, array('custom', 'range', 'weekly', 'monthly'), true)) {
+            $mode = 'weekly';
+        }
+
+        $start_date = isset($config['startDate']) ? $this->sanitizeDateValue($config['startDate']) : '';
+        $end_date = isset($config['endDate']) ? $this->sanitizeDateValue($config['endDate']) : '';
+        $start_time = isset($config['startTime']) ? $this->sanitizeTimeValue($config['startTime']) : '';
+        $end_time = isset($config['endTime']) ? $this->sanitizeTimeValue($config['endTime']) : '';
+
+        if ($start_date === '' || $start_time === '' || $end_time === '') {
+            return array();
+        }
+
+        $start_day = \DateTime::createFromFormat('Y-m-d H:i:s', $start_date . ' 00:00:00', $timezone);
+        if (!$start_day instanceof \DateTime) {
+            return array();
+        }
+
+        $end_day = null;
+        if ($end_date !== '') {
+            $end_day = \DateTime::createFromFormat('Y-m-d H:i:s', $end_date . ' 00:00:00', $timezone);
+        }
+        if (!$end_day instanceof \DateTime) {
+            $end_day = clone $start_day;
+        }
+        if ($end_day < $start_day) {
+            $end_day = clone $start_day;
+        }
+
+        $build_row = static function (\DateTime $day_obj) use ($timezone, $start_time, $end_time, $occurrence_status_db, $batch_id): ?array {
+            $start_at = \DateTime::createFromFormat('Y-m-d H:i:s', $day_obj->format('Y-m-d') . ' ' . $start_time . ':00', $timezone);
+            $end_at = \DateTime::createFromFormat('Y-m-d H:i:s', $day_obj->format('Y-m-d') . ' ' . $end_time . ':00', $timezone);
+            if (!$start_at instanceof \DateTime || !$end_at instanceof \DateTime) {
+                return null;
+            }
+            if ($end_at <= $start_at) {
+                $end_at = clone $start_at;
+                $end_at->modify('+1 hour');
+            }
+
+            return array(
+                'start' => $start_at->format('Y-m-d H:i:s'),
+                'end' => $end_at->format('Y-m-d H:i:s'),
+                'status' => $occurrence_status_db,
+                'source' => MjEventOccurrences::SOURCE_GENERATED,
+                'generation_batch_id' => $batch_id,
+            );
+        };
+
+        $rows = array();
+
+        if ($mode === 'custom') {
+            $row = $build_row($start_day);
+            if ($row !== null) {
+                $rows[] = $row;
+            }
+            return $rows;
+        }
+
+        if ($mode === 'range') {
+            $cursor = clone $start_day;
+            $count = 0;
+            while ($cursor <= $end_day && $count < 730) {
+                $row = $build_row($cursor);
+                if ($row !== null) {
+                    $rows[] = $row;
+                }
+                $cursor->modify('+1 day');
+                $count++;
+            }
+            return $rows;
+        }
+
+        if ($mode === 'monthly') {
+            $weekday_map = array('mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7);
+            $ordinal_map = array('first' => 1, 'second' => 2, 'third' => 3, 'fourth' => 4, 'last' => -1);
+            $monthly_weekday = isset($config['monthlyWeekday']) ? sanitize_key((string) $config['monthlyWeekday']) : 'mon';
+            $monthly_ordinal = isset($config['monthlyOrdinal']) ? sanitize_key((string) $config['monthlyOrdinal']) : 'first';
+            $target_weekday = isset($weekday_map[$monthly_weekday]) ? (int) $weekday_map[$monthly_weekday] : 1;
+            $target_ordinal = isset($ordinal_map[$monthly_ordinal]) ? (int) $ordinal_map[$monthly_ordinal] : 1;
+
+            $month_cursor = \DateTime::createFromFormat('Y-m-d H:i:s', $start_day->format('Y-m-01') . ' 00:00:00', $timezone);
+            $count = 0;
+            while ($month_cursor instanceof \DateTime && $count < 120 && $month_cursor <= $end_day) {
+                $candidate = null;
+                if ($target_ordinal === -1) {
+                    $candidate = clone $month_cursor;
+                    $candidate->modify('last day of this month');
+                    while ((int) $candidate->format('N') !== $target_weekday) {
+                        $candidate->modify('-1 day');
+                    }
+                } else {
+                    $candidate = clone $month_cursor;
+                    $first_weekday = (int) $candidate->format('N');
+                    $delta = ($target_weekday - $first_weekday + 7) % 7;
+                    $day_number = 1 + $delta + (($target_ordinal - 1) * 7);
+                    $days_in_month = (int) $candidate->format('t');
+                    if ($day_number <= $days_in_month) {
+                        $candidate->setDate((int) $candidate->format('Y'), (int) $candidate->format('m'), $day_number);
+                    } else {
+                        $candidate = null;
+                    }
+                }
+
+                if ($candidate instanceof \DateTime && $candidate >= $start_day && $candidate <= $end_day) {
+                    $row = $build_row($candidate);
+                    if ($row !== null) {
+                        $rows[] = $row;
+                    }
+                }
+
+                $month_cursor->modify('first day of next month');
+                $count++;
+            }
+
+            return $rows;
+        }
+
+        $days_raw = isset($config['days']) ? $config['days'] : array();
+        $weekday_to_n = array('mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7);
+        $active_days = array();
+        foreach ($weekday_to_n as $day_key => $day_n) {
+            $is_active = false;
+            if (is_array($days_raw) && array_values($days_raw) === $days_raw) {
+                $is_active = in_array($day_key, array_map('sanitize_key', $days_raw), true);
+            } elseif (is_array($days_raw)) {
+                $is_active = !empty($days_raw[$day_key]);
+            }
+            if ($is_active) {
+                $active_days[] = $day_n;
+            }
+        }
+        if (empty($active_days)) {
+            $active_days[] = (int) $start_day->format('N');
+        }
+
+        $frequency = isset($config['frequency']) ? sanitize_key((string) $config['frequency']) : 'every_week';
+        $interval_days = $frequency === 'every_two_weeks' ? 14 : 7;
+
+        foreach ($active_days as $weekday_n) {
+            $candidate = clone $start_day;
+            while ((int) $candidate->format('N') !== (int) $weekday_n) {
+                $candidate->modify('+1 day');
+            }
+
+            $count = 0;
+            while ($candidate <= $end_day && $count < 208) {
+                $row = $build_row($candidate);
+                if ($row !== null) {
+                    $rows[] = $row;
+                }
+                $candidate->modify('+' . $interval_days . ' days');
+                $count++;
+            }
+        }
+
+        usort($rows, static function ($left, $right) {
+            return strcmp((string) $left['start'], (string) $right['start']);
+        });
+
+        return $rows;
+    }
+
+    /**
+     * Reconcile generated occurrences batch ids for all active batches of an event,
+     * then purge generated NULL rows that no longer belong to any active batch slot.
+     *
+     * @param int $event_id
+     * @return array<string,int>
+     */
+    private function reconcileGeneratedBatchIdsForEvent(int $event_id): array
+    {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0) {
+            return array(
+                'batches_processed' => 0,
+                'slots_expected' => 0,
+                'orphan_null_deleted' => 0,
+                'remaining_null_generated' => 0,
+            );
+        }
+
+        $batches = MjEventOccurrenceGenerationBatches::get_for_event($event_id, false);
+        if (!is_array($batches) || empty($batches)) {
+            $remaining = MjEventOccurrences::count_generated_null_rows_for_event($event_id);
+            return array(
+                'batches_processed' => 0,
+                'slots_expected' => 0,
+                'orphan_null_deleted' => 0,
+                'remaining_null_generated' => $remaining,
+            );
+        }
+
+        $allowed_slot_map = array();
+        $batches_processed = 0;
+        $slots_expected = 0;
+        global $wpdb;
+        $occ_table = function_exists('mj_member_get_event_occurrences_table_name')
+            ? mj_member_get_event_occurrences_table_name()
+            : ($wpdb->prefix . 'mj_event_date_occurrences');
+
+        foreach ($batches as $batch) {
+            if (!is_array($batch)) {
+                continue;
+            }
+
+            $batch_uuid = isset($batch['batch_uuid']) ? sanitize_text_field((string) $batch['batch_uuid']) : '';
+            $batch_storage_id = isset($batch['id']) && (int) $batch['id'] > 0 ? (string) (int) $batch['id'] : '';
+            if ($batch_uuid === '' || $batch_storage_id === '') {
+                continue;
+            }
+
+            $config_raw = isset($batch['config_snapshot']) ? $batch['config_snapshot'] : null;
+            $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+            if (!is_array($config_arr)) {
+                continue;
+            }
+
+            $sanitized_config = $this->sanitizeOccurrenceGeneratorPlan($config_arr);
+            if (empty($sanitized_config)) {
+                continue;
+            }
+
+            $summary_raw = isset($batch['summary']) ? $batch['summary'] : null;
+            $summary_arr = is_array($summary_raw) ? $summary_raw : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
+            $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+
+            $occurrence_status_front = 'planned';
+            if (isset($summary_arr['generated_occurrence_status']) && is_string($summary_arr['generated_occurrence_status'])) {
+                $candidate = sanitize_key((string) $summary_arr['generated_occurrence_status']);
+                if (in_array($candidate, array('planned', 'confirmed', 'cancelled'), true)) {
+                    $occurrence_status_front = $candidate;
+                }
+            } elseif (isset($sanitized_config['occurrenceStatus']) && is_string($sanitized_config['occurrenceStatus'])) {
+                $candidate = sanitize_key((string) $sanitized_config['occurrenceStatus']);
+                if (in_array($candidate, array('planned', 'confirmed', 'cancelled'), true)) {
+                    $occurrence_status_front = $candidate;
+                }
+            }
+
+            $occurrence_status_db = $this->occurrenceStatusFromFront($occurrence_status_front);
+            $rows = $this->buildGeneratedRowsFromBatchConfig($sanitized_config, $batch_storage_id, $occurrence_status_db);
+            if (empty($rows)) {
+                continue;
+            }
+
+            $batches_processed++;
+            $slots_expected += count($rows);
+            MjEventOccurrences::enforce_generation_batch_for_rows($event_id, $batch_storage_id, $rows);
+
+            if (!empty($occ_table)) {
+                $sample_rows = array();
+                foreach ($rows as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $start = isset($row['start']) ? trim((string) $row['start']) : '';
+                    $end = isset($row['end']) ? trim((string) $row['end']) : '';
+                    if ($start === '' || $end === '') {
+                        continue;
+                    }
+
+                    $db_row = $wpdb->get_row(
+                        $wpdb->prepare(
+                            "SELECT id, start_at, end_at, source, generation_batch_id FROM {$occ_table} WHERE event_id = %d AND start_at = %s AND end_at = %s LIMIT 1",
+                            $event_id,
+                            $start,
+                            $end
+                        ),
+                        ARRAY_A
+                    );
+                    if (is_array($db_row)) {
+                        $sample_rows[] = $db_row;
+                    }
+                    if (count($sample_rows) >= 5) {
+                        break;
+                    }
+                }
+
+                error_log('[DEBUG reconcile_batch_rows] eventId=' . $event_id
+                    . ', batchId=' . $batch_uuid
+                    . ', batchStorageId=' . $batch_storage_id
+                    . ', rows=' . wp_json_encode($sample_rows));
+            }
+
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $start = isset($row['start']) ? trim((string) $row['start']) : '';
+                $end = isset($row['end']) ? trim((string) $row['end']) : '';
+                if ($start === '' || $end === '') {
+                    continue;
+                }
+                $allowed_slot_map[$start . '|' . $end] = true;
+            }
+        }
+
+        $orphan_deleted = MjEventOccurrences::purge_orphan_generated_null_rows($event_id, array_keys($allowed_slot_map));
+        $remaining = MjEventOccurrences::count_generated_null_rows_for_event($event_id);
+
+        return array(
+            'batches_processed' => $batches_processed,
+            'slots_expected' => $slots_expected,
+            'orphan_null_deleted' => $orphan_deleted,
+            'remaining_null_generated' => $remaining,
+        );
+    }
+
+    public function updateOccurrenceBatchConfig() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        if (!$auth['is_coordinateur'] && !current_user_can(Config::capability())) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+        $batch_id = isset($_POST['batchId']) ? sanitize_text_field((string) $_POST['batchId']) : '';
+        error_log('[DEBUG updateOccurrenceBatchConfig] eventId=' . $event_id . ', batchId=' . $batch_id);
+        $incoming_config = array();
+        if (isset($_POST['config'])) {
+            $raw_config = wp_unslash($_POST['config']);
+            if (is_array($raw_config)) {
+                $incoming_config = $raw_config;
+            } elseif (is_string($raw_config) && $raw_config !== '') {
+                $decoded = json_decode($raw_config, true);
+                if (is_array($decoded)) {
+                    $incoming_config = $decoded;
+                }
+            }
+        }
+
+        if ($event_id <= 0 || $batch_id === '') {
+            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+            return;
+        }
+
+        $existing = $this->findOccurrenceGenerationBatchRecord($batch_id);
+        if (!$existing) {
+            wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $canonical_batch_id = isset($existing['batch_uuid']) ? sanitize_text_field((string) $existing['batch_uuid']) : '';
+        if ($canonical_batch_id === '') {
+            $canonical_batch_id = $batch_id;
+        }
+        $storage_batch_id = isset($existing['id']) && (int) $existing['id'] > 0
+            ? (string) (int) $existing['id']
+            : $batch_id;
+
+        $config_raw = isset($existing['config_snapshot']) ? $existing['config_snapshot'] : null;
+        $existing_config = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+        $existing_config = is_array($existing_config) ? $existing_config : array();
+
+        $merged_config = $existing_config;
+        foreach ($incoming_config as $key => $value) {
+            $merged_config[$key] = $value;
+        }
+
+        $sanitized_config = $this->sanitizeOccurrenceGeneratorPlan($merged_config);
+        if (empty($sanitized_config)) {
+            wp_send_json_error(array('message' => __('Configuration de lot invalide.', 'mj-member')));
+            return;
+        }
+
+        $summary_raw = isset($existing['summary']) ? $existing['summary'] : null;
+        $summary_arr = is_array($summary_raw) ? $summary_raw : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
+        $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+
+        $allowed_front_occurrence_statuses = array('planned', 'confirmed', 'cancelled');
+        $occurrence_status_front = 'planned';
+        if (isset($summary_arr['generated_occurrence_status']) && is_string($summary_arr['generated_occurrence_status'])) {
+            $candidate = sanitize_key((string) $summary_arr['generated_occurrence_status']);
+            if (in_array($candidate, $allowed_front_occurrence_statuses, true)) {
+                $occurrence_status_front = $candidate;
+            }
+        }
+        if (isset($merged_config['occurrenceStatus']) && is_string($merged_config['occurrenceStatus'])) {
+            $candidate = sanitize_key((string) $merged_config['occurrenceStatus']);
+            if (in_array($candidate, $allowed_front_occurrence_statuses, true)) {
+                $occurrence_status_front = $candidate;
+            }
+        }
+        $summary_arr['generated_occurrence_status'] = $occurrence_status_front;
+        $config_to_store = $sanitized_config;
+        $config_to_store['occurrenceStatus'] = $occurrence_status_front;
+
+        $occurrence_status_db = $this->occurrenceStatusFromFront($occurrence_status_front);
+        $new_rows = $this->buildGeneratedRowsFromBatchConfig($sanitized_config, $storage_batch_id, $occurrence_status_db);
+        error_log('[DEBUG buildGeneratedRows] batch_id=' . $canonical_batch_id . ', new_rows count=' . count($new_rows));
+        if (!empty($new_rows)) {
+            error_log('[DEBUG first_row] ' . json_encode($new_rows[0]));
+        }
+        if (empty($new_rows)) {
+            wp_send_json_error(array('message' => __('La configuration du lot ne génère aucune occurrence.', 'mj-member')));
+            return;
+        }
+
+        $previous_schedule_summary = isset($summary_arr['schedule_summary']) ? (string) $summary_arr['schedule_summary'] : '';
+        $summary_arr['schedule_summary'] = $this->buildBatchScheduleSummary($sanitized_config, $new_rows, $previous_schedule_summary);
+
+        $reconcile_before = $this->reconcileGeneratedBatchIdsForEvent($event_id);
+        error_log('[DEBUG reconcile_before_delete] eventId=' . $event_id
+            . ', batches_processed=' . (int) ($reconcile_before['batches_processed'] ?? 0)
+            . ', slots_expected=' . (int) ($reconcile_before['slots_expected'] ?? 0)
+            . ', orphan_null_deleted=' . (int) ($reconcile_before['orphan_null_deleted'] ?? 0)
+            . ', remaining_null_generated=' . (int) ($reconcile_before['remaining_null_generated'] ?? 0));
+
+        error_log('[DEBUG before_delete] Deleting occurrences for batch_id=' . $storage_batch_id);
+        MjEventOccurrences::delete_for_generation_batch($event_id, $storage_batch_id);
+        $deleted_null_matching = MjEventOccurrences::delete_generated_null_matching_rows($event_id, $new_rows);
+        error_log('[DEBUG before_add purge_null_matching] eventId=' . $event_id
+            . ', deleted_null_matching=' . (int) $deleted_null_matching
+            . ', batchStorageId=' . $storage_batch_id);
+        error_log('[DEBUG after_delete] Adding ' . count($new_rows) . ' new occurrences');
+        MjEventOccurrences::add_for_event($event_id, $new_rows);
+        MjEventOccurrences::enforce_generation_batch_for_rows($event_id, $storage_batch_id, $new_rows);
+
+        global $wpdb;
+        $occ_table = function_exists('mj_member_get_event_occurrences_table_name')
+            ? mj_member_get_event_occurrences_table_name()
+            : ($wpdb->prefix . 'mj_event_date_occurrences');
+        if (!empty($occ_table)) {
+            $total_for_batch = 0;
+            if ($storage_batch_id !== '') {
+                $total_for_batch = (int) $wpdb->get_var(
+                    $wpdb->prepare(
+                        "SELECT COUNT(*) FROM {$occ_table} WHERE event_id = %d AND generation_batch_id = %s",
+                        $event_id,
+                        $storage_batch_id
+                    )
+                );
+            }
+            $total_null_generated = (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$occ_table} WHERE event_id = %d AND source = %s AND (generation_batch_id IS NULL OR generation_batch_id = '')",
+                    $event_id,
+                    MjEventOccurrences::SOURCE_GENERATED
+                )
+            );
+            $target_null_generated = MjEventOccurrences::count_generated_null_matching_rows($event_id, $new_rows);
+            $db_rows_for_slots = array();
+            foreach ($new_rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $start = isset($row['start']) ? (string) $row['start'] : '';
+                $end = isset($row['end']) ? (string) $row['end'] : '';
+                if ($start === '' || $end === '') {
+                    continue;
+                }
+
+                $slot_rows = $wpdb->get_results(
+                    $wpdb->prepare(
+                        "SELECT id, start_at, end_at, source, generation_batch_id FROM {$occ_table} WHERE event_id = %d AND start_at = %s AND end_at = %s ORDER BY id ASC",
+                        $event_id,
+                        $start,
+                        $end
+                    ),
+                    ARRAY_A
+                );
+                if (is_array($slot_rows)) {
+                    foreach ($slot_rows as $slot_row) {
+                        if (count($db_rows_for_slots) >= 10) {
+                            break 2;
+                        }
+                        $db_rows_for_slots[] = $slot_row;
+                    }
+                }
+            }
+            error_log('[DEBUG post_insert_batch_state] eventId=' . $event_id . ', batchId=' . $canonical_batch_id . ', batchStorageId=' . $storage_batch_id . ', rows_with_batch=' . $total_for_batch . ', generated_rows_with_null_batch=' . $total_null_generated . ', target_rows_with_null_batch=' . $target_null_generated . ', db_rows=' . wp_json_encode($db_rows_for_slots));
+        }
+
+        MjEventOccurrenceGenerationBatches::create($event_id, $canonical_batch_id, array(
+            'status' => isset($existing['status']) ? (string) $existing['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
+            'generated_by_member_id' => isset($existing['generated_by_member_id']) ? (int) $existing['generated_by_member_id'] : null,
+            'config_snapshot' => $config_to_store,
+            'summary' => $summary_arr,
+            'occurrences_count' => count($new_rows),
+        ));
+
+        $reconcile_stats = $this->reconcileGeneratedBatchIdsForEvent($event_id);
+        error_log('[DEBUG reconcile_generated_batch_ids] eventId=' . $event_id
+            . ', batches_processed=' . (int) ($reconcile_stats['batches_processed'] ?? 0)
+            . ', slots_expected=' . (int) ($reconcile_stats['slots_expected'] ?? 0)
+            . ', orphan_null_deleted=' . (int) ($reconcile_stats['orphan_null_deleted'] ?? 0)
+            . ', remaining_null_generated=' . (int) ($reconcile_stats['remaining_null_generated'] ?? 0));
+
+        $all_rows = MjEventOccurrences::get_for_event($event_id);
+        $min_start = null;
+        $max_end = null;
+        if (is_array($all_rows)) {
+            foreach ($all_rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $start_at = isset($row['start_at']) ? (string) $row['start_at'] : '';
+                $end_at = isset($row['end_at']) ? (string) $row['end_at'] : '';
+                if ($start_at !== '' && ($min_start === null || strcmp($start_at, $min_start) < 0)) {
+                    $min_start = $start_at;
+                }
+                if ($end_at !== '' && ($max_end === null || strcmp($end_at, $max_end) > 0)) {
+                    $max_end = $end_at;
+                }
+            }
+        }
+
+        $event_updates = array();
+        $event_updates['date_debut'] = $min_start;
+        $event_updates['date_fin'] = $max_end;
+        MjEvents::update($event_id, $event_updates);
+
+        $updated_batches = $this->getOccurrenceGenerationBatchesForEvent($event_id);
+        $refreshed_event = MjEvents::find($event_id);
+        $occurrence_rows = class_exists(MjEventSchedule::class) && $refreshed_event
+            ? MjEventSchedule::build_all_occurrences($refreshed_event)
+            : array();
+        $occurrence_payload = $this->formatEventOccurrencesForFront($occurrence_rows);
+
+        wp_send_json_success(array(
+            'message' => __('Configuration du lot mise à jour.', 'mj-member'),
+            'occurrenceGenerationBatches' => $updated_batches,
+            'occurrences' => $occurrence_payload,
         ));
     }
 

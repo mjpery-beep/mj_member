@@ -727,11 +727,27 @@ class MjEvents implements CrudRepositoryInterface {
                 $source_value = $fallback_source;
             }
 
-            $rows[] = array(
+            $generation_batch_id = '';
+            if (isset($occurrence['generation_batch_id']) && $occurrence['generation_batch_id'] !== '') {
+                $generation_batch_id = sanitize_text_field((string) $occurrence['generation_batch_id']);
+            } elseif (isset($occurrence['generationBatchId']) && $occurrence['generationBatchId'] !== '') {
+                $generation_batch_id = sanitize_text_field((string) $occurrence['generationBatchId']);
+            } elseif (isset($occurrence['batch_id']) && $occurrence['batch_id'] !== '') {
+                $generation_batch_id = sanitize_text_field((string) $occurrence['batch_id']);
+            } elseif (isset($occurrence['meta']) && is_array($occurrence['meta']) && !empty($occurrence['meta']['generation_batch_ref'])) {
+                $generation_batch_id = sanitize_text_field((string) $occurrence['meta']['generation_batch_ref']);
+            }
+
+            $row = array(
                 'start' => $start_value,
                 'end' => $end_value,
                 'source' => $source_value,
             );
+            if ($generation_batch_id !== '') {
+                $row['generation_batch_id'] = $generation_batch_id;
+            }
+
+            $rows[] = $row;
         }
 
         MjEventOccurrences::replace_for_event($event_id, $rows);

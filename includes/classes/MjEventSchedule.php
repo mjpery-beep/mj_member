@@ -167,7 +167,9 @@ class MjEventSchedule {
             $occurrence['event_id'] = isset($row['event_id']) ? (int) $row['event_id'] : 0;
             $occurrence['generation_batch_id'] = isset($row['generation_batch_id']) && $row['generation_batch_id'] !== ''
                 ? (string) $row['generation_batch_id']
-                : (isset($meta['generation_batch_id']) ? (string) $meta['generation_batch_id'] : '');
+                : (isset($meta['generation_batch_ref']) && $meta['generation_batch_ref'] !== ''
+                    ? (string) $meta['generation_batch_ref']
+                    : '');
             $occurrence['visibility'] = isset($row['audience_visibility']) && $row['audience_visibility'] !== ''
                 ? sanitize_key((string) $row['audience_visibility'])
                 : (isset($meta['visibility']) ? sanitize_key((string) $meta['visibility']) : MjEventOccurrences::VISIBILITY_TOUS);

@@ -1014,6 +1014,7 @@ $this->add_control('nextcloud_label', array(
                 }
                 if ($initials === '') $initials = 'M';
                 $gest_fav_member_items[] = array(
+                    'favorite_id' => $fav_id,
                     'label'      => $label,
                     'url'        => add_query_arg(array('main-tab' => 'member', 'member' => $fav_id), $gest_url),
                     'avatar_url' => $avatar_url,
@@ -1062,6 +1063,7 @@ $this->add_control('nextcloud_label', array(
                     }
                 }
                 $gest_fav_event_items[] = array(
+                    'favorite_id' => $fav_id,
                     'label'    => $label,
                     'url'      => add_query_arg(array('main-tab' => 'event', 'event_id' => $fav_id), $gest_url),
                     'emoji'    => $emoji,
@@ -1084,12 +1086,12 @@ $this->add_control('nextcloud_label', array(
 
         if ($is_preview && empty($gest_fav_member_items) && empty($gest_fav_event_items)) {
             $gest_fav_member_items = array(
-                array('label' => __('Membre exemple 1', 'mj-member'), 'url' => '#', 'avatar_url' => '', 'initials' => 'ME', 'tab_urls' => array('information' => '#', 'dyndata' => '#', 'membership' => '#', 'badges' => '#', 'photos' => '#', 'ideas' => '#', 'messages' => '#', 'notifications' => '#', 'testimonials' => '#', 'notes' => '#', 'history' => '#')),
-                array('label' => __('Membre exemple 2', 'mj-member'), 'url' => '#', 'avatar_url' => '', 'initials' => 'ME', 'tab_urls' => array('information' => '#', 'dyndata' => '#', 'membership' => '#', 'badges' => '#', 'photos' => '#', 'ideas' => '#', 'messages' => '#', 'notifications' => '#', 'testimonials' => '#', 'notes' => '#', 'history' => '#')),
+                array('favorite_id' => 101, 'label' => __('Membre exemple 1', 'mj-member'), 'url' => '#', 'avatar_url' => '', 'initials' => 'ME', 'tab_urls' => array('information' => '#', 'dyndata' => '#', 'membership' => '#', 'badges' => '#', 'photos' => '#', 'ideas' => '#', 'messages' => '#', 'notifications' => '#', 'testimonials' => '#', 'notes' => '#', 'history' => '#')),
+                array('favorite_id' => 102, 'label' => __('Membre exemple 2', 'mj-member'), 'url' => '#', 'avatar_url' => '', 'initials' => 'ME', 'tab_urls' => array('information' => '#', 'dyndata' => '#', 'membership' => '#', 'badges' => '#', 'photos' => '#', 'ideas' => '#', 'messages' => '#', 'notifications' => '#', 'testimonials' => '#', 'notes' => '#', 'history' => '#')),
             );
             $gest_fav_event_items = array(
-                array('label' => __('Événement exemple 1', 'mj-member'), 'url' => '#', 'emoji' => '🎯', 'tab_urls' => array('event-page' => '#', 'registrations' => '#', 'attendance' => '#', 'description' => '#', 'regdoc' => '#', 'publish' => '#', 'details' => '#', 'photos' => '#', 'documents' => '#', 'occurrence-encoder' => '#', 'editor' => '#')),
-                array('label' => __('Événement exemple 2', 'mj-member'), 'url' => '#', 'emoji' => '🎨', 'tab_urls' => array('event-page' => '#', 'registrations' => '#', 'attendance' => '#', 'description' => '#', 'regdoc' => '#', 'publish' => '#', 'details' => '#', 'photos' => '#', 'documents' => '#', 'occurrence-encoder' => '#', 'editor' => '#')),
+                array('favorite_id' => 201, 'label' => __('Événement exemple 1', 'mj-member'), 'url' => '#', 'emoji' => '🎯', 'tab_urls' => array('event-page' => '#', 'registrations' => '#', 'attendance' => '#', 'description' => '#', 'regdoc' => '#', 'publish' => '#', 'details' => '#', 'photos' => '#', 'documents' => '#', 'occurrence-encoder' => '#', 'editor' => '#')),
+                array('favorite_id' => 202, 'label' => __('Événement exemple 2', 'mj-member'), 'url' => '#', 'emoji' => '🎨', 'tab_urls' => array('event-page' => '#', 'registrations' => '#', 'attendance' => '#', 'description' => '#', 'regdoc' => '#', 'publish' => '#', 'details' => '#', 'photos' => '#', 'documents' => '#', 'occurrence-encoder' => '#', 'editor' => '#')),
             );
         }
 

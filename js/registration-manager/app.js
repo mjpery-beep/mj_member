@@ -509,6 +509,8 @@
         var viewMode = _viewMode[0];
         var setViewMode = _viewMode[1];
 
+        var occurrenceEditorModal = useModal();
+
         var occurrencesByDate = useMemo(function () {
             var map = {};
             localOccurrences.forEach(function (occ) {
@@ -540,7 +542,7 @@
         var editorHasDate = editorState && typeof editorState.date === 'string' && editorState.date !== '';
         var editorHasExistingId = editorState && !!editorState.id;
         var hasExistingOccurrences = localOccurrences.length > 0;
-        var shouldShowEditorCard = !!(selectedOccurrenceId || editorHasExistingId || editorHasDate || !hasExistingOccurrences);
+        var shouldShowEditorCard = !!(occurrenceEditorModal.isOpen && (selectedOccurrenceId || editorHasExistingId || editorHasDate));
         var isCreatingNewOccurrence = !selectedOccurrenceId && !editorHasExistingId && (editorHasDate || !hasExistingOccurrences);
         var editorCardTitle = isCreatingNewOccurrence
             ? getString(strings, 'occurrenceEditorCreateTitle', 'Ajoute une occurrence')
@@ -736,7 +738,8 @@
                 next.reason = '';
                 return next;
             });
-        }, [weekOverview, weekTimeScale, weekTimelineRange, setSelectedOccurrenceId, setEditorState]);
+            occurrenceEditorModal.open({ date: day.iso });
+        }, [occurrenceEditorModal.open, weekOverview, weekTimeScale, weekTimelineRange, setSelectedOccurrenceId, setEditorState]);
 
         var _generatorState = useState(createGeneratorState(initialPivotDate));
         var generatorState = _generatorState[0];
@@ -770,6 +773,7 @@
         var generatorEndTime = typeof safeGeneratorState.endTime === 'string'
             ? safeGeneratorState.endTime
             : '';
+        var generatorAllDay = generatorStartTime === '00:00' && generatorEndTime === '23:59';
         var isSingleGeneratorMode = generatorMode === 'custom';
         var showGeneratorEndDate = generatorMode !== 'custom';
         var generatorMonthlyOrdinal = typeof safeGeneratorState.monthlyOrdinal === 'string'
@@ -875,6 +879,10 @@
         var _batchProcessingId = useState('');
         var batchProcessingId = _batchProcessingId[0];
         var setBatchProcessingId = _batchProcessingId[1];
+
+        var _batchConfigDrafts = useState({});
+        var batchConfigDrafts = _batchConfigDrafts[0];
+        var setBatchConfigDrafts = _batchConfigDrafts[1];
 
         var generationHistory = (localBatches !== null
             ? localBatches
@@ -1176,7 +1184,7 @@
             }
 
             acc.push({
-                key: (batch.batchId || batch.batch_uuid || 'lot-' + index),
+                key: (batch.batchId || 'lot-' + index),
                 label: previewLabel,
                 text: text,
                 assignment: assignmentParts.join(' | '),
@@ -1192,6 +1200,7 @@
         useEffect(function () {
             setLocalBatches(null);
             setBatchProcessingId('');
+            setBatchConfigDrafts({});
         }, [event && event.id]);
 
         useEffect(function () {
@@ -1345,18 +1354,20 @@
                 });
         }, [apiPost, event, onBatchesUpdate, strings]);
 
-        var handleUpdateBatchAssignment = useCallback(function (batchId, locationId, memberIds) {
+        var handleUpdateBatchAssignment = useCallback(function (batchId, locationId, memberIds, occurrenceStatus) {
             if (!apiPost || !event || !batchId) {
                 return;
             }
 
             var eventId = event.id;
+            var normalizedOccurrenceStatus = normalizeOccurrenceStatus(occurrenceStatus || 'planned');
             setBatchProcessingId(batchId + ':assignment');
             apiPost('mj_regmgr_update_batch_assignment', {
                 eventId: eventId,
                 batchId: batchId,
                 locationId: locationId > 0 ? locationId : 0,
                 memberIds: Array.isArray(memberIds) ? memberIds : [],
+                occurrenceStatus: normalizedOccurrenceStatus,
             })
                 .then(function (data) {
                     setBatchProcessingId('');
@@ -1372,49 +1383,98 @@
                     }
                     console.warn('[MjRegMgr] updateBatchAssignment error', err && err.message ? err.message : err);
                 });
+                }, [apiPost, event, onBatchesUpdate]);
+
+        var handleUpdateBatchConfig = useCallback(function (batchId, partialConfig) {
+            if (!apiPost || !event || !batchId || !partialConfig || typeof partialConfig !== 'object') {
+                return;
+            }
+
+            var eventId = event.id;
+            setBatchProcessingId(batchId + ':config');
+            apiPost('mj_regmgr_update_occurrence_batch_config', {
+                eventId: eventId,
+                batchId: batchId,
+                config: partialConfig,
+            })
+                .then(function (data) {
+                    setBatchProcessingId('');
+                    setBatchConfigDrafts(function (prev) {
+                        var next = Object.assign({}, prev || {});
+                        delete next[batchId];
+                        return next;
+                    });
+                    if (data && Array.isArray(data.occurrenceGenerationBatches)) {
+                        setLocalBatches(data.occurrenceGenerationBatches.filter(function (batch) {
+                            return batch && batch.status !== 'deleted';
+                        }));
+                        if (onBatchesUpdate) { onBatchesUpdate(data.occurrenceGenerationBatches); }
+                    }
+                    if (data && Array.isArray(data.occurrences)) {
+                        setLocalOccurrences(data.occurrences.map(function (occ, index) {
+                            return normalizeOccurrence(occ, index);
+                        }));
+                    }
+                })
+                .catch(function (err) {
+                    setBatchProcessingId('');
+                    if (typeof window !== 'undefined' && window.alert) {
+                        window.alert(err && err.message ? err.message : 'Erreur lors de la mise à jour de la configuration du lot.');
+                    }
+                    console.warn('[MjRegMgr] updateBatchConfig error', err && err.message ? err.message : err);
+                });
         }, [apiPost, event, onBatchesUpdate]);
 
-        var generatedPreviewCard = canShowGeneratedPreview && h('details', {
-            class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--fold mj-regmgr-occurrence__card--generated-preview',
-            open: true,
+        var generatedPreviewCard = canShowGeneratedPreview && h('div', {
+            class: 'mj-regmgr-occurrence__header-preview',
+            style: {
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '10px 12px',
+                borderRadius: '16px',
+                border: '1px solid rgba(148, 163, 184, 0.18)',
+                background: 'rgba(255, 255, 255, 0.82)',
+                boxShadow: '0 8px 20px rgba(15, 23, 42, 0.06)',
+                maxWidth: '560px',
+                minWidth: '280px',
+                flex: '1 1 420px',
+            },
         }, [
-            h('summary', { class: 'mj-regmgr-occurrence__fold-summary' }, [
-                h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
-                    h('span', { class: 'mj-regmgr-occurrence__fold-eyebrow' }, getString(strings, 'occurrencePreviewEyebrow', 'Rendu front partagé')),
-                    h('strong', null, getString(strings, 'occurrenceGeneratorPreviewLabel', 'Aperçu de l’horaire')),
-                ]),
-                selectedGlobalLotLines.length > 0 && h('span', { class: 'mj-regmgr-occurrence__history-item-count' },
-                    getString(strings, 'occurrenceGenerationSelectedLotsCount', '{{count}} lot(s) sélectionné(s)').replace('{{count}}', String(selectedGlobalLotLines.length))
-                ),
-                h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
+            h('div', { class: 'mj-regmgr-occurrence__header-preview-copy', style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 } }, [
+                h('strong', { style: { fontSize: '0.88rem', lineHeight: 1.2, color: '#0f172a' } }, getString(strings, 'occurrenceGeneratorPreviewLabel', 'Aperçu de l’horaire')),
             ]),
-            h('div', { class: 'mj-regmgr-occurrence__fold-body' }, [
-                h('p', { class: 'mj-regmgr-occurrence__description' },
-                    eventUsesGenerator
-                        ? getString(strings, 'occurrencePreviewDescriptionGenerated', 'Cet aperçu réutilise exactement le rendu de la page événement (mode générateur).')
-                        : getString(strings, 'occurrencePreviewDescriptionManual', 'Cet aperçu réutilise exactement le rendu de la page événement (mode manuel).')
-                ),
-                selectedGlobalLotLines.length > 0
-                    ? h('ul', { class: 'mj-regmgr-occurrence__history-list' }, selectedGlobalLotLines.map(function (line) {
-                        return h('li', { key: line.key, class: 'mj-regmgr-occurrence__history-item' }, [
-                            line.label && h('div', { class: 'mj-regmgr-occurrence__history-item-header' }, [
-                                h('strong', null, line.label),
-                            ]),
-                            h('div', {
-                                class: 'mj-regmgr-occurrence__history-item-preview',
-                                dangerouslySetInnerHTML: { __html: formatPreviewTextWithBoldWeekdays(line.text) },
-                            }),
-                            line.assignment && h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, line.assignment),
-                            line.dates && h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, line.dates),
-                        ]);
-                    }))
-                    : hasSchedulePreviewHtml
-                    ? h('div', {
-                        class: 'mj-regmgr-occurrence__preview mj-regmgr-occurrence__preview--shared',
-                        dangerouslySetInnerHTML: { __html: schedulePreviewHtml },
-                    })
-                    : h('p', { class: 'mj-regmgr-occurrence__hint' }, getString(strings, 'occurrenceSchedulePreviewEmpty', 'Aucun horaire détecté')),
-            ]),
+            selectedGlobalLotLines.length > 0 && h('div', {
+                class: 'mj-regmgr-occurrence__header-preview-text',
+                style: {
+                    fontSize: '0.84rem',
+                    lineHeight: 1.45,
+                    color: '#0f172a',
+                    overflow: 'hidden',
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    WebkitLineClamp: 2,
+                    flex: '1 1 auto',
+                    minWidth: 0,
+                },
+                dangerouslySetInnerHTML: { __html: formatPreviewTextWithBoldWeekdays(selectedGlobalLotLines[0].text) },
+            }),
+            !selectedGlobalLotLines.length && hasSchedulePreviewHtml && h('div', {
+                class: 'mj-regmgr-occurrence__header-preview-text',
+                style: {
+                    fontSize: '0.84rem',
+                    lineHeight: 1.45,
+                    color: '#0f172a',
+                    overflow: 'hidden',
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    WebkitLineClamp: 2,
+                    flex: '1 1 auto',
+                    minWidth: 0,
+                },
+                dangerouslySetInnerHTML: { __html: schedulePreviewHtml },
+            }),
+            !selectedGlobalLotLines.length && !hasSchedulePreviewHtml && h('span', { class: 'mj-regmgr-occurrence__hint', style: { fontSize: '0.84rem', margin: 0 } }, getString(strings, 'occurrenceSchedulePreviewEmpty', 'Aucun horaire détecté')),
         ]);
 
         var sidebarContent = h('div', { class: 'mj-regmgr-occurrence__sidebar' }, [
@@ -1432,8 +1492,8 @@
                         if (!batch || typeof batch !== 'object') {
                             return null;
                         }
-                        var batchId = batch.batchId || batch.batch_uuid || '';
-                        var shortId = batchId.length >= 8 ? batchId.slice(0, 8) : batchId;
+                        var batchId = batch.batchId || '';
+                        var shortId = batchId;
                         var count = typeof batch.occurrencesCount === 'number' ? batch.occurrencesCount : 0;
                         var rawDate = typeof batch.createdAt === 'string' && batch.createdAt !== '' ? batch.createdAt : '';
                         var createdAtLabel = '';
@@ -1449,9 +1509,8 @@
                             createdAtLabel = getString(strings, 'occurrenceGenerationHistoryUnknownDate', 'date inconnue');
                         }
                         var batchSummary = batch.summary && typeof batch.summary === 'object' ? batch.summary : {};
-                        var defaultLotLabel = getString(strings, 'occurrenceGenerationHistoryLot', 'Lot #{{n}}').replace('{{n}}', String(generationHistory.length - index));
                         var batchTitle = typeof batchSummary.batch_title === 'string' ? batchSummary.batch_title.trim() : '';
-                        var lotLabel = batchTitle !== '' ? batchTitle : defaultLotLabel;
+                        var lotLabel = batchTitle;
                         var countLabel = getString(strings, 'occurrenceGenerationHistoryCount', '{{count}} occurrence(s)').replace('{{count}}', String(count));
                         var lotSchedulePreview = typeof batchSummary.schedule_summary === 'string' ? batchSummary.schedule_summary : '';
                         if (!lotSchedulePreview) {
@@ -1459,21 +1518,27 @@
                         }
                         lotSchedulePreview = normalizeLegacyManualSummary(lotSchedulePreview);
                         var batchConfig = batch.configSnapshot && typeof batch.configSnapshot === 'object' ? batch.configSnapshot : {};
+                        var batchDraft = batchId && batchConfigDrafts && typeof batchConfigDrafts === 'object' && batchConfigDrafts[batchId] && typeof batchConfigDrafts[batchId] === 'object'
+                            ? batchConfigDrafts[batchId]
+                            : null;
+                        var effectiveBatchConfig = batchDraft
+                            ? Object.assign({}, batchConfig, batchDraft)
+                            : batchConfig;
                         var lotStartRaw = '';
                         var lotEndRaw = '';
-                        if (typeof batchConfig.startDate === 'string' && batchConfig.startDate !== '') {
-                            lotStartRaw = batchConfig.startDate;
-                        } else if (typeof batchConfig.startDateISO === 'string' && batchConfig.startDateISO !== '') {
-                            lotStartRaw = batchConfig.startDateISO;
-                        } else if (typeof batchConfig.start === 'string' && batchConfig.start !== '') {
-                            lotStartRaw = batchConfig.start;
+                        if (typeof effectiveBatchConfig.startDate === 'string' && effectiveBatchConfig.startDate !== '') {
+                            lotStartRaw = effectiveBatchConfig.startDate;
+                        } else if (typeof effectiveBatchConfig.startDateISO === 'string' && effectiveBatchConfig.startDateISO !== '') {
+                            lotStartRaw = effectiveBatchConfig.startDateISO;
+                        } else if (typeof effectiveBatchConfig.start === 'string' && effectiveBatchConfig.start !== '') {
+                            lotStartRaw = effectiveBatchConfig.start;
                         }
-                        if (typeof batchConfig.endDate === 'string' && batchConfig.endDate !== '') {
-                            lotEndRaw = batchConfig.endDate;
-                        } else if (typeof batchConfig.endDateISO === 'string' && batchConfig.endDateISO !== '') {
-                            lotEndRaw = batchConfig.endDateISO;
-                        } else if (typeof batchConfig.end === 'string' && batchConfig.end !== '') {
-                            lotEndRaw = batchConfig.end;
+                        if (typeof effectiveBatchConfig.endDate === 'string' && effectiveBatchConfig.endDate !== '') {
+                            lotEndRaw = effectiveBatchConfig.endDate;
+                        } else if (typeof effectiveBatchConfig.endDateISO === 'string' && effectiveBatchConfig.endDateISO !== '') {
+                            lotEndRaw = effectiveBatchConfig.endDateISO;
+                        } else if (typeof effectiveBatchConfig.end === 'string' && effectiveBatchConfig.end !== '') {
+                            lotEndRaw = effectiveBatchConfig.end;
                         }
                         var lotStartLabel = formatBatchPreviewDate(lotStartRaw);
                         var lotEndLabel = formatBatchPreviewDate(lotEndRaw);
@@ -1483,129 +1548,443 @@
                         var assignedMemberIds = Array.isArray(batchSummary.assigned_member_ids)
                             ? batchSummary.assigned_member_ids.map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; })
                             : (batchSummary.assigned_member_id ? [parseInt(batchSummary.assigned_member_id, 10)] : []);
+                        var batchOccurrenceStatus = 'planned';
+                        if (typeof batchSummary.generated_occurrence_status === 'string' && batchSummary.generated_occurrence_status !== '') {
+                            batchOccurrenceStatus = normalizeOccurrenceStatus(batchSummary.generated_occurrence_status);
+                        } else if (typeof effectiveBatchConfig.occurrenceStatus === 'string' && effectiveBatchConfig.occurrenceStatus !== '') {
+                            batchOccurrenceStatus = normalizeOccurrenceStatus(effectiveBatchConfig.occurrenceStatus);
+                        }
+                        var batchMode = typeof effectiveBatchConfig.mode === 'string' && effectiveBatchConfig.mode !== '' ? effectiveBatchConfig.mode : 'weekly';
+                        var batchFrequency = typeof effectiveBatchConfig.frequency === 'string' && effectiveBatchConfig.frequency !== ''
+                            ? effectiveBatchConfig.frequency
+                            : 'every_week';
+                        var batchStartDate = typeof effectiveBatchConfig.startDate === 'string' ? effectiveBatchConfig.startDate : '';
+                        var batchEndDate = typeof effectiveBatchConfig.endDate === 'string' ? effectiveBatchConfig.endDate : '';
+                        var batchStartTime = typeof effectiveBatchConfig.startTime === 'string' ? effectiveBatchConfig.startTime : '09:00';
+                        var batchEndTime = typeof effectiveBatchConfig.endTime === 'string' ? effectiveBatchConfig.endTime : '12:00';
+                        var batchAllDay = batchMode === 'range' && batchStartTime === '00:00' && batchEndTime === '23:59';
+                        var batchModeLabel = batchMode === 'weekly'
+                            ? getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')
+                            : (batchMode === 'monthly'
+                                ? getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')
+                                : (batchMode === 'range'
+                                    ? getString(strings, 'occurrenceGeneratorModeRange', 'Plage de dates')
+                                    : getString(strings, 'occurrenceGeneratorModeCustom', 'Date fixe')));
+                        var batchMonthlyOrdinal = typeof effectiveBatchConfig.monthlyOrdinal === 'string' && effectiveBatchConfig.monthlyOrdinal !== ''
+                            ? effectiveBatchConfig.monthlyOrdinal
+                            : 'first';
+                        var batchMonthlyWeekday = typeof effectiveBatchConfig.monthlyWeekday === 'string' && effectiveBatchConfig.monthlyWeekday !== ''
+                            ? effectiveBatchConfig.monthlyWeekday
+                            : 'mon';
+                        var batchDays = { mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun: false };
+                        if (Array.isArray(effectiveBatchConfig.days)) {
+                            effectiveBatchConfig.days.forEach(function (dayKey) {
+                                if (typeof dayKey === 'string' && Object.prototype.hasOwnProperty.call(batchDays, dayKey)) {
+                                    batchDays[dayKey] = true;
+                                }
+                            });
+                        } else if (effectiveBatchConfig.days && typeof effectiveBatchConfig.days === 'object') {
+                            Object.keys(batchDays).forEach(function (dayKey) {
+                                batchDays[dayKey] = !!effectiveBatchConfig.days[dayKey];
+                            });
+                        }
+                        var updateBatchConfigDraft = function (changes) {
+                            var payload = {
+                                mode: batchMode,
+                                frequency: batchFrequency,
+                                startDate: batchStartDate,
+                                endDate: batchEndDate,
+                                startTime: batchStartTime,
+                                endTime: batchEndTime,
+                                monthlyOrdinal: batchMonthlyOrdinal,
+                                monthlyWeekday: batchMonthlyWeekday,
+                                days: batchDays,
+                            };
+                            if (changes && typeof changes === 'object') {
+                                Object.keys(changes).forEach(function (key) {
+                                    payload[key] = changes[key];
+                                });
+                            }
+                            setBatchConfigDrafts(function (prev) {
+                                var next = Object.assign({}, prev || {});
+                                next[batchId] = payload;
+                                return next;
+                            });
+                        };
+                        var saveBatchConfig = function () {
+                            var payload = {
+                                mode: batchMode,
+                                frequency: batchFrequency,
+                                startDate: batchStartDate,
+                                endDate: batchEndDate,
+                                startTime: batchStartTime,
+                                endTime: batchEndTime,
+                                monthlyOrdinal: batchMonthlyOrdinal,
+                                monthlyWeekday: batchMonthlyWeekday,
+                                days: batchDays,
+                            };
+                            handleUpdateBatchConfig(batchId, payload);
+                        };
                         var isProcessing = batchProcessingId !== '';
+                        var lotStateTone = includeInGlobalSchedule ? 'shared' : (batchOccurrenceStatus === 'cancelled' ? 'cancelled' : (batchOccurrenceStatus === 'confirmed' ? 'confirmed' : 'planned'));
+                        var lotStatsLabel = countLabel + (batchAllDay ? ' • ' + getString(strings, 'occurrenceAllDayLabel', 'Toute la journée') : ' • ' + batchStartTime + ' → ' + batchEndTime);
+                        var lotPrimaryMeta = [];
+                        if (lotStartLabel || lotEndLabel) {
+                            lotPrimaryMeta.push(lotStartLabel || '—');
+                            if (lotEndLabel) {
+                                lotPrimaryMeta.push(lotEndLabel);
+                            }
+                        }
+                        var lotSecondaryMeta = [];
+                        lotSecondaryMeta.push(getString(strings, 'occurrenceGenerationHistoryCount', '{{count}} occurrence(s)').replace('{{count}}', String(count)));
+                        lotSecondaryMeta.push(getString(strings, 'occurrenceGenerationHistoryUnknownDate', 'date inconnue'));
+                        var lotCardStyle = {
+                            border: '1px solid rgba(15, 23, 42, 0.08)',
+                            borderRadius: '24px',
+                            background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)',
+                            boxShadow: '0 14px 40px rgba(15, 23, 42, 0.08)',
+                            padding: '20px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '18px',
+                        };
+                        var lotTopbarStyle = {
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            justifyContent: 'space-between',
+                            gap: '16px',
+                        };
+                        var lotIdentityStyle = {
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            minWidth: 0,
+                        };
+                        var lotBadgeStyle = {
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            width: 'fit-content',
+                            padding: '5px 10px',
+                            borderRadius: '999px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            letterSpacing: '0.04em',
+                            textTransform: 'uppercase',
+                        };
+                        var lotHeroStyle = {
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px',
+                            padding: '16px',
+                            borderRadius: '20px',
+                            background: lotStateTone === 'shared'
+                                ? 'linear-gradient(135deg, rgba(14, 116, 144, 0.12), rgba(14, 165, 233, 0.08))'
+                                : (lotStateTone === 'cancelled'
+                                    ? 'linear-gradient(135deg, rgba(220, 38, 38, 0.10), rgba(248, 113, 113, 0.06))'
+                                    : (lotStateTone === 'confirmed'
+                                        ? 'linear-gradient(135deg, rgba(22, 163, 74, 0.10), rgba(74, 222, 128, 0.06))'
+                                        : 'linear-gradient(135deg, rgba(249, 250, 251, 0.96), rgba(255, 255, 255, 0.96))')),
+                            border: '1px solid rgba(15, 23, 42, 0.06)',
+                        };
+                        var lotPillRowStyle = {
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '8px',
+                        };
+                        var lotFlagsStyle = {
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                            gap: '12px',
+                        };
+                        var lotMetaGridStyle = {
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                            gap: '12px',
+                        };
+                        var lotConfigStyle = {
+                            marginTop: '4px',
+                            borderRadius: '18px',
+                            border: '1px solid rgba(148, 163, 184, 0.18)',
+                            background: 'rgba(255,255,255,0.7)',
+                            overflow: 'hidden',
+                        };
+                        var lotConfigBodyStyle = {
+                            paddingTop: '14px',
+                        };
+                        var lotFooterStyle = {
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            paddingTop: '8px',
+                        };
                         return h('li', {
                             key: batchId || ('batch-' + index),
-                            class: 'mj-regmgr-occurrence__history-item',
+                            class: classNames('mj-regmgr-occurrence__history-item', 'mj-regmgr-occurrence__batch-card', 'mj-regmgr-occurrence__batch-card--' + lotStateTone, {
+                                'mj-regmgr-occurrence__batch-card--selected': !!includeInGlobalSchedule,
+                                'mj-regmgr-occurrence__batch-card--has-dates': !!(lotStartLabel || lotEndLabel),
+                            }),
+                            style: lotCardStyle,
                         }, [
-                            h('div', { class: 'mj-regmgr-occurrence__history-item-header' }, [
-                                h('strong', null, lotLabel),
-                                h('span', { class: 'mj-regmgr-occurrence__history-item-count' }, countLabel),
-                                apiPost && h('button', {
-                                    type: 'button',
-                                    class: 'mj-regmgr-occurrence__history-item-rename',
-                                    disabled: isProcessing,
-                                    title: getString(strings, 'occurrenceGenerationRenameBatch', 'Renommer le lot'),
-                                    onClick: function () { handleRenameBatch(batchId, batchTitle); },
-                                }, getString(strings, 'occurrenceGenerationRenameBatch', 'Renommer')),
-                                apiPost && h('button', {
-                                    type: 'button',
-                                    class: 'mj-regmgr-occurrence__history-item-delete',
-                                    disabled: isProcessing,
-                                    title: getString(strings, 'occurrenceGenerationDeleteBatch', 'Supprimer ce lot'),
-                                    onClick: function () {
-                                        var confirmMsg = getString(strings, 'occurrenceGenerationDeleteConfirm', 'Supprimer les {{count}} occurrence(s) de ce lot ?').replace('{{count}}', String(count));
-                                        if (window.confirm(confirmMsg)) {
-                                            handleDeleteBatch(batchId);
-                                        }
-                                    },
-                                }, getString(strings, 'occurrenceGenerationDeleteBatch', 'Supprimer')),
+                            h('div', { class: 'mj-regmgr-occurrence__batch-card__topbar', style: lotTopbarStyle }, [
+                                h('div', { class: 'mj-regmgr-occurrence__batch-card__identity', style: lotIdentityStyle }, [
+                                    lotLabel !== '' && h('strong', { class: 'mj-regmgr-occurrence__batch-card__title', style: { fontSize: '1.12rem', lineHeight: 1.15, letterSpacing: '-0.02em' } }, lotLabel),
+                                    h('span', { class: 'mj-regmgr-occurrence__history-item-count', style: { fontSize: '0.88rem', color: '#475569' } }, countLabel + ' • ' + batchModeLabel),
+                                ]),
+                                h('div', { class: 'mj-regmgr-occurrence__batch-card__actions', style: { display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' } }, [
+                                    apiPost && h('button', {
+                                        type: 'button',
+                                        class: 'mj-regmgr-occurrence__batch-card__action mj-regmgr-occurrence__batch-card__action--ghost mj-regmgr-occurrence__batch-card__action--icon',
+                                        style: { width: '34px', height: '34px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
+                                        disabled: isProcessing,
+                                        title: getString(strings, 'occurrenceGenerationRenameBatch', 'Renommer le lot'),
+                                        onClick: function () { handleRenameBatch(batchId, batchTitle); },
+                                    }, h('span', {
+                                        class: 'mj-btn__icon',
+                                        'aria-hidden': true,
+                                        dangerouslySetInnerHTML: {
+                                            __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+                                        },
+                                    })),
+                                    apiPost && h('button', {
+                                        type: 'button',
+                                        class: 'mj-regmgr-occurrence__batch-card__action mj-regmgr-occurrence__batch-card__action--danger mj-regmgr-occurrence__batch-card__action--icon',
+                                        style: { width: '34px', height: '34px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
+                                        disabled: isProcessing,
+                                        title: getString(strings, 'occurrenceGenerationDeleteBatch', 'Supprimer ce lot'),
+                                        onClick: function () {
+                                            var confirmMsg = getString(strings, 'occurrenceGenerationDeleteConfirm', 'Supprimer les {{count}} occurrence(s) de ce lot ?').replace('{{count}}', String(count));
+                                            if (window.confirm(confirmMsg)) {
+                                                handleDeleteBatch(batchId);
+                                            }
+                                        },
+                                    }, h('span', {
+                                        class: 'mj-btn__icon',
+                                        'aria-hidden': true,
+                                        dangerouslySetInnerHTML: {
+                                            __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
+                                        },
+                                    })),
+                                ]),
                             ]),
-                            h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, [
-                                h('span', { class: 'mj-regmgr-occurrence__history-item-id', title: batchId }, shortId ? shortId + '…' : getString(strings, 'occurrenceGenerationHistoryUnknownBatch', 'Lot sans identifiant')),
-                                h('span', { class: 'mj-regmgr-occurrence__history-item-date' }, createdAtLabel),
+                            h('div', { class: 'mj-regmgr-occurrence__batch-card__hero', style: lotHeroStyle }, [
+                                h('div', { class: 'mj-regmgr-occurrence__batch-card__pill-row', style: lotPillRowStyle }, [
+                                    h('span', { class: 'mj-regmgr-occurrence__batch-card__pill mj-regmgr-occurrence__batch-card__pill--count', style: Object.assign({}, lotBadgeStyle, { background: 'rgba(15, 118, 110, 0.14)', color: '#115e59' }) }, lotStatsLabel),
+                                    h('span', { class: 'mj-regmgr-occurrence__batch-card__pill mj-regmgr-occurrence__batch-card__pill--meta', style: Object.assign({}, lotBadgeStyle, { background: 'rgba(15, 23, 42, 0.08)', color: '#334155' }) }, shortId ? ('#' + shortId) : getString(strings, 'occurrenceGenerationHistoryUnknownBatch', 'Lot sans identifiant')),
+                                    h('span', { class: 'mj-regmgr-occurrence__batch-card__pill mj-regmgr-occurrence__batch-card__pill--date', style: Object.assign({}, lotBadgeStyle, { background: 'rgba(217, 119, 6, 0.12)', color: '#92400e' }) }, createdAtLabel),
+                                ]),
+                                lotSchedulePreview && h('div', { class: 'mj-regmgr-occurrence__batch-card__preview', style: { fontSize: '0.96rem', lineHeight: 1.6, color: '#0f172a' } }, lotSchedulePreview),
                             ]),
-                            h('div', { class: 'mj-regmgr-occurrence__history-item-preview' }, lotSchedulePreview),
-                            (lotStartLabel || lotEndLabel) && h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, [
-                                lotStartLabel && h('span', null,
-                                    getString(strings, 'occurrenceGenerationPreviewStartDate', 'Date de début : {{value}}').replace('{{value}}', lotStartLabel)
-                                ),
-                                lotEndLabel && h('span', null,
-                                    getString(strings, 'occurrenceGenerationPreviewEndDate', 'Date de fin : {{value}}').replace('{{value}}', lotEndLabel)
-                                ),
-                            ]),
-                            apiPost && h('label', { class: 'mj-regmgr-occurrence__history-item-flag' }, [
-                                h('input', {
-                                    type: 'checkbox',
-                                    checked: includeInGlobalSchedule,
-                                    disabled: isProcessing,
-                                    onChange: function (e) {
-                                        handleToggleBatchScheduleFlag(batchId, e.currentTarget.checked);
-                                    },
-                                }),
-                                h('span', null, getString(strings, 'occurrenceGenerationAddToGlobalSchedule', 'Ajouter à l\'horaire global')),
-                            ]),
-                            apiPost && h('label', { class: 'mj-regmgr-occurrence__history-item-flag' }, [
-                                h('input', {
-                                    type: 'checkbox',
-                                    checked: includeDatesInSchedulePreview,
-                                    disabled: isProcessing,
-                                    onChange: function (e) {
-                                        handleToggleBatchPreviewDatesFlag(batchId, e.currentTarget.checked);
-                                    },
-                                }),
-                                h('span', null, getString(strings, 'occurrenceGenerationIncludeDatesInPreview', 'Ajouter date début/fin dans l\'aperçu horaire')),
-                            ]),
-                            apiPost && h('div', { class: 'mj-regmgr-occurrence__history-item-assignments' }, [
-                                h('label', { class: 'mj-regmgr-occurrence__history-item-assignment' }, [
-                                    h('span', null, getString(strings, 'occurrenceGenerationAssignLocation', 'Lieu du lot')),
-                                    h('select', {
-                                        class: 'mj-regmgr-occurrence__history-item-assignment-select',
-                                        value: assignedLocationId > 0 ? String(assignedLocationId) : '',
+                            h('div', { class: 'mj-regmgr-occurrence__batch-card__flags', style: lotFlagsStyle }, [
+                                apiPost && h('label', { class: 'mj-regmgr-occurrence__history-item-flag mj-regmgr-occurrence__batch-card__flag', style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '16px', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(148, 163, 184, 0.16)' } }, [
+                                    h('input', {
+                                        type: 'checkbox',
+                                        checked: includeInGlobalSchedule,
                                         disabled: isProcessing,
                                         onChange: function (e) {
-                                            var nextLocationId = parseInt(e.currentTarget.value || '0', 10);
-                                            handleUpdateBatchAssignment(batchId, nextLocationId, assignedMemberIds);
+                                            handleToggleBatchScheduleFlag(batchId, e.currentTarget.checked);
                                         },
-                                    }, [
-                                        h('option', { value: '' }, getString(strings, 'occurrenceGenerationAssignLocationPlaceholder', 'Choisir un lieu...')),
-                                    ].concat(lotLocationOptions.map(function (option) {
-                                        return h('option', { key: 'loc-' + option.id, value: String(option.id) }, option.name);
-                                    }))),
+                                    }),
+                                    h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationAddToGlobalSchedule', 'Ajouter à l\'horaire global')),
                                 ]),
-                                h('div', { class: 'mj-regmgr-occurrence__history-item-assignment' }, [
-                                    h('span', null, getString(strings, 'occurrenceGenerationAssignMember', 'Membre assigné (optionnel)')),
-                                    h('div', { class: 'mj-regmgr-occurrence__history-item-assignment-checkboxes' },
-                                        lotMemberOptions.length === 0
-                                            ? h('span', { class: 'mj-regmgr-occurrence__hint' }, getString(strings, 'occurrenceGenerationAssignMemberPlaceholder', 'Aucun membre'))
-                                            : lotMemberOptions.map(function (option) {
-                                                var checked = assignedMemberIds.indexOf(option.id) !== -1;
-                                                return h('label', {
-                                                    key: 'mem-check-' + option.id,
-                                                    class: 'mj-regmgr-occurrence__history-item-assignment-check',
-                                                }, [
-                                                    h('input', {
-                                                        type: 'checkbox',
-                                                        checked: checked,
-                                                        disabled: isProcessing,
-                                                        onChange: function (e) {
-                                                            var next = assignedMemberIds.slice();
-                                                            if (e.currentTarget.checked) {
-                                                                if (next.indexOf(option.id) === -1) {
-                                                                    next.push(option.id);
-                                                                }
-                                                            } else {
-                                                                next = next.filter(function (id) { return id !== option.id; });
-                                                            }
-                                                            handleUpdateBatchAssignment(batchId, assignedLocationId, next);
-                                                        },
-                                                    }),
-                                                    h('span', null, option.name),
-                                                ]);
-                                            })
-                                    ),
+                                apiPost && h('label', { class: 'mj-regmgr-occurrence__history-item-flag mj-regmgr-occurrence__batch-card__flag', style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '16px', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(148, 163, 184, 0.16)' } }, [
+                                    h('input', {
+                                        type: 'checkbox',
+                                        checked: includeDatesInSchedulePreview,
+                                        disabled: isProcessing,
+                                        onChange: function (e) {
+                                            handleToggleBatchPreviewDatesFlag(batchId, e.currentTarget.checked);
+                                        },
+                                    }),
+                                    h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationIncludeDatesInPreview', 'Ajouter date début/fin dans l\'aperçu horaire')),
+                                ]),
+                            ]),
+                            apiPost && h('details', {
+                                class: 'mj-regmgr-occurrence__history-item-assignment mj-regmgr-occurrence__history-item-config-fold mj-regmgr-occurrence__batch-card__config',
+                                open: false,
+                            }, [
+                                h('summary', { class: 'mj-regmgr-occurrence__fold-summary mj-regmgr-occurrence__history-config-summary' }, [
+                                    h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
+                                        h('span', { class: 'mj-regmgr-occurrence__history-config-title' }, getString(strings, 'occurrenceGenerationBatchConfigTitle', 'Configuration du lot')),
+                                    ]),
+                                    h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
+                                ]),
+                                h('div', { class: 'mj-regmgr-occurrence__fold-body mj-regmgr-occurrence__batch-card__config-body' }, [
+                                    h('div', { class: 'mj-regmgr-occurrence__form-row mj-regmgr-occurrence__batch-card__grid' }, [
+                                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorModeLabel', 'Mode')),
+                                            h('select', {
+                                                class: 'mj-regmgr-occurrence__history-item-assignment-select',
+                                                value: batchMode,
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    var nextMode = e.currentTarget.value;
+                                                    updateBatchConfigDraft({ mode: nextMode });
+                                                },
+                                            }, [
+                                                h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Ajoute date unique')),
+                                                h('option', { value: 'range' }, getString(strings, 'occurrenceGeneratorModeRange', 'Plage de dates')),
+                                                h('option', { value: 'weekly' }, getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')),
+                                                h('option', { value: 'monthly' }, getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')),
+                                            ]),
+                                        ]),
+                                        (batchMode === 'weekly') && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorFrequencyLabel', 'Fréquence')),
+                                            h('select', {
+                                                class: 'mj-regmgr-occurrence__history-item-assignment-select',
+                                                value: batchFrequency,
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    updateBatchConfigDraft({ frequency: e.currentTarget.value });
+                                                },
+                                            }, [
+                                                h('option', { value: 'every_week' }, getString(strings, 'occurrenceGeneratorEveryWeek', 'Chaque semaine')),
+                                                h('option', { value: 'every_two_weeks' }, getString(strings, 'occurrenceGeneratorEveryTwoWeeks', 'Toutes les deux semaines')),
+                                            ]),
+                                        ]),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-occurrence__form-row mj-regmgr-occurrence__batch-card__grid' }, [
+                                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorStartDate', 'Date de début')),
+                                            h('input', {
+                                                type: 'date',
+                                                class: 'mj-regmgr-occurrence__input',
+                                                value: batchStartDate,
+                                                disabled: isProcessing,
+                                                onInput: function (e) {
+                                                    updateBatchConfigDraft({ startDate: e.currentTarget.value });
+                                                },
+                                            }),
+                                        ]),
+                                        (batchMode !== 'custom') && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorEndDate', 'Date de fin')),
+                                            h('input', {
+                                                type: 'date',
+                                                class: 'mj-regmgr-occurrence__input',
+                                                value: batchEndDate,
+                                                disabled: isProcessing,
+                                                onInput: function (e) {
+                                                    updateBatchConfigDraft({ endDate: e.currentTarget.value });
+                                                },
+                                            }),
+                                        ]),
+                                    ]),
+                                    (batchMode === 'range') && h('div', { class: 'mj-regmgr-occurrence__form-field mj-regmgr-occurrence__batch-card__full-row' }, [
+                                        h('label', { class: 'mj-regmgr-occurrence__label' }, [
+                                            h('input', {
+                                                type: 'checkbox',
+                                                checked: batchAllDay,
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    var checked = !!e.currentTarget.checked;
+                                                    if (checked) {
+                                                        updateBatchConfigDraft({ startTime: '00:00', endTime: '23:59' });
+                                                    } else {
+                                                        updateBatchConfigDraft({ startTime: '09:00', endTime: '17:00' });
+                                                    }
+                                                },
+                                            }),
+                                            ' ',
+                                            getString(strings, 'occurrenceAllDayCheckbox', 'Toute la journée'),
+                                        ]),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-occurrence__form-row mj-regmgr-occurrence__batch-card__grid' }, [
+                                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceStartLabel', 'Heure de début')),
+                                            h('input', {
+                                                type: 'time',
+                                                class: 'mj-regmgr-occurrence__input',
+                                                value: batchStartTime,
+                                                disabled: isProcessing || batchAllDay,
+                                                onInput: function (e) {
+                                                    updateBatchConfigDraft({ startTime: e.currentTarget.value });
+                                                },
+                                            }),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceEndLabel', 'Heure de fin')),
+                                            h('input', {
+                                                type: 'time',
+                                                class: 'mj-regmgr-occurrence__input',
+                                                value: batchEndTime,
+                                                disabled: isProcessing || batchAllDay,
+                                                onInput: function (e) {
+                                                    updateBatchConfigDraft({ endTime: e.currentTarget.value });
+                                                },
+                                            }),
+                                        ]),
+                                    ]),
+                                    (batchMode === 'weekly') && h('div', { class: 'mj-regmgr-occurrence__days mj-regmgr-occurrence__batch-card__days' }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, dayIndex) {
+                                        return h('label', {
+                                            key: 'batch-day-' + batchId + '-' + dayKey,
+                                            class: classNames('mj-regmgr-occurrence__day-row', {
+                                                'mj-regmgr-occurrence__day-row--active': !!batchDays[dayKey],
+                                            }),
+                                        }, [
+                                            h('input', {
+                                                type: 'checkbox',
+                                                class: 'mj-regmgr-occurrence__day-row-checkbox',
+                                                checked: !!batchDays[dayKey],
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    var nextDays = Object.assign({}, batchDays);
+                                                    nextDays[dayKey] = !!e.currentTarget.checked;
+                                                    updateBatchConfigDraft({ days: nextDays });
+                                                },
+                                            }),
+                                            h('span', { class: 'mj-regmgr-occurrence__day-row-label' }, weekdayLabels[dayIndex] || dayKey),
+                                        ]);
+                                    })),
+                                    (batchMode === 'monthly') && h('div', { class: 'mj-regmgr-occurrence__form-row mj-regmgr-occurrence__batch-card__grid' }, [
+                                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyOrdinalLabel', 'Ordre dans le mois')),
+                                            h('select', {
+                                                class: 'mj-regmgr-occurrence__history-item-assignment-select',
+                                                value: batchMonthlyOrdinal,
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    updateBatchConfigDraft({ monthlyOrdinal: e.currentTarget.value });
+                                                },
+                                            }, monthlyOrdinalOptions.map(function (option) {
+                                                return h('option', { key: option.value, value: option.value }, option.label);
+                                            })),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyWeekdayLabel', 'Jour de la semaine')),
+                                            h('select', {
+                                                class: 'mj-regmgr-occurrence__history-item-assignment-select',
+                                                value: batchMonthlyWeekday,
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    updateBatchConfigDraft({ monthlyWeekday: e.currentTarget.value });
+                                                },
+                                            }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, dayIndex) {
+                                                return h('option', { key: dayKey, value: dayKey }, weekdayFullLabels[dayIndex] || weekdayLabels[dayIndex]);
+                                            })),
+                                        ]),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-occurrence__history-item-actions mj-regmgr-occurrence__batch-card__footer', style: lotFooterStyle }, [
+                                        h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--primary',
+                                            disabled: isProcessing,
+                                            onClick: saveBatchConfig,
+                                        }, getString(strings, 'occurrenceGenerationSaveBatchConfig', 'Enregistrer')),
+                                    ]),
                                 ]),
                             ]),
                         ]);
                     })),
                 ]),
             ]),
-            generatedPreviewCard,
             !shouldShowEditorCard && h('p', { class: 'mj-regmgr-occurrence__hint mj-regmgr-occurrence__hint--empty' },
                 getString(strings, 'occurrenceEmptySelection', 'Sélectionnez une date dans le calendrier pour commencer.')
             ),
-            shouldShowEditorCard && h('div', { class: 'mj-regmgr-occurrence__card' }, [
-                h('h2', null, editorCardTitle),
+            shouldShowEditorCard && h(Modals.Modal, {
+                isOpen: occurrenceEditorModal.isOpen,
+                onClose: handleCancelEdit,
+                title: editorCardTitle,
+                size: 'large',
+            }, [
+                h('div', { class: 'mj-regmgr-occurrence__card' }, [
                 selectedOccurrence && selectedDayOccurrences.length > 1 && h('div', { class: 'mj-regmgr-occurrence__occurrence-list' }, selectedDayOccurrences.map(function (item) {
                     var chipStatus = item && typeof item.status === 'string' ? normalizeOccurrenceStatus(item.status) : '';
                     return h('button', {
@@ -1709,6 +2088,7 @@
                         disabled: isPersisting,
                     }, getString(strings, 'occurrenceDeleteButton', 'Supprimer')),
                 ]),
+                ]),
             ]),
             canShowGeneratorForm && h('details', {
                 class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--fold',
@@ -1795,6 +2175,32 @@
                             }),
                         ]),
                     ]),
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, [
+                            h('input', {
+                                type: 'checkbox',
+                                checked: !!generatorAllDay,
+                                onChange: function (event) {
+                                    var checked = !!event.currentTarget.checked;
+                                    setGeneratorState(function (prev) {
+                                        var next = Object.assign({}, prev);
+                                        if (checked) {
+                                            next.startTime = '00:00';
+                                            next.endTime = '23:59';
+                                        } else {
+                                            if (next.startTime === '00:00' && next.endTime === '23:59') {
+                                                next.startTime = '09:00';
+                                                next.endTime = '17:00';
+                                            }
+                                        }
+                                        return next;
+                                    });
+                                },
+                            }),
+                            ' ',
+                            getString(strings, 'occurrenceAllDayCheckbox', 'Toute la journée'),
+                        ]),
+                    ]),
                     h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
                         h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
                             h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceStartLabel', 'Heure de début')),
@@ -1802,6 +2208,7 @@
                                 type: 'time',
                                 class: 'mj-regmgr-occurrence__input',
                                 value: generatorStartTime,
+                                disabled: !!generatorAllDay,
                                 onInput: function (event) { handleGeneratorChange('startTime', event.currentTarget.value); },
                             }),
                         ]),
@@ -1811,6 +2218,7 @@
                                 type: 'time',
                                 class: 'mj-regmgr-occurrence__input',
                                 value: generatorEndTime,
+                                disabled: !!generatorAllDay,
                                 onInput: function (event) { handleGeneratorChange('endTime', event.currentTarget.value); },
                             }),
                         ]),
@@ -1842,7 +2250,7 @@
                                         'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.start),
                                     }),
                                     value: startValue || '',
-                                    disabled: !isActive,
+                                    disabled: !isActive || !!generatorAllDay,
                                     onInput: function (event) { handleGeneratorTimeChange(dayKey, 'start', event.currentTarget.value); },
                                 }),
                                 h('span', { class: 'mj-regmgr-occurrence__day-row-separator' }, ' - '),
@@ -1852,7 +2260,7 @@
                                         'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.end),
                                     }),
                                     value: endValue || '',
-                                    disabled: !isActive,
+                                    disabled: !isActive || !!generatorAllDay,
                                     onInput: function (event) { handleGeneratorTimeChange(dayKey, 'end', event.currentTarget.value); },
                                 }),
                             ]),
@@ -1912,7 +2320,7 @@
             setSchedulePreviewAutoSync(true);
         }, [buildGeneratorPlan, computeSchedulePreview]);
 
-        var persistOccurrences = useCallback(function (nextList, rollback, previewOverride, clearGenerator) {
+        var persistOccurrences = useCallback(function (nextList, rollback, previewOverride, clearGenerator, persistOptions) {
             if (!onPersistOccurrences) {
                 return Promise.resolve();
             }
@@ -1920,7 +2328,8 @@
             var summaryPayload = typeof previewOverride === 'string' ? previewOverride : schedulePreview;
             var planResult = buildGeneratorPlan();
             var generatorPayload = clearGenerator === true ? {} : serializeGeneratorPlan(planResult, generatorState);
-            return Promise.resolve(onPersistOccurrences(nextList, summaryPayload, generatorPayload))
+            var optionsPayload = persistOptions && typeof persistOptions === 'object' ? persistOptions : {};
+            return Promise.resolve(onPersistOccurrences(nextList, summaryPayload, generatorPayload, optionsPayload))
                 .then(function (result) {
                     var responseEvent = result && result.event && typeof result.event === 'object'
                         ? result.event
@@ -1963,7 +2372,8 @@
                 baseState.date = day.iso;
                 setEditorState(baseState);
             }
-        }, []);
+            occurrenceEditorModal.open({ date: day.iso });
+        }, [occurrenceEditorModal.open, setEditorState, setSelectedOccurrenceId]);
 
         var handleEditorChange = useCallback(function (field, value) {
             setEditorState(function (prev) {
@@ -1974,12 +2384,13 @@
         }, []);
 
         var handleCancelEdit = useCallback(function () {
+            occurrenceEditorModal.close();
             var reset = createEditorState(selectedOccurrence);
             if (!selectedOccurrence && editorState && editorState.date) {
                 reset.date = editorState.date;
             }
             setEditorState(reset);
-        }, [selectedOccurrence, editorState]);
+        }, [occurrenceEditorModal.close, selectedOccurrence, editorState]);
 
         var handleUpdateOccurrence = useCallback(function () {
             if (!editorState || !editorState.date) {
@@ -2178,7 +2589,7 @@
                 setSchedulePreview(previousPreviewValue);
                 setSchedulePreviewVisible(previousPreviewVisible);
                 setSchedulePreviewAutoSync(previousPreviewAutoSync);
-            }, '', true).catch(function () {
+            }, '', true, { purgeBatches: true }).catch(function () {
                 // Parent handles notification
             });
         }, [localOccurrences, strings, selectedOccurrenceId, editorState, persistOccurrences, schedulePreview, schedulePreviewVisible, schedulePreviewAutoSync]);
@@ -2460,52 +2871,57 @@
 
         return h('div', { class: 'mj-regmgr-occurrence' }, [
             h('div', { class: 'mj-regmgr-occurrence__header' }, [
-                h('div', { class: 'mj-regmgr-occurrence__heading' }, [
-                    h('h2', null, getString(strings, 'occurrencePanelTitle', 'Gestionnaire d\'occurrences')),
-                    headingSubLabel && h('span', { class: 'mj-regmgr-occurrence__subheading' }, headingSubLabel),
+                h('div', { class: 'mj-regmgr-occurrence__header-main', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' } }, [
+                    h('div', { class: 'mj-regmgr-occurrence__heading' }, [
+                        h('h2', null, getString(strings, 'occurrencePanelTitle', 'Gestionnaire d\'occurrences')),
+                        headingSubLabel && h('span', { class: 'mj-regmgr-occurrence__subheading' }, headingSubLabel),
+                    ]),
+                    h('div', { class: 'mj-regmgr-occurrence__header-controls' }, [
+                        h('div', { class: 'mj-regmgr-occurrence__nav' }, [
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-regmgr-occurrence__nav-button',
+                                'aria-label': getString(strings, 'occurrenceNavPrevious', 'Mois précédent'),
+                                onClick: function () { handleShiftPivot(-1); },
+                            }, [
+                                h('span', { class: 'mj-regmgr-occurrence__nav-icon', 'aria-hidden': true }, '‹'),
+                            ]),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-regmgr-occurrence__nav-button',
+                                'aria-label': getString(strings, 'occurrenceNavNext', 'Mois suivant'),
+                                onClick: function () { handleShiftPivot(1); },
+                            }, [
+                                h('span', { class: 'mj-regmgr-occurrence__nav-icon', 'aria-hidden': true }, '›'),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-occurrence__view-toggle' }, [
+                            h('button', {
+                                type: 'button',
+                                class: classNames('mj-regmgr-occurrence__view-button', {
+                                    'mj-regmgr-occurrence__view-button--active': viewMode === 'quarter',
+                                }),
+                                onClick: function () { setViewMode('quarter'); },
+                            }, getString(strings, 'occurrenceViewQuarter', '4 mois')),
+                            h('button', {
+                                type: 'button',
+                                class: classNames('mj-regmgr-occurrence__view-button', {
+                                    'mj-regmgr-occurrence__view-button--active': viewMode === 'month',
+                                }),
+                                onClick: function () { setViewMode('month'); },
+                            }, getString(strings, 'occurrenceViewMonth', 'Mois')),
+                            h('button', {
+                                type: 'button',
+                                class: classNames('mj-regmgr-occurrence__view-button', {
+                                    'mj-regmgr-occurrence__view-button--active': viewMode === 'week',
+                                }),
+                                onClick: function () { setViewMode('week'); },
+                            }, getString(strings, 'occurrenceViewWeek', 'Semaine')),
+                        ]),
+                    ]),
                 ]),
-                h('div', { class: 'mj-regmgr-occurrence__header-controls' }, [
-                    h('div', { class: 'mj-regmgr-occurrence__nav' }, [
-                        h('button', {
-                            type: 'button',
-                            class: 'mj-regmgr-occurrence__nav-button',
-                            'aria-label': getString(strings, 'occurrenceNavPrevious', 'Mois précédent'),
-                            onClick: function () { handleShiftPivot(-1); },
-                        }, [
-                            h('span', { class: 'mj-regmgr-occurrence__nav-icon', 'aria-hidden': true }, '‹'),
-                        ]),
-                        h('button', {
-                            type: 'button',
-                            class: 'mj-regmgr-occurrence__nav-button',
-                            'aria-label': getString(strings, 'occurrenceNavNext', 'Mois suivant'),
-                            onClick: function () { handleShiftPivot(1); },
-                        }, [
-                            h('span', { class: 'mj-regmgr-occurrence__nav-icon', 'aria-hidden': true }, '›'),
-                        ]),
-                    ]),
-                    h('div', { class: 'mj-regmgr-occurrence__view-toggle' }, [
-                        h('button', {
-                            type: 'button',
-                            class: classNames('mj-regmgr-occurrence__view-button', {
-                                'mj-regmgr-occurrence__view-button--active': viewMode === 'quarter',
-                            }),
-                            onClick: function () { setViewMode('quarter'); },
-                        }, getString(strings, 'occurrenceViewQuarter', '4 mois')),
-                        h('button', {
-                            type: 'button',
-                            class: classNames('mj-regmgr-occurrence__view-button', {
-                                'mj-regmgr-occurrence__view-button--active': viewMode === 'month',
-                            }),
-                            onClick: function () { setViewMode('month'); },
-                        }, getString(strings, 'occurrenceViewMonth', 'Mois')),
-                        h('button', {
-                            type: 'button',
-                            class: classNames('mj-regmgr-occurrence__view-button', {
-                                'mj-regmgr-occurrence__view-button--active': viewMode === 'week',
-                            }),
-                            onClick: function () { setViewMode('week'); },
-                        }, getString(strings, 'occurrenceViewWeek', 'Semaine')),
-                    ]),
+                generatedPreviewCard && h('div', { class: 'mj-regmgr-occurrence__header-preview-row', style: { marginTop: '12px', display: 'flex', justifyContent: 'flex-start' } }, [
+                    generatedPreviewCard,
                 ]),
             ]),
 
@@ -2661,6 +3077,7 @@
                                                 onClick: function (event) {
                                                     event.stopPropagation();
                                                     setSelectedOccurrenceId(occurrence.id);
+                                                    occurrenceEditorModal.open({ date: occurrence.date });
                                                 },
                                                 'aria-label': ariaLabel,
                                             }, [
@@ -2836,6 +3253,28 @@
         return startLabel || endLabel || '';
     }
 
+    function normalizeTimeValue(value) {
+        if (typeof value !== 'string') {
+            return '';
+        }
+        var trimmed = value.trim();
+        var match = trimmed.match(/^(\d{2}:\d{2})(?::\d{2})?$/);
+        return match ? match[1] : trimmed;
+    }
+
+    function isAllDayTimeRange(start, end) {
+        var startValue = normalizeTimeValue(start);
+        var endValue = normalizeTimeValue(end);
+        return startValue === '00:00' && endValue === '23:59';
+    }
+
+    function formatSchedulePreviewRange(start, end) {
+        if (isAllDayTimeRange(start, end)) {
+            return '';
+        }
+        return formatPreviewRange(start, end);
+    }
+
     function formatPreviewTextWithBoldWeekdays(text) {
         if (typeof text !== 'string' || text === '') {
             return '';
@@ -3003,11 +3442,8 @@
             var override = overrides[dayKey] || {};
             var startTime = override.start || plan.startTime || '';
             var endTime = override.end || plan.endTime || '';
-            var range = formatPreviewRange(startTime, endTime);
-            if (!range) {
-                return;
-            }
-            segments.push(label + ' ' + range);
+            var range = formatSchedulePreviewRange(startTime, endTime);
+            segments.push(range ? (label + ' ' + range) : label);
         });
         if (segments.length === 0) {
             return '';
@@ -3039,7 +3475,7 @@
         }
         var pattern = getString(strings, 'occurrencePreviewMonthlyPattern', 'Tous les {{ordinal}} {{weekday}} du mois');
         var summary = pattern.replace('{{ordinal}}', ordinalLabel).replace('{{weekday}}', weekdayLabel);
-        var range = formatPreviewRange(plan.startTime, plan.endTime);
+        var range = formatSchedulePreviewRange(plan.startTime, plan.endTime);
         if (range) {
             summary += ' · ' + range;
         }
@@ -3058,7 +3494,7 @@
         if (!label) {
             return '';
         }
-        var range = formatPreviewRange(first.startTime, first.endTime);
+        var range = formatSchedulePreviewRange(first.startTime, first.endTime);
         return range ? label + ' · ' + range : label;
     }
 
@@ -3121,7 +3557,7 @@
 
         var startTime = typeof plan.startTime === 'string' ? plan.startTime : '';
         var endTime = typeof plan.endTime === 'string' ? plan.endTime : '';
-        if (startTime && endTime) {
+        if (startTime && endTime && !isAllDayTimeRange(startTime, endTime)) {
             return getString(strings, 'occurrencePreviewRangePattern', 'Du {{startDay}} à {{endDay}} de {{startTime}} à {{endTime}}')
                 .replace('{{startDay}}', startLabel)
                 .replace('{{endDay}}', endLabel)
@@ -3184,12 +3620,12 @@
                 return;
             }
             var weekdayLabel = resolveWeekdayLabel(key, weekdayFullLabels);
-            var range = formatPreviewRange(referenceStart, referenceEnd);
-            if (!weekdayLabel || !range) {
+            var range = formatSchedulePreviewRange(referenceStart, referenceEnd);
+            if (!weekdayLabel) {
                 hasWeeklyPattern = false;
                 return;
             }
-            segments.push({ key: key, label: weekdayLabel + ' ' + range });
+            segments.push({ key: key, label: range ? (weekdayLabel + ' ' + range) : weekdayLabel });
         });
         if (!hasWeeklyPattern || segments.length === 0) {
             return '';
@@ -3212,7 +3648,7 @@
             if (!label) {
                 continue;
             }
-            var range = formatPreviewRange(occ.startTime, occ.endTime);
+            var range = formatSchedulePreviewRange(occ.startTime, occ.endTime);
             segments.push(range ? label + ' · ' + range : label);
         }
         if (segments.length === 0) {
@@ -3453,6 +3889,15 @@
             reasonValue = occurrence.cancelReason;
         }
 
+        var generationBatchValue = '';
+        if (occurrence && typeof occurrence.generationBatchId === 'string') {
+            generationBatchValue = occurrence.generationBatchId;
+        } else if (occurrence && typeof occurrence.generation_batch_id === 'string') {
+            generationBatchValue = occurrence.generation_batch_id;
+        } else if (occurrence && typeof occurrence.batch_id === 'string') {
+            generationBatchValue = occurrence.batch_id;
+        }
+
         return {
             id: occurrence && occurrence.id ? String(occurrence.id) : 'occurrence-' + index,
             date: dateValue,
@@ -3462,7 +3907,7 @@
             status: statusValue,
             reason: reasonValue,
             source: occurrence && typeof occurrence.source === 'string' ? occurrence.source : 'manual',
-            generationBatchId: occurrence && typeof occurrence.generationBatchId === 'string' ? occurrence.generationBatchId : '',
+            generationBatchId: generationBatchValue,
             visibility: occurrence && typeof occurrence.visibility === 'string' ? occurrence.visibility : 'tous',
             noteSchedule: occurrence && typeof occurrence.noteSchedule === 'string' ? occurrence.noteSchedule : '',
             noteCalendar: occurrence && typeof occurrence.noteCalendar === 'string' ? occurrence.noteCalendar : '',
@@ -4400,12 +4845,14 @@
             }
 
             if (typeof service.saveEventOccurrences !== 'function') {
-                service.saveEventOccurrences = function (eventId, occurrences, scheduleSummary, generatorPlan) {
+                service.saveEventOccurrences = function (eventId, occurrences, scheduleSummary, generatorPlan, options) {
+                    var safeOptions = options && typeof options === 'object' ? options : {};
                     return fallbackPost('mj_regmgr_save_event_occurrences', {
                         eventId: eventId,
                         occurrences: occurrences,
                         scheduleSummary: typeof scheduleSummary === 'string' ? scheduleSummary : '',
                         generatorPlan: generatorPlan && typeof generatorPlan === 'object' ? generatorPlan : null,
+                        purgeBatches: !!safeOptions.purgeBatches,
                     });
                 };
             }
@@ -8108,7 +8555,7 @@
                 });
         }, [api, selectedEvent, showSuccess, showError, loadRegistrations]);
 
-        var handlePersistEventOccurrences = useCallback(function (nextOccurrences, scheduleSummary, generatorPlan) {
+        var handlePersistEventOccurrences = useCallback(function (nextOccurrences, scheduleSummary, generatorPlan, options) {
             var eventIdSource = null;
             if (eventDetails && eventDetails.id !== undefined && eventDetails.id !== null) {
                 eventIdSource = eventDetails.id;
@@ -8123,6 +8570,15 @@
             var scheduleSummaryValue = typeof scheduleSummary === 'string' ? scheduleSummary : '';
 
             var payload = Array.isArray(nextOccurrences) ? nextOccurrences.map(function (occ) {
+                var generationBatchValue = '';
+                if (occ && typeof occ.generationBatchId === 'string') {
+                    generationBatchValue = occ.generationBatchId;
+                } else if (occ && typeof occ.generation_batch_id === 'string') {
+                    generationBatchValue = occ.generation_batch_id;
+                } else if (occ && typeof occ.batch_id === 'string') {
+                    generationBatchValue = occ.batch_id;
+                }
+
                 return {
                     id: occ && occ.id ? occ.id : null,
                     date: occ && typeof occ.date === 'string' ? occ.date : '',
@@ -8133,7 +8589,7 @@
                     reason: occ && typeof occ.reason === 'string' ? occ.reason : '',
                     source: occ && typeof occ.source === 'string' ? occ.source : 'manual',
                     createAsManualLot: !!(occ && occ.createAsManualLot),
-                    generationBatchId: occ && typeof occ.generationBatchId === 'string' ? occ.generationBatchId : '',
+                    generationBatchId: generationBatchValue,
                     visibility: occ && typeof occ.visibility === 'string' ? occ.visibility : 'tous',
                     noteSchedule: occ && typeof occ.noteSchedule === 'string' ? occ.noteSchedule : '',
                     noteCalendar: occ && typeof occ.noteCalendar === 'string' ? occ.noteCalendar : '',
@@ -8141,8 +8597,9 @@
             }) : [];
 
             var generatorPayload = generatorPlan && typeof generatorPlan === 'object' ? generatorPlan : null;
+            var persistOptions = options && typeof options === 'object' ? options : {};
 
-            return api.saveEventOccurrences(eventIdSource, payload, scheduleSummaryValue, generatorPayload)
+            return api.saveEventOccurrences(eventIdSource, payload, scheduleSummaryValue, generatorPayload, persistOptions)
                 .then(function (response) {
                     var responseEventId = response && response.event && response.event.id !== undefined && response.event.id !== null
                         ? String(response.event.id)

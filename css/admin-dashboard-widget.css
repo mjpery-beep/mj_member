@@ -317,6 +317,41 @@
 .mjd-table tbody tr { transition: background .1s; }
 .mjd-table tbody tr:hover td { background: #fafbfc; }
 
+.mjd-age-genre .mjd-table th:not(:first-child),
+.mjd-age-genre .mjd-table td:not(:first-child) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.mjd-age-genre .mjd-table tfoot td {
+    font-weight: 700;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+}
+
+.mjd-age-genre__layout {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.mjd-age-genre__chart {
+    position: relative;
+    width: 100%;
+    height: 260px;
+}
+
+.mjd-age-genre__chart canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+@media (max-width: 480px) {
+    .mjd-age-genre__chart {
+        height: 220px;
+    }
+}
+
 /* ── Badges ─────────────────────────────────────────────────── */
 .mjd-badge {
     display: inline-block;

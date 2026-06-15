@@ -271,6 +271,138 @@
         return h('span', { className: cls('mjd-badge', 'mjd-badge--' + (props.type || 'default')) }, props.children);
     }
 
+    function AgeGenreTable(props) {
+        var data = props.data || {};
+        var headers = Array.isArray(data.headers) ? data.headers : [];
+        var rows = Array.isArray(data.rows) ? data.rows : [];
+
+        if (!headers.length || !rows.length) {
+            return h('p', { className: 'mjd-empty' }, 'Aucune donnée.');
+        }
+
+        return h('div', { className: 'mjd-table-wrap mjd-age-genre' },
+            h('table', { className: 'mjd-table' }, [
+                h('thead', null,
+                    h('tr', null, [
+                        h('th', { key: 'age' }, 'Tranche d\'âge'),
+                        headers.map(function (header) {
+                            return h('th', { key: 'h-' + header.key }, header.label);
+                        }),
+                        h('th', { key: 'total' }, 'Total')
+                    ])
+                ),
+                h('tbody', null,
+                    rows.map(function (row) {
+                        var counts = row.counts || {};
+                        return h('tr', { key: row.key || row.label }, [
+                            h('td', { key: 'label' }, row.label || ''),
+                            headers.map(function (header) {
+                                return h('td', { key: 'v-' + header.key }, fmt(counts[header.key] || 0));
+                            }),
+                            h('td', { key: 'total' }, fmt(row.total || 0))
+                        ]);
+                    })
+                ),
+                h('tfoot', null,
+                    h('tr', { className: 'mjd-age-genre__total' }, [
+                        h('td', { key: 't-label' }, 'Total'),
+                        headers.map(function (header) {
+                            return h('td', { key: 't-' + header.key }, fmt(header.total || 0));
+                        }),
+                        h('td', { key: 't-total' }, fmt(data.total || 0))
+                    ])
+                )
+            ])
+        );
+    }
+
+    function AgeGenreChart(props) {
+        var data = props.data || {};
+        var headers = Array.isArray(data.headers) ? data.headers : [];
+        var rows = Array.isArray(data.rows) ? data.rows : [];
+        var canvasRef = useRef(null);
+        var chartRef = useRef(null);
+
+        useEffect(function () {
+            if (!headers.length || !rows.length) {
+                return;
+            }
+
+            ensureChartJs().then(function (Chart) {
+                if (!canvasRef.current) {
+                    return;
+                }
+
+                if (chartRef.current) {
+                    chartRef.current.destroy();
+                }
+
+                chartRef.current = new Chart(canvasRef.current, {
+                    type: 'bar',
+                    data: {
+                        labels: rows.map(function (row) { return row.label; }),
+                        datasets: headers.map(function (header, index) {
+                            return {
+                                label: header.label,
+                                data: rows.map(function (row) {
+                                    var counts = row.counts || {};
+                                    return Number(counts[header.key] || 0);
+                                }),
+                                backgroundColor: col(index),
+                                borderRadius: 4,
+                                maxBarThickness: 36,
+                                stack: 'age-genre'
+                            };
+                        })
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    usePointStyle: true,
+                                    pointStyle: 'rectRounded',
+                                    padding: 14,
+                                    font: { size: 11 }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                stacked: true,
+                                grid: { display: false },
+                                ticks: { font: { size: 11 }, color: '#64748b' }
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                ticks: { precision: 0, font: { size: 11 }, color: '#64748b' },
+                                grid: { color: 'rgba(148,163,184,.15)' }
+                            }
+                        },
+                        animation: { duration: 700, easing: 'easeOutQuart' }
+                    }
+                });
+            });
+
+            return function () {
+                if (chartRef.current) {
+                    chartRef.current.destroy();
+                }
+            };
+        }, [headers, rows]);
+
+        if (!headers.length || !rows.length) {
+            return h('p', { className: 'mjd-empty' }, 'Aucune donnée.');
+        }
+
+        return h('div', { className: 'mjd-age-genre__chart' },
+            h('canvas', { ref: canvasRef })
+        );
+    }
+
     /* ── Metric pill row (membership) ───────────────────────────── */
     function MetricPills(props) {
         return h('div', { className: 'mjd-pills' },
@@ -319,6 +451,7 @@
         var ts    = d.testimonialStats || {};
         var mwl   = d.membersWithLogin || [];
         var dfs   = d.dynamicFieldStats || [];
+        var ageGenreStats = ms.age_genre || {};
 
         /* ── Row 1 : KPI strip ─────────────────────────────────── */
         var kpiRow = h('div', { className: 'mjd-kpis' },
@@ -339,6 +472,15 @@
         if (ms.statuses && ms.statuses.length)   memberTabs.push({ label: 'Statut',      content: h(Donut, { items: ms.statuses,      total: ms.total, centerLabel: 'membres' }) });
         if (ms.payments && ms.payments.length)   memberTabs.push({ label: 'Cotisations', content: h(Donut, { items: ms.payments,      total: ms.total, centerLabel: 'membres' }) });
         if (ms.age_brackets && ms.age_brackets.length) memberTabs.push({ label: 'Âge',   content: h(Donut, { items: ms.age_brackets, total: ms.total, centerLabel: 'membres' }) });
+        if (ageGenreStats.headers && ageGenreStats.headers.length && ageGenreStats.rows && ageGenreStats.rows.length) {
+            memberTabs.push({
+                label: 'Age et Genre',
+                content: h('div', { className: 'mjd-age-genre__layout' }, [
+                    h(AgeGenreChart, { data: ageGenreStats }),
+                    h(AgeGenreTable, { data: ageGenreStats })
+                ])
+            });
+        }
 
         /* Append dynamic field distribution tabs */
         dfs.forEach(function (df) {

@@ -1525,6 +1525,15 @@ a.mj-header-gest-favs-col__title--link:hover {
 }
 
 /* Ligne d'un item */
+.mj-header-gest-fav-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 8px;
+    padding: 3px 4px;
+    transition: background 0.15s;
+}
+
 a.mj-header-gest-fav-item {
     display: flex;
     align-items: center;
@@ -1621,6 +1630,43 @@ a.mj-header-gest-fav-link:hover {
 
 .mj-header-gest-fav-item:hover .mj-header-gest-fav-actions {
     display: grid;
+}
+
+.mj-header-gest-fav-item:focus-within .mj-header-gest-fav-actions {
+    display: grid;
+}
+
+.mj-header-gest-fav-unfav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    border-radius: 999px;
+    color: #ef4444;
+    font-size: 0.8rem;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.mj-header-gest-fav-unfav:hover {
+    background: rgba(239, 68, 68, 0.12);
+    transform: scale(1.08);
+}
+
+.mj-header-gest-fav-unfav:focus-visible {
+    outline: 2px solid #ef4444;
+    outline-offset: 1px;
+}
+
+.mj-header-gest-fav-unfav[disabled] {
+    opacity: 0.55;
+    cursor: default;
+    transform: none;
 }
 
 .mj-header-gest-fav-actions a {

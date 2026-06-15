@@ -138,6 +138,27 @@ class MjEventOccurrenceGenerationBatches {
     }
 
     /**
+     * @param int|string $id
+     * @return array<string,mixed>|null
+     */
+    public static function find_by_id($id) {
+        $id = (int) $id;
+        if ($id <= 0 || !self::table_ready()) {
+            return null;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+        $query = $wpdb->prepare(
+            "SELECT id, batch_uuid, event_id, status, generated_by_member_id, config_snapshot, summary, occurrences_count, created_at, deleted_at FROM {$table} WHERE id = %d LIMIT 1",
+            $id
+        );
+        $row = $wpdb->get_row($query, ARRAY_A);
+
+        return is_array($row) ? $row : null;
+    }
+
+    /**
      * @param int $event_id
      * @param string $batch_uuid
      * @return bool
@@ -163,6 +184,31 @@ class MjEventOccurrenceGenerationBatches {
             ),
             array('%s', '%s'),
             array('%d', '%s')
+        );
+
+        return $updated !== false;
+    }
+
+    /**
+     * @param int $event_id
+     * @return bool
+     */
+    public static function mark_deleted_for_event($event_id) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || !self::table_ready()) {
+            return false;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+        $updated = $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$table} SET status = %s, deleted_at = %s WHERE event_id = %d AND status != %s",
+                self::STATUS_DELETED,
+                current_time('mysql'),
+                $event_id,
+                self::STATUS_DELETED
+            )
         );
 
         return $updated !== false;

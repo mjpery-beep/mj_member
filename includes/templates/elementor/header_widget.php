@@ -195,6 +195,17 @@ function mj_header_svg_icon(string $name): string {
                                     </span>
                                     <span class="mj-header-gest-fav-label"><?php echo esc_html((string)$fi['label']); ?></span>
                                 </a>
+                                <button
+                                    type="button"
+                                    class="mj-header-gest-fav-unfav"
+                                    data-mj-header-fav-remove="1"
+                                    data-fav-type="member"
+                                    data-target-id="<?php echo (int)($fi['favorite_id'] ?? 0); ?>"
+                                    title="<?php esc_attr_e('Retirer des favoris', 'mj-member'); ?>"
+                                    aria-label="<?php esc_attr_e('Retirer des favoris', 'mj-member'); ?>"
+                                >
+                                    &#10084;
+                                </button>
                                 <div class="mj-header-gest-fav-actions">
                                     <?php if (!empty($fi['tab_urls']) && is_array($fi['tab_urls'])): ?>
                                         <?php foreach ($fi['tab_urls'] as $tab_key => $tab_url): ?>
@@ -224,6 +235,17 @@ function mj_header_svg_icon(string $name): string {
                                     <span class="mj-header-gest-fav-emoji"><?php echo esc_html((string)($fe['emoji'] ?? '&#128197;')); ?></span>
                                     <span class="mj-header-gest-fav-label"><?php echo esc_html((string)$fe['label']); ?></span>
                                 </a>
+                                <button
+                                    type="button"
+                                    class="mj-header-gest-fav-unfav"
+                                    data-mj-header-fav-remove="1"
+                                    data-fav-type="event"
+                                    data-target-id="<?php echo (int)($fe['favorite_id'] ?? 0); ?>"
+                                    title="<?php esc_attr_e('Retirer des favoris', 'mj-member'); ?>"
+                                    aria-label="<?php esc_attr_e('Retirer des favoris', 'mj-member'); ?>"
+                                >
+                                    &#10084;
+                                </button>
                                 <div class="mj-header-gest-fav-actions">
                                     <?php if (!empty($fe['tab_urls']) && is_array($fe['tab_urls'])): ?>
                                         <?php foreach ($fe['tab_urls'] as $tab_key => $tab_url): ?>

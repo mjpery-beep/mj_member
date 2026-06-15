@@ -2787,30 +2787,49 @@
                                         onPointerDown: function(ev) { ev.stopPropagation(); },
                                         onTouchStart: function(ev) { ev.stopPropagation(); }
                                     }, props.favoriteItems.map(function(favItem, favIndex) {
-                                        return h('button', {
+                                        return h('div', {
                                             key: favIndex,
-                                            type: 'button',
-                                            className: 'mj-hour-encode-calendar__quick-fav-item',
-                                            title: favItem.projectLabel + ' \u203A ' + favItem.taskName,
-                                            onClick: function(event) {
-                                                event.preventDefault();
-                                                event.stopPropagation();
-                                                if (typeof props.onFavoriteQuickSubmit === 'function') {
-                                                    props.onFavoriteQuickSubmit(favItem);
-                                                }
-                                            }
+                                            className: 'mj-hour-encode-calendar__quick-fav-row'
                                         }, [
-                                            favItem.projectColor
-                                                ? h('span', {
-                                                    key: 'dot',
-                                                    className: 'mj-hour-encode-calendar__quick-fav-dot',
-                                                    style: { backgroundColor: favItem.projectColor }
-                                                })
-                                                : h('span', { key: 'star', className: 'mj-hour-encode-calendar__quick-fav-star' }, '\u2B50'),
-                                            h('span', { key: 'label', className: 'mj-hour-encode-calendar__quick-fav-label' }, [
-                                                h('span', { key: 'project', className: 'mj-hour-encode-calendar__quick-fav-project' }, favItem.projectLabel),
-                                                h('span', { key: 'task', className: 'mj-hour-encode-calendar__quick-fav-task' }, favItem.taskName)
-                                            ])
+                                            h('button', {
+                                                key: 'submit',
+                                                type: 'button',
+                                                className: 'mj-hour-encode-calendar__quick-fav-item',
+                                                title: favItem.projectLabel + ' \u203A ' + favItem.taskName,
+                                                onClick: function(event) {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    if (typeof props.onFavoriteQuickSubmit === 'function') {
+                                                        props.onFavoriteQuickSubmit(favItem);
+                                                    }
+                                                }
+                                            }, [
+                                                favItem.projectColor
+                                                    ? h('span', {
+                                                        key: 'dot',
+                                                        className: 'mj-hour-encode-calendar__quick-fav-dot',
+                                                        style: { backgroundColor: favItem.projectColor }
+                                                    })
+                                                    : h('span', { key: 'star', className: 'mj-hour-encode-calendar__quick-fav-star' }, '\u2B50'),
+                                                h('span', { key: 'label', className: 'mj-hour-encode-calendar__quick-fav-label' }, [
+                                                    h('span', { key: 'project', className: 'mj-hour-encode-calendar__quick-fav-project' }, favItem.projectLabel),
+                                                    h('span', { key: 'task', className: 'mj-hour-encode-calendar__quick-fav-task' }, favItem.taskName)
+                                                ])
+                                            ]),
+                                            typeof props.onToggleFavorite === 'function'
+                                                ? h('button', {
+                                                    key: 'remove',
+                                                    type: 'button',
+                                                    className: 'mj-hour-encode-calendar__quick-fav-remove',
+                                                    title: 'Retirer des favoris',
+                                                    'aria-label': 'Retirer des favoris',
+                                                    onClick: function(event) {
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                        props.onToggleFavorite(favItem.projectKey, favItem.taskName);
+                                                    }
+                                                }, '\u00D7')
+                                                : null
                                         ]);
                                     })));
                                 }
@@ -7778,6 +7797,7 @@
                                             : null,
                                         favoriteItems: favoriteItems,
                                         onFavoriteQuickSubmit: handleFavoriteQuickSubmit,
+                                        onToggleFavorite: handleToggleFavorite,
                                         onSelectionCancel: handleSelectionCancel
                                     }),
                                     isMobileLayout ? null : aggregateSummary

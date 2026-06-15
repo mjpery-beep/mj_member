@@ -49,6 +49,7 @@
         this._bindSubMenus();
         this._bindLoginForm();
         this._bindNotifActions();
+        this._bindGestionnaireFavoriteRemovals();
         this._bindAccCardNotifPreview();
 
         if (this.config.sticky) {
@@ -345,6 +346,62 @@
             } else if (action === 'archive-all') {
                 self._notifArchiveAll(btn);
             }
+        });
+    };
+
+    MjHeader.prototype._bindGestionnaireFavoriteRemovals = function () {
+        var self = this;
+        var dropdown = this.el.querySelector('[data-mj-header-dropdown="gestionnaire"]');
+        if (!dropdown || this.config.isPreview) return;
+
+        dropdown.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-mj-header-fav-remove]');
+            if (!btn) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            var type = (btn.getAttribute('data-fav-type') || '').toLowerCase();
+            var targetId = parseInt(btn.getAttribute('data-target-id') || '0', 10);
+            if ((type !== 'member' && type !== 'event') || targetId <= 0) return;
+
+            btn.disabled = true;
+
+            var data = new FormData();
+            data.append('action', 'mj_header_toggle_favorite');
+            data.append('nonce', self.config.headerNonce || '');
+            data.append('type', type);
+            data.append('target_id', String(targetId));
+            data.append('operation', 'remove');
+
+            fetch(self.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (!res || !res.success) {
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    var item = btn.closest('.mj-header-gest-fav-item');
+                    if (item) {
+                        item.remove();
+                    }
+
+                    var list = btn.closest('.mj-header-gest-fav-list');
+                    if (list && !list.querySelector('.mj-header-gest-fav-item')) {
+                        list.remove();
+                        var col = btn.closest('.mj-header-gest-favs-col');
+                        if (col && !col.querySelector('.mj-header-gest-fav-empty')) {
+                            var empty = document.createElement('p');
+                            empty.className = 'mj-header-gest-fav-empty';
+                            empty.textContent = 'Aucun favori';
+                            col.appendChild(empty);
+                        }
+                    }
+                })
+                .catch(function () {
+                    btn.disabled = false;
+                });
         });
     };
 
