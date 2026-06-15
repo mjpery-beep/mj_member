@@ -299,7 +299,10 @@ function mj_settings_page() {
             $selectedTables = isset($_POST['mj_fixtures_restore_tables']) && is_array($_POST['mj_fixtures_restore_tables'])
                 ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_restore_tables']))
                 : array();
-            $result = MjFixturesManager::restoreFixtures($selectedTables);
+            $cleanBeforeTables = isset($_POST['mj_fixtures_clean_before_tables']) && is_array($_POST['mj_fixtures_clean_before_tables'])
+                ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_clean_before_tables']))
+                : array();
+            $result = MjFixturesManager::restoreFixtures($selectedTables, $cleanBeforeTables);
             if (!empty($result['success'])) {
                 $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures restaurées depuis data/fixtures.');
             } else {

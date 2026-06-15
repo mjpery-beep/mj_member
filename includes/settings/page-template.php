@@ -2426,17 +2426,28 @@ if (!defined('ABSPATH')) {
                                 <form id="mj-fixtures-restore-form" method="post">
                                     <?php wp_nonce_field('mj_fixtures_action', 'mj_fixtures_nonce'); ?>
                                     <input type="hidden" name="mj_fixtures_action" value="restore" />
-                                    <div style="display:grid; gap:6px; margin-bottom:10px; max-height:160px; overflow:auto; border:1px solid #e2e8f0; border-radius:6px; padding:8px; background:#f8fafc;">
+                                    <div style="display:grid; gap:6px; margin-bottom:10px; max-height:200px; overflow:auto; border:1px solid #e2e8f0; border-radius:6px; padding:8px; background:#f8fafc;">
                                         <?php foreach ((array) $fixtures_tables_status as $fixture_table) : ?>
-                                            <label style="display:flex; align-items:center; gap:8px; color:#334155;">
-                                                <input
-                                                    type="checkbox"
-                                                    name="mj_fixtures_restore_tables[]"
-                                                    value="<?php echo esc_attr((string) ($fixture_table['slug'] ?? '')); ?>"
-                                                    <?php checked(!empty($fixture_table['exists'])); ?>
-                                                />
-                                                <span><?php echo esc_html((string) ($fixture_table['label'] ?? '')); ?></span>
-                                            </label>
+                                            <div style="display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; color:#334155; border-bottom:1px dashed #e2e8f0; padding-bottom:6px;">
+                                                <label style="display:flex; align-items:center; gap:8px; margin:0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="mj_fixtures_restore_tables[]"
+                                                        value="<?php echo esc_attr((string) ($fixture_table['slug'] ?? '')); ?>"
+                                                        <?php checked(!empty($fixture_table['exists'])); ?>
+                                                    />
+                                                    <span><?php echo esc_html((string) ($fixture_table['label'] ?? '')); ?></span>
+                                                </label>
+                                                <label style="display:flex; align-items:center; gap:6px; margin:0; font-size:12px; color:#64748b; white-space:nowrap;">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="mj_fixtures_clean_before_tables[]"
+                                                        value="<?php echo esc_attr((string) ($fixture_table['slug'] ?? '')); ?>"
+                                                        <?php checked(!empty($fixture_table['exists'])); ?>
+                                                    />
+                                                    clean before
+                                                </label>
+                                            </div>
                                         <?php endforeach; ?>
                                     </div>
                                     <button

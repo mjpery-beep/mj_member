@@ -147,7 +147,7 @@ final class MjFixturesManager
         );
     }
 
-    public static function restoreFixtures(array $selectedSlugs = array()): array
+    public static function restoreFixtures(array $selectedSlugs = array(), array $cleanBeforeSlugs = array()): array
     {
         global $wpdb;
 
@@ -166,6 +166,7 @@ final class MjFixturesManager
         $wpdb->query('SET FOREIGN_KEY_CHECKS = 0');
 
         $targetSlugs = self::normalizeSelectedSlugs($selectedSlugs);
+        $cleanBeforeLookup = array_fill_keys(self::normalizeSelectedSlugs($cleanBeforeSlugs), true);
 
         foreach ($targetSlugs as $slug) {
             $table = $wpdb->prefix . $slug;
@@ -181,9 +182,12 @@ final class MjFixturesManager
                 continue;
             }
 
-            $truncated = $wpdb->query("TRUNCATE TABLE `{$table}`");
-            if ($truncated === false) {
-                $wpdb->query("DELETE FROM `{$table}`");
+            $mustCleanBefore = !empty($cleanBeforeLookup[$slug]);
+            if ($mustCleanBefore) {
+                $truncated = $wpdb->query("TRUNCATE TABLE `{$table}`");
+                if ($truncated === false) {
+                    $wpdb->query("DELETE FROM `{$table}`");
+                }
             }
 
             $handle = @fopen($file, 'rb');
@@ -222,7 +226,9 @@ final class MjFixturesManager
                     continue;
                 }
 
-                $ok = $wpdb->insert($table, $insertData);
+                $ok = $mustCleanBefore
+                    ? $wpdb->insert($table, $insertData)
+                    : $wpdb->replace($table, $insertData);
                 if ($ok === false) {
                     $errors[] = sprintf(__('Insertion échouée dans %s.', 'mj-member'), $table);
                     continue;
