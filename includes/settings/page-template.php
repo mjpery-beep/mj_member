@@ -3165,6 +3165,8 @@ if (!defined('ABSPATH')) {
             var panels = Array.prototype.slice.call(container.querySelectorAll('.mj-settings-tabs__panel'));
             var saveActions = document.getElementById('mj-settings-save-actions');
             var fixturesOptionsForm = document.getElementById('mj-fixtures-options-form');
+            var fixturesCreateForm = document.getElementById('mj-fixtures-create-form');
+            var fixturesRestoreForm = document.getElementById('mj-fixtures-restore-form');
 
             if (!navButtons.length || !panels.length) {
                 return;
@@ -3232,6 +3234,20 @@ if (!defined('ABSPATH')) {
                     appendCheckedValuesToForm(fixturesOptionsForm, 'input[name="mj_fixtures_restore_tables[]"]', 'mj_fixtures_restore_tables[]');
                     appendCheckedValuesToForm(fixturesOptionsForm, 'input[name="mj_fixtures_clean_before_tables[]"]', 'mj_fixtures_clean_before_tables[]');
                     appendCheckedValuesToForm(fixturesOptionsForm, 'input[name="mj_fixtures_use_on_install_tables[]"]', 'mj_fixtures_use_on_install_tables[]');
+                });
+            }
+
+            if (fixturesCreateForm) {
+                fixturesCreateForm.addEventListener('submit', function () {
+                    appendCheckedValuesToForm(fixturesCreateForm, 'input[name="mj_fixtures_tables[]"]', 'mj_fixtures_tables[]');
+                });
+            }
+
+            if (fixturesRestoreForm) {
+                fixturesRestoreForm.addEventListener('submit', function () {
+                    appendCheckedValuesToForm(fixturesRestoreForm, 'input[name="mj_fixtures_restore_tables[]"]', 'mj_fixtures_restore_tables[]');
+                    appendCheckedValuesToForm(fixturesRestoreForm, 'input[name="mj_fixtures_clean_before_tables[]"]', 'mj_fixtures_clean_before_tables[]');
+                    appendCheckedValuesToForm(fixturesRestoreForm, 'input[name="mj_fixtures_use_on_install_tables[]"]', 'mj_fixtures_use_on_install_tables[]');
                 });
             }
 

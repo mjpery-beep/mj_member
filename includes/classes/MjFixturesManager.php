@@ -240,16 +240,16 @@ final class MjFixturesManager
                 continue;
             }
 
-            $file = $slug . '.json';
-            $payload = array('slug' => $slug, 'generated_at' => current_time('mysql'));
-            $ok = @file_put_contents($dir . $file, wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            if ($ok === false) {
-                $errors[] = sprintf(__('Impossible d\'ecrire %s.', 'mj-member'), $file);
+            $result = self::createSimpleSourceFixture($slug, $dir);
+            if (is_wp_error($result)) {
+                $errors[] = $result->get_error_message();
                 continue;
             }
 
-            $manifest['tables'][$slug] = array('table' => $slug, 'file' => $file, 'rows' => 1, 'kind' => 'source');
-            $saved[] = array('slug' => $slug, 'table' => $slug, 'file' => $file, 'rows' => 1);
+            $file = (string) ($result['file'] ?? ($slug . '.json'));
+            $rows = (int) ($result['rows'] ?? 0);
+            $manifest['tables'][$slug] = array('table' => $slug, 'file' => $file, 'rows' => $rows, 'kind' => 'source');
+            $saved[] = array('slug' => $slug, 'table' => $slug, 'file' => $file, 'rows' => $rows);
         }
 
         @file_put_contents($dir . 'fixtures.manifest.json', wp_json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
@@ -269,14 +269,29 @@ final class MjFixturesManager
         $restored = array();
         $errors = array();
         $cleanLookup = array_fill_keys(self::sanitizeSourceSlugs($cleanBeforeSlugs, false), true);
+        $restoreTargets = self::sanitizeSourceSlugs($selectedSlugs, false);
+
+        if (empty($restoreTargets)) {
+            return array(
+                'success' => false,
+                'restored' => array(),
+                'errors' => array(__('Aucune source selectionnee pour la restauration.', 'mj-member')),
+            );
+        }
 
         $wpdb->query('SET FOREIGN_KEY_CHECKS = 0');
 
-        foreach (self::sanitizeSourceSlugs($selectedSlugs, true) as $slug) {
+        foreach ($restoreTargets as $slug) {
             if (in_array($slug, self::TABLE_SLUGS, true)) {
                 $table = $wpdb->prefix . $slug;
                 $file = $dir . $slug . '.jsonl';
-                if (!self::tableExists($table) || !is_readable($file)) {
+                if (!self::tableExists($table)) {
+                    $errors[] = sprintf(__('Table introuvable pour la source %s.', 'mj-member'), $slug);
+                    continue;
+                }
+
+                if (!is_readable($file)) {
+                    $errors[] = sprintf(__('Fixture introuvable ou illisible: %s.', 'mj-member'), basename($file));
                     continue;
                 }
 
@@ -335,12 +350,26 @@ final class MjFixturesManager
             }
 
             $file = $dir . $slug . '.json';
-            if (is_readable($file)) {
-                $restored[] = array('slug' => $slug, 'table' => $slug, 'file' => basename($file), 'rows' => 1);
+            $mustClean = !empty($cleanLookup[$slug]);
+            $result = self::restoreSimpleSourceFixture($slug, $dir, $mustClean);
+            if (is_wp_error($result)) {
+                $errors[] = $result->get_error_message();
+                continue;
             }
+
+            $restored[] = array(
+                'slug' => $slug,
+                'table' => $slug,
+                'file' => (string) ($result['file'] ?? basename($file)),
+                'rows' => (int) ($result['rows'] ?? 0),
+            );
         }
 
         $wpdb->query('SET FOREIGN_KEY_CHECKS = 1');
+
+        if (empty($restored) && empty($errors)) {
+            $errors[] = __('Aucune donnee restauree a partir des fixtures selectionnees.', 'mj-member');
+        }
 
         return array('success' => empty($errors), 'restored' => $restored, 'errors' => $errors);
     }
@@ -520,6 +549,414 @@ final class MjFixturesManager
         return array('path' => $tmpFile, 'filename' => $filename, 'mime' => 'application/zip');
     }
 
+    private static function createSimpleSourceFixture(string $slug, string $dir): array|WP_Error
+    {
+        $filename = $slug . '.json';
+        $payload = array(
+            'slug' => $slug,
+            'generated_at' => current_time('mysql'),
+            'items' => array(),
+        );
+
+        switch ($slug) {
+            case 'wp_pages':
+                $payload['items'] = self::collectPosts('page');
+                break;
+            case 'wp_posts':
+                $payload['items'] = self::collectPosts('post');
+                break;
+            case 'wp_media':
+                $payload['items'] = self::collectMedia($dir);
+                break;
+            case 'wp_theme_settings':
+                $payload['items'] = array(
+                    'stylesheet' => get_stylesheet(),
+                    'theme_mods' => get_theme_mods(),
+                    'custom_css' => wp_get_custom_css(),
+                );
+                break;
+            case 'supertool_data':
+                $payload['items'] = self::collectSupertoolData();
+                break;
+            case 'config_mj_member':
+                $payload['items'] = self::collectOptionsByPatterns(self::getConfigSelection()['mj_member'] ?? array('mj_*'));
+                break;
+            case 'config_supertool':
+                $payload['items'] = self::collectOptionsByPatterns(self::getConfigSelection()['supertool'] ?? array('mjet_*', 'elementor_cpt_support'));
+                break;
+            default:
+                return new WP_Error('fixtures_source_unknown', __('Source de fixture inconnue.', 'mj-member'));
+        }
+
+        $json = wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false || @file_put_contents($dir . $filename, $json) === false) {
+            return new WP_Error('fixtures_source_write', sprintf(__('Impossible d\'ecrire %s.', 'mj-member'), $filename));
+        }
+
+        $rows = is_array($payload['items']) ? count($payload['items']) : 1;
+        return array('file' => $filename, 'rows' => $rows);
+    }
+
+    private static function restoreSimpleSourceFixture(string $slug, string $dir, bool $cleanBefore): array|WP_Error
+    {
+        $filename = $slug . '.json';
+        $path = $dir . $filename;
+
+        if (!is_readable($path)) {
+            return new WP_Error('fixtures_source_missing', sprintf(__('Fixture introuvable ou illisible: %s.', 'mj-member'), $filename));
+        }
+
+        $raw = @file_get_contents($path);
+        $decoded = is_string($raw) ? json_decode($raw, true) : null;
+        if (!is_array($decoded)) {
+            return new WP_Error('fixtures_source_invalid', sprintf(__('%s invalide.', 'mj-member'), $filename));
+        }
+
+        $items = $decoded['items'] ?? array();
+
+        switch ($slug) {
+            case 'wp_pages':
+                return self::restorePosts('page', $items, $cleanBefore, $filename);
+            case 'wp_posts':
+                return self::restorePosts('post', $items, $cleanBefore, $filename);
+            case 'wp_media':
+                return self::restoreMedia($dir, $items, $cleanBefore, $filename);
+            case 'wp_theme_settings':
+                return self::restoreThemeSettings($items, $cleanBefore, $filename);
+            case 'supertool_data':
+                return self::restoreSupertoolData($items, $cleanBefore, $filename);
+            case 'config_mj_member':
+            case 'config_supertool':
+                return self::restoreOptions($items, $cleanBefore, $filename);
+            default:
+                return new WP_Error('fixtures_source_unknown', __('Source de fixture inconnue.', 'mj-member'));
+        }
+    }
+
+    private static function collectPosts(string $postType): array
+    {
+        $posts = get_posts(array(
+            'post_type' => $postType,
+            'post_status' => 'any',
+            'posts_per_page' => -1,
+            'orderby' => 'ID',
+            'order' => 'ASC',
+        ));
+
+        $items = array();
+        foreach ($posts as $post) {
+            $items[] = array(
+                'post' => array(
+                    'post_name' => $post->post_name,
+                    'post_title' => $post->post_title,
+                    'post_content' => $post->post_content,
+                    'post_excerpt' => $post->post_excerpt,
+                    'post_status' => $post->post_status,
+                    'post_parent' => (int) $post->post_parent,
+                    'menu_order' => (int) $post->menu_order,
+                ),
+                'meta' => get_post_meta((int) $post->ID),
+            );
+        }
+
+        return $items;
+    }
+
+    private static function restorePosts(string $postType, $items, bool $cleanBefore, string $filename): array|WP_Error
+    {
+        if (!is_array($items)) {
+            return new WP_Error('fixtures_posts_invalid', sprintf(__('%s invalide.', 'mj-member'), $filename));
+        }
+
+        if ($cleanBefore) {
+            $ids = get_posts(array('post_type' => $postType, 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids'));
+            foreach ($ids as $id) {
+                wp_delete_post((int) $id, true);
+            }
+        }
+
+        $count = 0;
+        foreach ($items as $item) {
+            if (empty($item['post']) || !is_array($item['post'])) {
+                continue;
+            }
+
+            $post = $item['post'];
+            $slug = sanitize_title((string) ($post['post_name'] ?? ''));
+            if ($slug === '') {
+                continue;
+            }
+
+            $existing = get_page_by_path($slug, OBJECT, $postType);
+            $payload = array(
+                'post_type' => $postType,
+                'post_name' => $slug,
+                'post_title' => (string) ($post['post_title'] ?? ''),
+                'post_content' => (string) ($post['post_content'] ?? ''),
+                'post_excerpt' => (string) ($post['post_excerpt'] ?? ''),
+                'post_status' => (string) ($post['post_status'] ?? 'draft'),
+                'post_parent' => (int) ($post['post_parent'] ?? 0),
+                'menu_order' => (int) ($post['menu_order'] ?? 0),
+            );
+
+            if ($existing && !$cleanBefore) {
+                $payload['ID'] = (int) $existing->ID;
+                $postId = wp_update_post($payload, true);
+            } else {
+                $postId = wp_insert_post($payload, true);
+            }
+
+            if (is_wp_error($postId) || (int) $postId <= 0) {
+                continue;
+            }
+
+            if (!empty($item['meta']) && is_array($item['meta'])) {
+                foreach ($item['meta'] as $metaKey => $metaValues) {
+                    if (!is_array($metaValues)) {
+                        continue;
+                    }
+                    delete_post_meta((int) $postId, (string) $metaKey);
+                    foreach ($metaValues as $metaValue) {
+                        add_post_meta((int) $postId, (string) $metaKey, maybe_unserialize($metaValue));
+                    }
+                }
+            }
+
+            $count++;
+        }
+
+        return array('file' => $filename, 'rows' => $count);
+    }
+
+    private static function collectMedia(string $fixturesDir): array
+    {
+        $attachments = get_posts(array(
+            'post_type' => 'attachment',
+            'post_status' => 'any',
+            'posts_per_page' => -1,
+            'orderby' => 'ID',
+            'order' => 'ASC',
+        ));
+
+        $settings = self::getImageImportSettings();
+        $maxBytes = (int) $settings['max_file_size_mb'] * 1024 * 1024;
+        $mediaDir = $fixturesDir . 'media/';
+        wp_mkdir_p($mediaDir);
+
+        $items = array();
+        foreach ($attachments as $attachment) {
+            $path = get_attached_file((int) $attachment->ID);
+            if (!is_string($path) || !is_readable($path)) {
+                continue;
+            }
+
+            $size = (int) @filesize($path);
+            if ($size <= 0 || $size > $maxBytes) {
+                continue;
+            }
+
+            $storedName = sanitize_file_name((string) $attachment->ID . '-' . basename($path));
+            if (@copy($path, $mediaDir . $storedName) === false) {
+                continue;
+            }
+
+            $items[] = array(
+                'file' => 'media/' . $storedName,
+                'post' => array(
+                    'post_title' => $attachment->post_title,
+                    'post_excerpt' => $attachment->post_excerpt,
+                    'post_content' => $attachment->post_content,
+                    'post_mime_type' => $attachment->post_mime_type,
+                ),
+                'meta' => get_post_meta((int) $attachment->ID),
+            );
+        }
+
+        return $items;
+    }
+
+    private static function restoreMedia(string $fixturesDir, $items, bool $cleanBefore, string $filename): array|WP_Error
+    {
+        if (!is_array($items)) {
+            return new WP_Error('fixtures_media_invalid', sprintf(__('%s invalide.', 'mj-member'), $filename));
+        }
+
+        if ($cleanBefore) {
+            $ids = get_posts(array('post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids'));
+            foreach ($ids as $id) {
+                wp_delete_attachment((int) $id, true);
+            }
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+
+        $overwrite = !empty(self::getImageImportSettings()['overwrite_existing']);
+        $count = 0;
+
+        foreach ($items as $item) {
+            $rel = isset($item['file']) ? (string) $item['file'] : '';
+            if ($rel === '') {
+                continue;
+            }
+
+            $source = $fixturesDir . ltrim(str_replace('..', '', $rel), '/\\');
+            if (!is_readable($source)) {
+                continue;
+            }
+
+            $filenameOnly = sanitize_file_name(basename($source));
+            if (!$overwrite && get_page_by_title($filenameOnly, OBJECT, 'attachment')) {
+                continue;
+            }
+
+            $blob = @file_get_contents($source);
+            if (!is_string($blob)) {
+                continue;
+            }
+
+            $bits = wp_upload_bits($filenameOnly, null, $blob);
+            if (!empty($bits['error'])) {
+                continue;
+            }
+
+            $post = is_array($item['post'] ?? null) ? $item['post'] : array();
+            $attachment = array(
+                'post_title' => sanitize_text_field((string) ($post['post_title'] ?? $filenameOnly)),
+                'post_excerpt' => sanitize_text_field((string) ($post['post_excerpt'] ?? '')),
+                'post_content' => sanitize_textarea_field((string) ($post['post_content'] ?? '')),
+                'post_mime_type' => sanitize_text_field((string) ($post['post_mime_type'] ?? 'application/octet-stream')),
+                'post_status' => 'inherit',
+                'guid' => $bits['url'],
+            );
+
+            $attachmentId = wp_insert_attachment($attachment, $bits['file']);
+            if (is_wp_error($attachmentId) || (int) $attachmentId <= 0) {
+                continue;
+            }
+
+            $meta = wp_generate_attachment_metadata((int) $attachmentId, $bits['file']);
+            if (is_array($meta)) {
+                wp_update_attachment_metadata((int) $attachmentId, $meta);
+            }
+
+            $count++;
+        }
+
+        return array('file' => $filename, 'rows' => $count);
+    }
+
+    private static function collectSupertoolData(): array
+    {
+        global $wpdb;
+
+        $templates = self::collectPosts('mjet-template');
+        $options = self::collectOptionsByPatterns(array('mjet_*', 'elementor_cpt_support'));
+
+        $rows = $wpdb->get_results("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE 'mjet_%'", ARRAY_A);
+        foreach ((array) $rows as $row) {
+            $options[(string) $row['option_name']] = maybe_unserialize($row['option_value']);
+        }
+
+        return array(
+            'templates' => $templates,
+            'options' => $options,
+        );
+    }
+
+    private static function restoreSupertoolData($items, bool $cleanBefore, string $filename): array|WP_Error
+    {
+        if (!is_array($items)) {
+            return new WP_Error('fixtures_supertool_invalid', sprintf(__('%s invalide.', 'mj-member'), $filename));
+        }
+
+        $templates = isset($items['templates']) && is_array($items['templates']) ? $items['templates'] : array();
+        $options = isset($items['options']) && is_array($items['options']) ? $items['options'] : array();
+
+        $postsResult = self::restorePosts('mjet-template', $templates, $cleanBefore, $filename);
+        if (is_wp_error($postsResult)) {
+            return $postsResult;
+        }
+
+        foreach ($options as $key => $value) {
+            if (!self::isSensitiveOption((string) $key)) {
+                update_option((string) $key, $value);
+            }
+        }
+
+        return array('file' => $filename, 'rows' => (int) ($postsResult['rows'] ?? 0));
+    }
+
+    private static function restoreThemeSettings($items, bool $cleanBefore, string $filename): array|WP_Error
+    {
+        if (!is_array($items)) {
+            return new WP_Error('fixtures_theme_invalid', sprintf(__('%s invalide.', 'mj-member'), $filename));
+        }
+
+        if ($cleanBefore) {
+            remove_theme_mods();
+        }
+
+        $stylesheet = sanitize_text_field((string) ($items['stylesheet'] ?? get_stylesheet()));
+        $mods = isset($items['theme_mods']) && is_array($items['theme_mods']) ? $items['theme_mods'] : array();
+        update_option('theme_mods_' . $stylesheet, $mods);
+
+        if (isset($items['custom_css']) && is_string($items['custom_css'])) {
+            wp_update_custom_css_post($items['custom_css']);
+        }
+
+        return array('file' => $filename, 'rows' => count($mods));
+    }
+
+    private static function collectOptionsByPatterns(array $patterns): array
+    {
+        global $wpdb;
+
+        $result = array();
+        foreach ($patterns as $pattern) {
+            $pattern = (string) $pattern;
+            if (strpos($pattern, '*') !== false) {
+                $like = str_replace('*', '%', $pattern);
+                $rows = $wpdb->get_results($wpdb->prepare("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $like), ARRAY_A);
+                foreach ((array) $rows as $row) {
+                    $name = (string) $row['option_name'];
+                    if (!self::isSensitiveOption($name)) {
+                        $result[$name] = maybe_unserialize($row['option_value']);
+                    }
+                }
+            } else {
+                if (!self::isSensitiveOption($pattern)) {
+                    $result[$pattern] = get_option($pattern, null);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    private static function restoreOptions($items, bool $cleanBefore, string $filename): array|WP_Error
+    {
+        if (!is_array($items)) {
+            return new WP_Error('fixtures_config_invalid', sprintf(__('%s invalide.', 'mj-member'), $filename));
+        }
+
+        $count = 0;
+        foreach ($items as $key => $value) {
+            $key = (string) $key;
+            if (self::isSensitiveOption($key)) {
+                continue;
+            }
+            if ($cleanBefore) {
+                delete_option($key);
+            }
+            update_option($key, $value);
+            $count++;
+        }
+
+        return array('file' => $filename, 'rows' => $count);
+    }
+
     private static function tableExists(string $table): bool
     {
         global $wpdb;
@@ -571,6 +1008,16 @@ final class MjFixturesManager
     private static function allSourceSlugs(): array
     {
         return array_merge(self::TABLE_SLUGS, array_keys(self::EXTRA_SOURCE_LABELS));
+    }
+
+    private static function isSensitiveOption(string $optionName): bool
+    {
+        $needle = strtolower($optionName);
+
+        return strpos($needle, 'secret') !== false
+            || strpos($needle, 'password') !== false
+            || strpos($needle, 'token') !== false
+            || strpos($needle, 'api_key') !== false;
     }
 
     private static function listFilesRecursive(string $dir): array

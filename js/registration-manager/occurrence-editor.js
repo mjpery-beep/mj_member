@@ -62,10 +62,15 @@
         var _localOccurrences = useState(normalizedOccurrences);
         var localOccurrences = _localOccurrences[0];
         var setLocalOccurrences = _localOccurrences[1];
+        var localOccurrencesRef = useRef(localOccurrences);
 
         useEffect(function () {
             setLocalOccurrences(normalizedOccurrences);
         }, [normalizedOccurrences]);
+
+        useEffect(function () {
+            localOccurrencesRef.current = localOccurrences;
+        }, [localOccurrences]);
 
         var _selectedId = useState(normalizedOccurrences.length > 0 ? normalizedOccurrences[0].id : null);
         var selectedOccurrenceId = _selectedId[0];
@@ -78,6 +83,22 @@
         var _activeBatchId = useState('');
         var activeBatchId = _activeBatchId[0];
         var setActiveBatchId = _activeBatchId[1];
+
+        var _draggingOccurrenceId = useState('');
+        var draggingOccurrenceId = _draggingOccurrenceId[0];
+        var setDraggingOccurrenceId = _draggingOccurrenceId[1];
+
+        var _weekInteraction = useState(null);
+        var weekInteraction = _weekInteraction[0];
+        var setWeekInteraction = _weekInteraction[1];
+
+        var _rangeSelection = useState(null);
+        var rangeSelection = _rangeSelection[0];
+        var setRangeSelection = _rangeSelection[1];
+        var isPointerDraggingRangeRef = useRef(false);
+        var suppressDayClickUntilRef = useRef(0);
+        var dragRangeStartIsoRef = useRef('');
+        var dragRangeEndIsoRef = useRef('');
 
         useEffect(function () {
             setSelectedOccurrenceId(normalizedOccurrences.length > 0 ? normalizedOccurrences[0].id : null);
@@ -283,6 +304,7 @@
         var WEEK_VIEW_HEIGHT = 560;
         var WEEK_CREATION_STEP_MINUTES = 15;
         var WEEK_CREATION_DEFAULT_DURATION = 60;
+        var MINUTES_PER_PIXEL_FOR_WEEK_DRAG = 2;
         var weekTimelineRange = Math.max(60, weekTimeScale.range || 0);
 
         var weekRangeLabel = useMemo(function () {
@@ -357,6 +379,7 @@
             setEditorState(function () {
                 var next = createEditorState(null);
                 next.date = day.iso;
+                next.endDate = day.iso;
                 next.startTime = startTime;
                 next.endTime = endTime;
                 next.status = 'planned';
@@ -365,6 +388,87 @@
             });
             openOccurrenceEditor(day.iso);
         }, [openOccurrenceEditor, weekOverview, weekTimeScale, weekTimelineRange, setSelectedOccurrenceId, setEditorState]);
+
+        var finalizeDayDragSelection = useCallback(function (forcedEndIso) {
+            var startIso = dragRangeStartIsoRef.current || '';
+            var endIso = forcedEndIso || dragRangeEndIsoRef.current || '';
+            if (!startIso || !endIso) {
+                return false;
+            }
+            var bounds = normalizeIsoDateRange(startIso, endIso);
+            isPointerDraggingRangeRef.current = false;
+            dragRangeStartIsoRef.current = '';
+            dragRangeEndIsoRef.current = '';
+            setRangeSelection(null);
+            if (!bounds) {
+                return false;
+            }
+            suppressDayClickUntilRef.current = Date.now() + 280;
+            var dateList = buildIsoDateRange(bounds.start, bounds.end);
+            if (!dateList.length) {
+                return false;
+            }
+
+            var previousList = cloneOccurrenceList(localOccurrences);
+            var previousSelection = selectedOccurrenceId;
+            var manualLotGroup = 'manual-range-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+            var createdOccurrences = dateList.map(function (dateIso, index) {
+                return {
+                    id: generateOccurrenceId(dateIso, '00:00', localOccurrences.length + index),
+                    date: dateIso,
+                    startTime: '00:00',
+                    endTime: '23:59',
+                    isAllDay: true,
+                    status: 'planned',
+                    reason: '',
+                    source: 'manual',
+                    title: dateList.length > 1
+                        ? getString(strings, 'occurrenceRangeDraftLabel', 'Plage de dates')
+                        : getString(strings, 'occurrenceFixedDraftLabel', 'Date fixe'),
+                    noteCalendar: dateList.length > 1
+                        ? getString(strings, 'occurrenceRangeDraftLabel', 'Plage de dates')
+                        : getString(strings, 'occurrenceFixedDraftLabel', 'Date fixe'),
+                    createAsManualLot: true,
+                    createAsManualLotGroup: manualLotGroup,
+                };
+            });
+
+            var updatedList = localOccurrences.concat(createdOccurrences);
+            var firstCreated = createdOccurrences[0] || null;
+            setLocalOccurrences(updatedList);
+            if (firstCreated) {
+                setSelectedOccurrenceId(firstCreated.id);
+                setEditorState(createEditorState(firstCreated));
+            }
+            persistOccurrences(updatedList, function () {
+                setLocalOccurrences(previousList);
+                setSelectedOccurrenceId(previousSelection);
+            }, '', true).catch(function () {
+                // Notification handled upstream.
+            });
+            return true;
+        }, [localOccurrences, selectedOccurrenceId, persistOccurrences, setSelectedOccurrenceId, setEditorState, strings]);
+
+        useEffect(function () {
+            if (!isPointerDraggingRangeRef.current) {
+                return;
+            }
+            if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+                return;
+            }
+            var handlePointerUp = function () {
+                if (!isPointerDraggingRangeRef.current) {
+                    return;
+                }
+                finalizeDayDragSelection(dragRangeEndIsoRef.current || '');
+            };
+            window.addEventListener('mouseup', handlePointerUp);
+            window.addEventListener('pointerup', handlePointerUp);
+            return function () {
+                window.removeEventListener('mouseup', handlePointerUp);
+                window.removeEventListener('pointerup', handlePointerUp);
+            };
+        }, [rangeSelection, finalizeDayDragSelection]);
 
         var _generatorState = useState(createGeneratorState(initialPivotDate));
         var generatorState = _generatorState[0];
@@ -497,6 +601,23 @@
         var hasSchedulePreviewHtml = typeof schedulePreviewHtml === 'string' && schedulePreviewHtml.trim() !== '';
         var canShowGeneratedPreview = localOccurrences.length > 0 || hasSchedulePreviewHtml;
         var highlightedBatchId = hoveredBatchId || activeBatchId;
+        var batchDatesMap = useMemo(function () {
+            var map = {};
+            localOccurrences.forEach(function (occurrence) {
+                if (!occurrence || !occurrence.date) {
+                    return;
+                }
+                var batchId = getOccurrenceBatchId(occurrence);
+                if (!batchId) {
+                    return;
+                }
+                if (!map[batchId]) {
+                    map[batchId] = {};
+                }
+                map[batchId][occurrence.date] = true;
+            });
+            return map;
+        }, [localOccurrences]);
         var _localBatches = useState(null);
         var localBatches = _localBatches[0];
         var setLocalBatches = _localBatches[1];
@@ -517,6 +638,20 @@
         ).filter(function (batch) {
             return batch && isOccurrenceBatchActive(batch.status);
         });
+
+        var batchConfigById = useMemo(function () {
+            var map = {};
+            generationHistory.forEach(function (batch) {
+                if (!batch || !batch.batchId) {
+                    return;
+                }
+                var config = batch.configSnapshot && typeof batch.configSnapshot === 'object'
+                    ? batch.configSnapshot
+                    : {};
+                map[String(batch.batchId)] = config;
+            });
+            return map;
+        }, [generationHistory]);
 
         var lotLocationOptions = useMemo(function () {
             var rawOptions = globalLocationOptions.length > 0 ? globalLocationOptions : loadedGlobalOptions.locations;
@@ -1666,6 +1801,25 @@
                     }),
                 ]),
                 h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceEndDateLabel', 'Date de fin')),
+                    h('input', {
+                        type: 'date',
+                        class: 'mj-regmgr-occurrence__input',
+                        value: editorState.endDate || editorState.date,
+                        onInput: function (event) { handleEditorChange('endDate', event.currentTarget.value); },
+                    }),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceTitleLabel', 'Titre')),
+                    h('input', {
+                        type: 'text',
+                        class: 'mj-regmgr-occurrence__input',
+                        value: editorState.title || '',
+                        placeholder: getString(strings, 'occurrenceTitlePlaceholder', 'Ex: Stage découverte'),
+                        onInput: function (event) { handleEditorChange('title', event.currentTarget.value); },
+                    }),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
                     h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceTypeLabel', 'Type')),
                     h('select', {
                         class: 'mj-regmgr-occurrence__input',
@@ -2019,10 +2173,251 @@
                 setSelectedOccurrenceId(null);
                 var baseState = createEditorState(null);
                 baseState.date = day.iso;
+                baseState.endDate = day.iso;
                 setEditorState(baseState);
             }
-            openOccurrenceEditor(day.iso);
-        }, [openOccurrenceEditor, setEditorState, setSelectedOccurrenceId, setActiveBatchId]);
+        }, [setEditorState, setSelectedOccurrenceId, setActiveBatchId]);
+
+        var handleCalendarDayDragStart = useCallback(function (day, event) {
+            if (!day || !day.iso) {
+                return;
+            }
+            if (event && typeof event.button === 'number' && event.button !== 0) {
+                return;
+            }
+            if (event && typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
+            isPointerDraggingRangeRef.current = true;
+            dragRangeStartIsoRef.current = day.iso;
+            dragRangeEndIsoRef.current = day.iso;
+            setRangeSelection({ startIso: day.iso, endIso: day.iso });
+        }, []);
+
+        var handleCalendarDayDragEnter = useCallback(function (day) {
+            if (!isPointerDraggingRangeRef.current || !day || !day.iso) {
+                return;
+            }
+            dragRangeEndIsoRef.current = day.iso;
+            setRangeSelection(function (prev) {
+                if (!prev || !prev.startIso) {
+                    return { startIso: day.iso, endIso: day.iso };
+                }
+                if (prev.endIso === day.iso) {
+                    return prev;
+                }
+                return { startIso: prev.startIso, endIso: day.iso };
+            });
+        }, []);
+
+        var handleCalendarDayDragEnd = useCallback(function (day, event) {
+            if (!isPointerDraggingRangeRef.current) {
+                return;
+            }
+            if (event && typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
+            if (day && day.iso) {
+                dragRangeEndIsoRef.current = day.iso;
+                setRangeSelection(function (prev) {
+                    if (!prev || !prev.startIso) {
+                        return { startIso: day.iso, endIso: day.iso };
+                    }
+                    return { startIso: prev.startIso, endIso: day.iso };
+                });
+            }
+            finalizeDayDragSelection(day && day.iso ? day.iso : '');
+        }, [finalizeDayDragSelection]);
+
+        var handleOccurrenceDragStart = useCallback(function (occurrence, event) {
+            if (!occurrence || !occurrence.id) {
+                return;
+            }
+            var occId = String(occurrence.id);
+            setDraggingOccurrenceId(occId);
+            if (event && event.dataTransfer) {
+                try {
+                    event.dataTransfer.setData('text/plain', occId);
+                    event.dataTransfer.effectAllowed = 'move';
+                } catch (error) {
+                    // Ignore browser limitations.
+                }
+            }
+        }, []);
+
+        var handleOccurrenceDragEnd = useCallback(function () {
+            setDraggingOccurrenceId('');
+        }, []);
+
+        var commitOccurrenceList = useCallback(function (updatedList) {
+            var previousList = cloneOccurrenceList(localOccurrences);
+            var previousSelection = selectedOccurrenceId;
+            setLocalOccurrences(updatedList);
+            persistOccurrences(updatedList, function () {
+                setLocalOccurrences(previousList);
+                setSelectedOccurrenceId(previousSelection);
+            }, '', true).catch(function () {
+                // Notification handled upstream.
+            });
+        }, [localOccurrences, selectedOccurrenceId, persistOccurrences]);
+
+        var handleOccurrenceDropOnDay = useCallback(function (dayIso, event) {
+            if (!dayIso) {
+                return;
+            }
+            if (event && typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
+            var droppedId = draggingOccurrenceId;
+            if (!droppedId && event && event.dataTransfer) {
+                try {
+                    droppedId = event.dataTransfer.getData('text/plain') || '';
+                } catch (error) {
+                    droppedId = '';
+                }
+            }
+            droppedId = String(droppedId || '');
+            if (!droppedId) {
+                return;
+            }
+
+            var targetOccurrence = localOccurrences.find(function (occ) {
+                return occ && String(occ.id) === droppedId;
+            }) || null;
+            if (!targetOccurrence) {
+                return;
+            }
+
+            var sourceDate = sanitizeDateValue(targetOccurrence.date);
+            var targetDate = sanitizeDateValue(dayIso);
+            if (!sourceDate || !targetDate || sourceDate === targetDate) {
+                setDraggingOccurrenceId('');
+                return;
+            }
+
+            var batchId = getOccurrenceBatchId(targetOccurrence);
+            var updatedList;
+            if (batchId) {
+                var shiftDays = diffIsoDateInDays(sourceDate, targetDate);
+                var linkedBatchConfig = batchConfigById[String(batchId)] || null;
+                var linkedBatchMode = linkedBatchConfig && typeof linkedBatchConfig.mode === 'string'
+                    ? sanitizeGeneratorMode(linkedBatchConfig.mode)
+                    : '';
+                if ((linkedBatchMode === 'weekly' || linkedBatchMode === 'monthly') && shiftDays !== 0) {
+                    var shiftedBatchConfig = shiftBatchConfigByDays(linkedBatchConfig, shiftDays);
+                    setDraggingOccurrenceId('');
+                    setSelectedOccurrenceId(droppedId);
+                    handleUpdateBatchConfig(String(batchId), shiftedBatchConfig);
+                    return;
+                }
+                updatedList = shiftBatchOccurrencesByDays(localOccurrences, batchId, shiftDays);
+            } else {
+                updatedList = localOccurrences.map(function (occ) {
+                    if (!occ || String(occ.id) !== droppedId) {
+                        return occ;
+                    }
+                    return Object.assign({}, occ, { date: targetDate });
+                });
+            }
+
+            setDraggingOccurrenceId('');
+            setSelectedOccurrenceId(droppedId);
+            commitOccurrenceList(updatedList);
+        }, [draggingOccurrenceId, localOccurrences, commitOccurrenceList, setSelectedOccurrenceId, batchConfigById, handleUpdateBatchConfig]);
+
+        var startWeekOccurrenceInteraction = useCallback(function (occurrence, mode, event) {
+            if (!occurrence || !occurrence.id || !mode) {
+                return;
+            }
+            if (event && typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
+            if (event && typeof event.stopPropagation === 'function') {
+                event.stopPropagation();
+            }
+            var startMinutes = parseTimeToMinutes(occurrence.startTime);
+            var endMinutes = parseTimeToMinutes(occurrence.endTime);
+            if (startMinutes === null) {
+                startMinutes = 9 * 60;
+            }
+            if (endMinutes === null || endMinutes <= startMinutes) {
+                endMinutes = startMinutes + 60;
+            }
+            setWeekInteraction({
+                mode: mode,
+                occurrenceId: String(occurrence.id),
+                startClientY: event && typeof event.clientY === 'number' ? event.clientY : 0,
+                originalStartMinutes: startMinutes,
+                originalEndMinutes: endMinutes,
+            });
+            setSelectedOccurrenceId(String(occurrence.id));
+        }, [setSelectedOccurrenceId]);
+
+        useEffect(function () {
+            if (!weekInteraction || typeof window === 'undefined') {
+                return;
+            }
+            var isCommitted = false;
+            var onPointerMove = function (event) {
+                var deltaY = (typeof event.clientY === 'number' ? event.clientY : 0) - (weekInteraction.startClientY || 0);
+                var deltaMinutesRaw = deltaY * MINUTES_PER_PIXEL_FOR_WEEK_DRAG;
+                var deltaMinutes = Math.round(deltaMinutesRaw / WEEK_CREATION_STEP_MINUTES) * WEEK_CREATION_STEP_MINUTES;
+                var nextStart = weekInteraction.originalStartMinutes;
+                var nextEnd = weekInteraction.originalEndMinutes;
+
+                if (weekInteraction.mode === 'move') {
+                    var duration = Math.max(WEEK_CREATION_STEP_MINUTES, weekInteraction.originalEndMinutes - weekInteraction.originalStartMinutes);
+                    nextStart = clampMinutesToDay(weekInteraction.originalStartMinutes + deltaMinutes);
+                    nextEnd = nextStart + duration;
+                    if (nextEnd > (24 * 60 - 1)) {
+                        nextEnd = 24 * 60 - 1;
+                        nextStart = Math.max(0, nextEnd - duration);
+                    }
+                } else if (weekInteraction.mode === 'resize-start') {
+                    nextStart = clampMinutesToDay(weekInteraction.originalStartMinutes + deltaMinutes);
+                    nextEnd = weekInteraction.originalEndMinutes;
+                    if (nextStart > nextEnd - WEEK_CREATION_STEP_MINUTES) {
+                        nextStart = nextEnd - WEEK_CREATION_STEP_MINUTES;
+                    }
+                } else if (weekInteraction.mode === 'resize-end') {
+                    nextStart = weekInteraction.originalStartMinutes;
+                    nextEnd = clampMinutesToDay(weekInteraction.originalEndMinutes + deltaMinutes);
+                    if (nextEnd < nextStart + WEEK_CREATION_STEP_MINUTES) {
+                        nextEnd = nextStart + WEEK_CREATION_STEP_MINUTES;
+                    }
+                }
+
+                var interactionId = weekInteraction.occurrenceId;
+                setLocalOccurrences(function (prevList) {
+                    return prevList.map(function (occ) {
+                        if (!occ || String(occ.id) !== interactionId) {
+                            return occ;
+                        }
+                        return Object.assign({}, occ, {
+                            startTime: minutesToTime(nextStart),
+                            endTime: minutesToTime(nextEnd),
+                            isAllDay: false,
+                        });
+                    });
+                });
+            };
+
+            var onPointerUp = function () {
+                if (isCommitted) {
+                    return;
+                }
+                isCommitted = true;
+                setWeekInteraction(null);
+                commitOccurrenceList(cloneOccurrenceList(localOccurrencesRef.current));
+            };
+
+            window.addEventListener('pointermove', onPointerMove);
+            window.addEventListener('pointerup', onPointerUp);
+            return function () {
+                window.removeEventListener('pointermove', onPointerMove);
+                window.removeEventListener('pointerup', onPointerUp);
+            };
+        }, [weekInteraction, commitOccurrenceList]);
 
         var handleEditorChange = useCallback(function (field, value) {
             setEditorState(function (prev) {
@@ -2049,6 +2444,7 @@
             var isAllDayOccurrence = !!editorState.isAllDay;
             var resolvedStartTime = isAllDayOccurrence ? '00:00' : editorState.startTime;
             var resolvedEndTime = isAllDayOccurrence ? '23:59' : editorState.endTime;
+            var titleValue = typeof editorState.title === 'string' ? editorState.title.trim() : '';
             var previousList = cloneOccurrenceList(localOccurrences);
             var previousSelection = selectedOccurrenceId;
             if (editorState.id) {
@@ -2064,6 +2460,7 @@
                         status: editorState.status,
                         reason: editorState.reason,
                         source: occ && occ.source ? occ.source : 'manual',
+                        noteCalendar: titleValue,
                     });
                 });
                 setLocalOccurrences(updatedList);
@@ -2074,22 +2471,40 @@
                     // Already handled by parent notifications
                 });
             } else {
-                var newId = generateOccurrenceId(editorState.date, editorState.startTime, localOccurrences.length);
-                var newOccurrence = {
-                    id: newId,
-                    date: editorState.date,
-                    startTime: resolvedStartTime,
-                    endTime: resolvedEndTime,
-                    isAllDay: isAllDayOccurrence,
-                    status: editorState.status,
-                    reason: editorState.reason,
-                    source: 'manual',
-                    createAsManualLot: true,
-                };
-                var updatedList = localOccurrences.concat([newOccurrence]);
+                var startIso = sanitizeDateValue(editorState.date);
+                var endIso = sanitizeDateValue(editorState.endDate || editorState.date);
+                var normalizedRange = normalizeIsoDateRange(startIso, endIso);
+                var rangeStart = normalizedRange ? normalizedRange.start : startIso;
+                var rangeEnd = normalizedRange ? normalizedRange.end : startIso;
+                var dateList = buildIsoDateRange(rangeStart, rangeEnd);
+                if (!dateList.length) {
+                    dateList = [startIso];
+                }
+                var manualLotGroup = dateList.length > 1
+                    ? ('manual-range-' + Date.now() + '-' + Math.floor(Math.random() * 100000))
+                    : '';
+                var newOccurrences = dateList.map(function (dateIso, index) {
+                    return {
+                        id: generateOccurrenceId(dateIso, resolvedStartTime || editorState.startTime, localOccurrences.length + index),
+                        date: dateIso,
+                        startTime: resolvedStartTime,
+                        endTime: resolvedEndTime,
+                        isAllDay: isAllDayOccurrence,
+                        status: editorState.status,
+                        reason: editorState.reason,
+                        source: 'manual',
+                        noteCalendar: titleValue,
+                        createAsManualLot: true,
+                        createAsManualLotGroup: manualLotGroup,
+                    };
+                });
+                var firstNewOccurrence = newOccurrences[0] || null;
+                var updatedList = localOccurrences.concat(newOccurrences);
                 setLocalOccurrences(updatedList);
-                setSelectedOccurrenceId(newId);
-                setEditorState(createEditorState(newOccurrence));
+                if (firstNewOccurrence) {
+                    setSelectedOccurrenceId(firstNewOccurrence.id);
+                    setEditorState(createEditorState(firstNewOccurrence));
+                }
                 persistOccurrences(updatedList, function () {
                     setLocalOccurrences(previousList);
                     setSelectedOccurrenceId(previousSelection);
@@ -2099,13 +2514,13 @@
             }
         }, [editorState, localOccurrences, selectedOccurrenceId, persistOccurrences]);
 
-        var handleDeleteOccurrence = useCallback(function () {
-            console.log('Deleting occurrence', selectedOccurrenceId);   
+        var handleDeleteOccurrence = useCallback(function (options) {
             if (!selectedOccurrenceId) {
                 return;
             }
+            var allowWithoutConfirm = !!(options && options.skipConfirm);
             var confirmMessage = getString(strings, 'occurrenceDeleteConfirm', 'Supprimer cette occurrence ?');
-            if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+            if (!allowWithoutConfirm && typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
                 return;
             }
             var previousList = cloneOccurrenceList(localOccurrences);
@@ -2127,6 +2542,44 @@
                 // Notification already handled upstream
             });
         }, [selectedOccurrenceId, strings, editorState, localOccurrences, persistOccurrences]);
+
+        useEffect(function () {
+            if (typeof window === 'undefined') {
+                return undefined;
+            }
+            var onKeyDown = function (event) {
+                if (!event) {
+                    return;
+                }
+                var key = typeof event.key === 'string' ? event.key : '';
+                if (key !== 'Delete' && key !== 'Backspace') {
+                    return;
+                }
+
+                var target = event.target;
+                if (target && typeof target === 'object') {
+                    var tagName = target.tagName ? String(target.tagName).toUpperCase() : '';
+                    var isEditable = !!target.isContentEditable;
+                    if (isEditable || tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
+                        return;
+                    }
+                }
+
+                if (!selectedOccurrenceId) {
+                    return;
+                }
+
+                if (typeof event.preventDefault === 'function') {
+                    event.preventDefault();
+                }
+                handleDeleteOccurrence({ skipConfirm: true });
+            };
+
+            window.addEventListener('keydown', onKeyDown);
+            return function () {
+                window.removeEventListener('keydown', onKeyDown);
+            };
+        }, [selectedOccurrenceId, handleDeleteOccurrence]);
 
         var handleGeneratorChange = useCallback(function (field, value) {
             setGeneratorState(function (prev) {
@@ -2560,21 +3013,142 @@
                                             'mj-regmgr-occurrence__day--selected': day.isSelected,
                                             'mj-regmgr-occurrence__day--today': day.isToday,
                                             'mj-regmgr-occurrence__day--with-occurrence': day.hasOccurrences,
-                                            'mj-regmgr-occurrence__day--batch-highlighted': !!(highlightedBatchId && dayHasBatch(day, highlightedBatchId)),
+                                            'mj-regmgr-occurrence__day--range-drag': !!(rangeSelection && isIsoDateInsideRange(day.iso, rangeSelection.startIso, rangeSelection.endIso)),
                                         }, day.status ? 'mj-regmgr-occurrence__day--status-' + day.status : null),
-                                        style: highlightedBatchId && dayHasBatch(day, highlightedBatchId)
-                                            ? {
-                                                boxShadow: 'inset 0 0 0 2px rgba(14, 165, 233, 0.65)',
-                                                background: 'linear-gradient(180deg, rgba(14,165,233,0.12), rgba(255,255,255,0.98))',
+                                        style: (rangeSelection && isIsoDateInsideRange(day.iso, rangeSelection.startIso, rangeSelection.endIso)
+                                                ? {
+                                                    boxShadow: 'inset 0 0 0 2px rgba(59,130,246,0.35)',
+                                                    background: 'linear-gradient(180deg, rgba(59,130,246,0.10), rgba(255,255,255,0.98))',
+                                                }
+                                                : null),
+                                        onPointerDown: function (event) { handleCalendarDayDragStart(day, event); },
+                                        onPointerEnter: function () { handleCalendarDayDragEnter(day); },
+                                        onPointerUp: function (event) { handleCalendarDayDragEnd(day, event); },
+                                        onDragOver: function (event) {
+                                            if (event && typeof event.preventDefault === 'function') {
+                                                event.preventDefault();
                                             }
-                                            : null,
-                                        onClick: function () { handleSelectDay(day); },
+                                        },
+                                        onDrop: function (event) {
+                                            handleOccurrenceDropOnDay(day.iso, event);
+                                        },
+                                        onClick: function () {
+                                            if (Date.now() < suppressDayClickUntilRef.current) {
+                                                return;
+                                            }
+                                            handleSelectDay(day);
+                                        },
                                     }, [
                                         h('span', { class: 'mj-regmgr-occurrence__day-number' }, day.label),
-                                        day.timeSummary && h('span', { class: 'mj-regmgr-occurrence__day-time' }, day.timeSummary),
-                                        day.hasOccurrences && h('span', {
-                                            class: classNames('mj-regmgr-occurrence__day-indicator', day.status ? 'mj-regmgr-occurrence__day-indicator--' + day.status : null),
-                                        }, day.occurrences.length),
+                                        rangeSelection && isIsoDateInsideRange(day.iso, rangeSelection.startIso, rangeSelection.endIso) && h('div', {
+                                            style: {
+                                                marginTop: '5px',
+                                                borderRadius: '10px',
+                                                padding: '4px 8px',
+                                                background: 'linear-gradient(120deg, rgba(59,130,246,0.16), rgba(147,197,253,0.2))',
+                                                border: '1px dashed rgba(37,99,235,0.45)',
+                                                color: '#1e40af',
+                                                fontSize: '10px',
+                                                fontWeight: 700,
+                                                textTransform: 'uppercase',
+                                                letterSpacing: '0.03em',
+                                            },
+                                        }, getString(strings, 'occurrenceDragCreateLabel', 'Nouvel objet')),
+                                        day.hasOccurrences && h('div', {
+                                            style: {
+                                                marginTop: '4px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '3px',
+                                            },
+                                        }, day.occurrences.slice(0, 4).map(function (occurrence, occurrenceIndex) {
+                                            var chipBatchId = getOccurrenceBatchId(occurrence);
+                                            var chipBatchSize = chipBatchId
+                                                ? localOccurrences.filter(function (item) { return getOccurrenceBatchId(item) === chipBatchId; }).length
+                                                : 1;
+                                            var hasPrevBatchDay = !!(chipBatchId
+                                                && batchDatesMap[chipBatchId]
+                                                && batchDatesMap[chipBatchId][shiftIsoDate(day.iso, -1)]);
+                                            var hasNextBatchDay = !!(chipBatchId
+                                                && batchDatesMap[chipBatchId]
+                                                && batchDatesMap[chipBatchId][shiftIsoDate(day.iso, 1)]);
+                                            var chipSegment = 'single';
+                                            if (chipBatchSize > 1) {
+                                                if (hasPrevBatchDay && hasNextBatchDay) {
+                                                    chipSegment = 'middle';
+                                                } else if (hasPrevBatchDay) {
+                                                    chipSegment = 'end';
+                                                } else if (hasNextBatchDay) {
+                                                    chipSegment = 'start';
+                                                }
+                                            }
+                                            var chipIsConnected = chipBatchSize > 1;
+                                            return h('div', {
+                                                key: day.iso + '-occ-chip-' + occurrence.id + '-' + occurrenceIndex,
+                                                draggable: true,
+                                                onDragStart: function (event) { handleOccurrenceDragStart(occurrence, event); },
+                                                onDragEnd: function () { handleOccurrenceDragEnd(); },
+                                                onPointerDown: function (event) {
+                                                    if (event && typeof event.stopPropagation === 'function') {
+                                                        event.stopPropagation();
+                                                    }
+                                                },
+                                                onClick: function (event) {
+                                                    if (event && typeof event.stopPropagation === 'function') {
+                                                        event.stopPropagation();
+                                                    }
+                                                    setSelectedOccurrenceId(occurrence.id);
+                                                    setActiveBatchId(chipBatchId);
+                                                },
+                                                style: {
+                                                    position: 'relative',
+                                                    fontSize: '11px',
+                                                    lineHeight: '1.2',
+                                                    display: 'block',
+                                                    width: 'calc(100% + 16px)',
+                                                    borderRadius: chipIsConnected
+                                                        ? (chipSegment === 'start'
+                                                            ? '12px 4px 4px 12px'
+                                                            : (chipSegment === 'middle'
+                                                                ? '4px'
+                                                                : (chipSegment === 'end'
+                                                                    ? '4px 12px 12px 4px'
+                                                                    : '12px')))
+                                                        : '12px',
+                                                    padding: chipIsConnected && chipSegment === 'middle' ? '6px 6px' : '6px 9px',
+                                                    marginLeft: chipIsConnected
+                                                        ? (chipSegment === 'middle' || chipSegment === 'end' ? '-10px' : '-8px')
+                                                        : '-8px',
+                                                    marginRight: chipIsConnected
+                                                        ? (chipSegment === 'middle' || chipSegment === 'start' ? '-10px' : '-8px')
+                                                        : '-8px',
+                                                    border: highlightedBatchId && chipBatchId === highlightedBatchId
+                                                        ? '1px solid rgba(14,165,233,0.65)'
+                                                        : '1px solid rgba(26,45,71,0.10)',
+                                                    background: draggingOccurrenceId && String(occurrence.id) === draggingOccurrenceId
+                                                        ? 'linear-gradient(135deg, rgba(59,130,246,0.30), rgba(255,255,255,0.98))'
+                                                        : 'linear-gradient(135deg, rgba(29,78,216,0.12), rgba(255,255,255,0.98))',
+                                                    boxShadow: selectedOccurrenceId === occurrence.id
+                                                        ? '0 0 0 2px rgba(14,165,233,0.30), 0 10px 24px rgba(15,35,95,0.12)'
+                                                        : (highlightedBatchId && chipBatchId === highlightedBatchId
+                                                            ? '0 0 0 2px rgba(14,165,233,0.28), 0 10px 24px rgba(15,35,95,0.12)'
+                                                            : '0 8px 18px rgba(15,35,95,0.08)'),
+                                                    cursor: 'grab',
+                                                    userSelect: 'none',
+                                                    overflow: 'hidden',
+                                                    opacity: highlightedBatchId && chipBatchId && chipBatchId !== highlightedBatchId ? 0.42 : 1,
+                                                    color: '#1e3a8a',
+                                                    minHeight: '18px',
+                                                    zIndex: chipIsConnected ? 3 : 2,
+                                                },
+                                                title: (occurrence.title || occurrence.noteCalendar || formatPreviewRange(
+                                                    occurrence.startTime,
+                                                    occurrence.endTime,
+                                                    !!occurrence.isAllDay,
+                                                    getString(strings, 'occurrenceAllDayLabel', 'Toute la journée')
+                                                )),
+                                            }, []);
+                                        })),
                                     ]);
                                 }));
                             }),
@@ -2637,7 +3211,23 @@
                                     h('div', {
                                         class: 'mj-regmgr-occurrence__week-column-body',
                                         style: { height: WEEK_VIEW_HEIGHT + 'px' },
+                                        onPointerDown: function (event) {
+                                            if (event.target === event.currentTarget) {
+                                                handleCalendarDayDragStart(day, event);
+                                            }
+                                        },
+                                        onPointerEnter: function () {
+                                            handleCalendarDayDragEnter(day);
+                                        },
+                                        onPointerUp: function (event) {
+                                            if (event.target === event.currentTarget) {
+                                                handleCalendarDayDragEnd(day, event);
+                                            }
+                                        },
                                         onClick: function (event) {
+                                            if (Date.now() < suppressDayClickUntilRef.current) {
+                                                return;
+                                            }
                                             if (event.target === event.currentTarget) {
                                                 handleSelectDay(day);
                                             }
@@ -2698,16 +3288,28 @@
                                                 style: {
                                                     top: blockTop + 'px',
                                                     height: blockHeight + 'px',
+                                                    border: highlightedBatchId && getOccurrenceBatchId(occurrence) === highlightedBatchId
+                                                        ? '1px solid rgba(14, 165, 233, 0.65)'
+                                                        : '1px solid rgba(26,45,71,0.10)',
+                                                    background: weekInteraction && String(occurrence.id) === weekInteraction.occurrenceId
+                                                        ? 'linear-gradient(135deg, rgba(59,130,246,0.30), rgba(255,255,255,0.98))'
+                                                        : 'linear-gradient(135deg, rgba(29,78,216,0.12), rgba(255,255,255,0.98))',
                                                     opacity: highlightedBatchId && getOccurrenceBatchId(occurrence) !== highlightedBatchId ? 0.42 : 1,
                                                     boxShadow: highlightedBatchId && getOccurrenceBatchId(occurrence) === highlightedBatchId
                                                         ? '0 0 0 2px rgba(14, 165, 233, 0.65), 0 8px 18px rgba(14,165,233,0.22)'
-                                                        : undefined,
+                                                        : '0 8px 18px rgba(15,35,95,0.08)',
+                                                    cursor: weekInteraction && String(occurrence.id) === weekInteraction.occurrenceId
+                                                        ? 'grabbing'
+                                                        : 'grab',
+                                                    touchAction: 'none',
                                                 },
                                                 onClick: function (event) {
                                                     event.stopPropagation();
                                                     setSelectedOccurrenceId(occurrence.id);
                                                     setActiveBatchId(getOccurrenceBatchId(occurrence));
-                                                    openOccurrenceEditor(occurrence.date);
+                                                },
+                                                onPointerDown: function (event) {
+                                                    startWeekOccurrenceInteraction(occurrence, 'move', event);
                                                 },
                                                 onMouseEnter: function () {
                                                     var batchId = getOccurrenceBatchId(occurrence);
@@ -2720,6 +3322,21 @@
                                                 },
                                                 'aria-label': ariaLabel,
                                             }, [
+                                                h('span', {
+                                                    onPointerDown: function (event) {
+                                                        startWeekOccurrenceInteraction(occurrence, 'resize-start', event);
+                                                    },
+                                                    style: {
+                                                        position: 'absolute',
+                                                        top: '-2px',
+                                                        left: '8px',
+                                                        right: '8px',
+                                                        height: '7px',
+                                                        borderRadius: '8px',
+                                                        background: 'rgba(255,255,255,0.62)',
+                                                        cursor: 'ns-resize',
+                                                    },
+                                                }),
                                                 h('span', { class: 'mj-regmgr-occurrence__week-block-time' }, formatPreviewRange(
                                                     occurrence.startTime,
                                                     occurrence.endTime,
@@ -2728,6 +3345,21 @@
                                                 )),
                                                 statusLabelMap[statusKey] && h('span', { class: 'mj-regmgr-occurrence__week-block-status' }, statusLabelMap[statusKey]),
                                                 occurrence.status === 'cancelled' && occurrence.reason && h('span', { class: 'mj-regmgr-occurrence__week-block-reason' }, occurrence.reason),
+                                                h('span', {
+                                                    onPointerDown: function (event) {
+                                                        startWeekOccurrenceInteraction(occurrence, 'resize-end', event);
+                                                    },
+                                                    style: {
+                                                        position: 'absolute',
+                                                        bottom: '-2px',
+                                                        left: '8px',
+                                                        right: '8px',
+                                                        height: '7px',
+                                                        borderRadius: '8px',
+                                                        background: 'rgba(255,255,255,0.62)',
+                                                        cursor: 'ns-resize',
+                                                    },
+                                                }),
                                             ]);
                                         }),
                                     ]),
@@ -3528,6 +4160,15 @@
             reasonValue = occurrence.cancelReason;
         }
 
+        var titleValue = '';
+        if (occurrence && typeof occurrence.title === 'string') {
+            titleValue = occurrence.title;
+        } else if (occurrence && typeof occurrence.noteCalendar === 'string') {
+            titleValue = occurrence.noteCalendar;
+        } else if (occurrence && typeof occurrence.note_calendar === 'string') {
+            titleValue = occurrence.note_calendar;
+        }
+
         var generationBatchValue = '';
         if (occurrence && typeof occurrence.generationBatchId === 'string') {
             generationBatchValue = occurrence.generationBatchId;
@@ -3550,7 +4191,229 @@
             visibility: occurrence && typeof occurrence.visibility === 'string' ? occurrence.visibility : 'tous',
             noteSchedule: occurrence && typeof occurrence.noteSchedule === 'string' ? occurrence.noteSchedule : '',
             noteCalendar: occurrence && typeof occurrence.noteCalendar === 'string' ? occurrence.noteCalendar : '',
+            title: titleValue,
         };
+    }
+
+    function normalizeIsoDateRange(startIso, endIso) {
+        var startDate = parseISODate(startIso);
+        var endDate = parseISODate(endIso);
+        if (!startDate || !endDate) {
+            return null;
+        }
+        if (endDate < startDate) {
+            var swap = startDate;
+            startDate = endDate;
+            endDate = swap;
+        }
+        return {
+            start: formatISODate(startDate),
+            end: formatISODate(endDate),
+        };
+    }
+
+    function isIsoDateInsideRange(dateIso, startIso, endIso) {
+        var range = normalizeIsoDateRange(startIso, endIso);
+        if (!range || !dateIso) {
+            return false;
+        }
+        return dateIso >= range.start && dateIso <= range.end;
+    }
+
+    function buildIsoDateRange(startIso, endIso) {
+        var range = normalizeIsoDateRange(startIso, endIso);
+        if (!range) {
+            return [];
+        }
+        var startDate = parseISODate(range.start);
+        var endDate = parseISODate(range.end);
+        if (!startDate || !endDate) {
+            return [];
+        }
+        var result = [];
+        var cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        var guard = 0;
+        while (cursor <= endDate && guard < 366) {
+            result.push(formatISODate(cursor));
+            cursor = addDays(cursor, 1);
+            guard += 1;
+        }
+        return result;
+    }
+
+    function diffIsoDateInDays(fromIso, toIso) {
+        var fromDate = parseISODate(fromIso);
+        var toDate = parseISODate(toIso);
+        if (!fromDate || !toDate) {
+            return 0;
+        }
+        var diffMs = toDate.getTime() - fromDate.getTime();
+        return Math.round(diffMs / (24 * 60 * 60 * 1000));
+    }
+
+    function shiftIsoDate(iso, deltaDays) {
+        var dateObj = parseISODate(iso);
+        if (!dateObj) {
+            return iso;
+        }
+        return formatISODate(addDays(dateObj, deltaDays));
+    }
+
+    function shiftBatchOccurrencesByDays(list, batchId, shiftDays) {
+        var numericShift = typeof shiftDays === 'number' && !Number.isNaN(shiftDays) ? Math.round(shiftDays) : 0;
+        if (!numericShift) {
+            return list;
+        }
+        var targetBatchId = String(batchId || '');
+        return (Array.isArray(list) ? list : []).map(function (occ) {
+            if (!occ || getOccurrenceBatchId(occ) !== targetBatchId) {
+                return occ;
+            }
+            return Object.assign({}, occ, {
+                date: shiftIsoDate(occ.date, numericShift),
+            });
+        });
+    }
+
+    function shiftBatchConfigByDays(config, shiftDays) {
+        var numericShift = typeof shiftDays === 'number' && !Number.isNaN(shiftDays) ? Math.round(shiftDays) : 0;
+        var base = config && typeof config === 'object' ? config : {};
+        if (!numericShift) {
+            return Object.assign({}, base);
+        }
+
+        var next = Object.assign({}, base);
+        if (typeof next.startDate === 'string' && next.startDate) {
+            next.startDate = shiftIsoDate(next.startDate, numericShift);
+        }
+        if (typeof next.endDate === 'string' && next.endDate) {
+            next.endDate = shiftIsoDate(next.endDate, numericShift);
+        }
+        if (typeof next.start === 'string' && next.start) {
+            next.start = shiftDateTimeByDays(next.start, numericShift);
+        }
+        if (typeof next.end === 'string' && next.end) {
+            next.end = shiftDateTimeByDays(next.end, numericShift);
+        }
+
+        var mode = typeof next.mode === 'string' ? sanitizeGeneratorMode(next.mode) : '';
+        if (mode === 'weekly') {
+            next.days = shiftWeekDays(next.days, numericShift);
+        } else if (mode === 'monthly' && typeof next.monthlyWeekday === 'string' && next.monthlyWeekday) {
+            next.monthlyWeekday = shiftWeekDayKey(next.monthlyWeekday, numericShift);
+        }
+
+        return next;
+    }
+
+    function shiftDateTimeByDays(value, shiftDays) {
+        if (typeof value !== 'string' || !value) {
+            return value;
+        }
+        var parsed = parseISODateTime(value);
+        if (!parsed) {
+            return value;
+        }
+        var shifted = addDays(parsed, shiftDays);
+        return formatISODate(shifted)
+            + ' '
+            + String(shifted.getHours()).padStart(2, '0')
+            + ':'
+            + String(shifted.getMinutes()).padStart(2, '0')
+            + ':'
+            + String(shifted.getSeconds()).padStart(2, '0');
+    }
+
+    function shiftWeekDays(daysValue, shiftDays) {
+        var keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        var shiftedMap = { mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun: false };
+        if (Array.isArray(daysValue)) {
+            daysValue.forEach(function (dayKey) {
+                var shifted = shiftWeekDayKey(dayKey, shiftDays);
+                if (shiftedMap.hasOwnProperty(shifted)) {
+                    shiftedMap[shifted] = true;
+                }
+            });
+            return keys.filter(function (key) { return shiftedMap[key]; });
+        }
+        if (daysValue && typeof daysValue === 'object') {
+            Object.keys(shiftedMap).forEach(function (key) {
+                shiftedMap[key] = false;
+            });
+            Object.keys(daysValue).forEach(function (rawKey) {
+                if (!daysValue[rawKey]) {
+                    return;
+                }
+                var shifted = shiftWeekDayKey(rawKey, shiftDays);
+                if (shiftedMap.hasOwnProperty(shifted)) {
+                    shiftedMap[shifted] = true;
+                }
+            });
+            return shiftedMap;
+        }
+        return daysValue;
+    }
+
+    function shiftWeekDayKey(dayKey, shiftDays) {
+        var keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        var normalized = typeof dayKey === 'string' ? sanitizeGeneratorWeekday(dayKey) : '';
+        var index = keys.indexOf(normalized);
+        if (index === -1) {
+            return normalized;
+        }
+        var shift = typeof shiftDays === 'number' && !Number.isNaN(shiftDays) ? Math.round(shiftDays) : 0;
+        var normalizedShift = ((shift % 7) + 7) % 7;
+        return keys[(index + normalizedShift) % 7];
+    }
+
+    function rebuildBatchOccurrencesForRange(list, batchId, startIso, endIso) {
+        var targetBatchId = String(batchId || '');
+        var safeList = Array.isArray(list) ? list : [];
+        var rangeDays = buildIsoDateRange(startIso, endIso);
+        if (!rangeDays.length) {
+            return safeList;
+        }
+
+        var batchItems = safeList
+            .filter(function (occ) { return occ && getOccurrenceBatchId(occ) === targetBatchId; })
+            .sort(function (left, right) { return String(left.date).localeCompare(String(right.date)); });
+        if (!batchItems.length) {
+            return safeList;
+        }
+
+        var template = batchItems[0];
+        var newBatchOccurrences = rangeDays.map(function (iso, index) {
+            var source = batchItems[index] || template;
+            return Object.assign({}, source, {
+                id: source.id || generateOccurrenceId(iso, source.startTime || '09:00', index),
+                date: iso,
+            });
+        });
+
+        var remaining = safeList.filter(function (occ) {
+            return !occ || getOccurrenceBatchId(occ) !== targetBatchId;
+        });
+        return remaining.concat(newBatchOccurrences).sort(function (left, right) {
+            var leftDate = left && left.date ? String(left.date) : '';
+            var rightDate = right && right.date ? String(right.date) : '';
+            if (leftDate !== rightDate) {
+                return leftDate.localeCompare(rightDate);
+            }
+            var leftTime = left && left.startTime ? String(left.startTime) : '';
+            var rightTime = right && right.startTime ? String(right.startTime) : '';
+            return leftTime.localeCompare(rightTime);
+        });
+    }
+
+    function clampMinutesToDay(value) {
+        var numeric = typeof value === 'number' && !Number.isNaN(value) ? value : 0;
+        if (numeric < 0) {
+            return 0;
+        }
+        if (numeric > (24 * 60 - 1)) {
+            return 24 * 60 - 1;
+        }
+        return numeric;
     }
 
     function getOccurrenceBatchId(occurrence) {
@@ -3783,21 +4646,25 @@
             return {
                 id: null,
                 date: '',
+                endDate: '',
                 startTime: '09:00',
                 endTime: '10:00',
                 isAllDay: false,
                 status: 'planned',
                 reason: '',
+                title: '',
             };
         }
         return {
             id: occurrence.id,
             date: occurrence.date,
+            endDate: occurrence.endDate || occurrence.date,
             startTime: occurrence.startTime || '09:00',
             endTime: occurrence.endTime || '10:00',
             isAllDay: !!occurrence.isAllDay,
             status: occurrence.status || 'planned',
             reason: occurrence.reason || '',
+            title: occurrence.title || occurrence.noteCalendar || '',
         };
     }
 

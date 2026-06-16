@@ -307,6 +307,16 @@ function mj_settings_page() {
                 ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_use_on_install_tables']))
                 : array();
 
+            if (empty($selectedSources)) {
+                $selectedSources = MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_RESTORE_SELECTED, array());
+            }
+            if (empty($cleanBeforeSources)) {
+                $cleanBeforeSources = MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_RESTORE_CLEAN, array());
+            }
+            if (empty($useOnInstallSources)) {
+                $useOnInstallSources = MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_USE_ON_INSTALL, array());
+            }
+
             MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_SELECTED, $selectedSources);
             MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_CLEAN, $cleanBeforeSources);
             MjFixturesManager::saveSelection(MjFixturesManager::OPTION_USE_ON_INSTALL, $useOnInstallSources);

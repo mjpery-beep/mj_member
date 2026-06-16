@@ -1601,6 +1601,17 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 $create_manual_batch = in_array(strtolower(trim($raw_create_manual_batch)), array('1', 'true', 'yes', 'on'), true);
             }
 
+            $create_manual_batch_group = '';
+            if (!empty($item['createAsManualLotGroup'])) {
+                $create_manual_batch_group = sanitize_text_field((string) $item['createAsManualLotGroup']);
+            } elseif (!empty($item['create_as_manual_lot_group'])) {
+                $create_manual_batch_group = sanitize_text_field((string) $item['create_as_manual_lot_group']);
+            }
+
+            if ($source === MjEventOccurrences::SOURCE_MANUAL && $generation_batch_id === '') {
+                $create_manual_batch = true;
+            }
+
             $visibility = MjEventOccurrences::VISIBILITY_TOUS;
             if (isset($item['visibility'])) {
                 $visibility = sanitize_key((string) $item['visibility']);
@@ -1620,6 +1631,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'source' => $source,
                 'generation_batch_id' => $generation_batch_id,
                 'create_manual_batch' => $create_manual_batch,
+                'create_manual_batch_group' => $create_manual_batch_group,
                 'visibility' => $visibility,
                 'meta' => !empty($meta) ? $meta : null,
             );
@@ -6345,6 +6357,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         if (!empty($normalized['rows'])) {
+            $manual_batch_groups = array();
             foreach ($normalized['rows'] as $index => $row) {
                 if (!is_array($row)) {
                     continue;
@@ -6357,19 +6370,72 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                     continue;
                 }
 
-                $manual_batch_id = $this->createOccurrenceGenerationBatchId();
-                $normalized['rows'][$index]['generation_batch_id'] = $manual_batch_id;
+                $group_key = isset($row['create_manual_batch_group'])
+                    ? sanitize_text_field((string) $row['create_manual_batch_group'])
+                    : '';
+                if ($group_key === '') {
+                    $start_value = isset($row['start']) ? (string) $row['start'] : '';
+                    $end_value = isset($row['end']) ? (string) $row['end'] : '';
+                    $status_value = isset($row['status']) ? sanitize_key((string) $row['status']) : '';
+                    $meta_value = isset($row['meta']) && is_array($row['meta']) ? $row['meta'] : array();
+                    $note_calendar_value = isset($meta_value['note_calendar']) ? sanitize_text_field((string) $meta_value['note_calendar']) : '';
+                    $all_day_value = isset($meta_value['all_day']) ? (string) $meta_value['all_day'] : '';
+                    $start_time_fragment = $start_value !== '' ? substr($start_value, 11, 5) : '';
+                    $end_time_fragment = $end_value !== '' ? substr($end_value, 11, 5) : '';
+                    $fingerprint = implode('|', array(
+                        'manual-fallback-group',
+                        $start_time_fragment,
+                        $end_time_fragment,
+                        $status_value,
+                        $note_calendar_value,
+                        $all_day_value,
+                    ));
+                    $group_key = '__fallback_' . md5($fingerprint);
+                }
 
-                $start_value = isset($row['start']) ? (string) $row['start'] : '';
-                $end_value = isset($row['end']) ? (string) $row['end'] : '';
-                $manual_summary = $this->formatManualOccurrenceSummary($start_value, $end_value);
+                if (!isset($manual_batch_groups[$group_key])) {
+                    $manual_batch_groups[$group_key] = array(
+                        'indexes' => array(),
+                    );
+                }
+
+                $manual_batch_groups[$group_key]['indexes'][] = $index;
+            }
+
+            foreach ($manual_batch_groups as $group_data) {
+                if (!is_array($group_data) || empty($group_data['indexes']) || !is_array($group_data['indexes'])) {
+                    continue;
+                }
+
+                $manual_batch_id = $this->createOccurrenceGenerationBatchId();
+                $group_start = '';
+                $group_end = '';
+
+                foreach ($group_data['indexes'] as $row_index) {
+                    if (!isset($normalized['rows'][$row_index]) || !is_array($normalized['rows'][$row_index])) {
+                        continue;
+                    }
+
+                    $normalized['rows'][$row_index]['generation_batch_id'] = $manual_batch_id;
+                    $start_value = isset($normalized['rows'][$row_index]['start']) ? (string) $normalized['rows'][$row_index]['start'] : '';
+                    $end_value = isset($normalized['rows'][$row_index]['end']) ? (string) $normalized['rows'][$row_index]['end'] : '';
+
+                    if ($start_value !== '' && ($group_start === '' || strcmp($start_value, $group_start) < 0)) {
+                        $group_start = $start_value;
+                    }
+                    if ($end_value !== '' && ($group_end === '' || strcmp($end_value, $group_end) > 0)) {
+                        $group_end = $end_value;
+                    }
+                }
+
+                $manual_summary = $this->formatManualOccurrenceSummary($group_start, $group_end);
 
                 $created_batches[] = array(
                     'batch_id' => $manual_batch_id,
                     'config_snapshot' => array(
-                        'mode' => 'manual_single',
-                        'start' => $start_value,
-                        'end' => $end_value,
+                        'mode' => count($group_data['indexes']) > 1 ? 'manual_range' : 'manual_single',
+                        'start' => $group_start,
+                        'end' => $group_end,
                     ),
                     'summary' => array(
                         'schedule_summary' => $manual_summary,
@@ -6377,7 +6443,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                         'include_dates_in_schedule_preview' => false,
                         'schedule_mode' => 'manual',
                     ),
-                    'occurrences_count' => 1,
+                    'occurrences_count' => count($group_data['indexes']),
                 );
             }
         }
@@ -6388,6 +6454,31 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                     continue;
                 }
                 unset($normalized['rows'][$index]['create_manual_batch']);
+                unset($normalized['rows'][$index]['create_manual_batch_group']);
+            }
+        }
+
+        if (!empty($normalized['rows'])) {
+            $rows_missing_batch = 0;
+            foreach ($normalized['rows'] as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $source = isset($row['source']) ? sanitize_key((string) $row['source']) : '';
+                if ($source !== MjEventOccurrences::SOURCE_MANUAL && $source !== MjEventOccurrences::SOURCE_GENERATED) {
+                    continue;
+                }
+                $batch_id = isset($row['generation_batch_id']) ? sanitize_text_field((string) $row['generation_batch_id']) : '';
+                if ($batch_id === '') {
+                    $rows_missing_batch++;
+                }
+            }
+
+            if ($rows_missing_batch > 0) {
+                wp_send_json_error(array(
+                    'message' => __('Chaque occurrence de type fixe/plage doit appartenir à un lot.', 'mj-member'),
+                ), 422);
+                return;
             }
         }
 
@@ -6674,6 +6765,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             . ', orphan_null_deleted=' . (int) ($reconcile_after_replace['orphan_null_deleted'] ?? 0)
             . ', remaining_null_generated=' . (int) ($reconcile_after_replace['remaining_null_generated'] ?? 0));
 
+        $this->syncOccurrenceBatchSnapshotsFromRows($event_id);
+
         $refreshed_event = MjEvents::find($event_id);
         if (!$refreshed_event) {
             $refreshed_event = $event;
@@ -6755,6 +6848,110 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'event' => $response_event,
             'eventSummary' => $event_summary,
         ));
+    }
+
+    private function syncOccurrenceBatchSnapshotsFromRows(int $event_id): void
+    {
+        if ($event_id <= 0 || !class_exists(MjEventOccurrenceGenerationBatches::class)) {
+            return;
+        }
+
+        $batch_rows = MjEventOccurrenceGenerationBatches::get_for_event($event_id, false);
+        $occurrence_rows = MjEventOccurrences::get_for_event($event_id);
+        if (!is_array($batch_rows) || empty($batch_rows) || !is_array($occurrence_rows) || empty($occurrence_rows)) {
+            return;
+        }
+
+        $stats_by_batch = array();
+        foreach ($occurrence_rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $batch_storage_id = isset($row['generation_batch_id'])
+                ? sanitize_text_field((string) $row['generation_batch_id'])
+                : '';
+            $start_at = isset($row['start_at']) ? trim((string) $row['start_at']) : '';
+            $end_at = isset($row['end_at']) ? trim((string) $row['end_at']) : '';
+            if ($batch_storage_id === '' || $start_at === '' || $end_at === '') {
+                continue;
+            }
+
+            if (!isset($stats_by_batch[$batch_storage_id])) {
+                $stats_by_batch[$batch_storage_id] = array(
+                    'min_start' => $start_at,
+                    'max_end' => $end_at,
+                    'count' => 0,
+                );
+            }
+
+            if (strcmp($start_at, $stats_by_batch[$batch_storage_id]['min_start']) < 0) {
+                $stats_by_batch[$batch_storage_id]['min_start'] = $start_at;
+            }
+            if (strcmp($end_at, $stats_by_batch[$batch_storage_id]['max_end']) > 0) {
+                $stats_by_batch[$batch_storage_id]['max_end'] = $end_at;
+            }
+            $stats_by_batch[$batch_storage_id]['count']++;
+        }
+
+        foreach ($batch_rows as $batch_row) {
+            if (!is_array($batch_row)) {
+                continue;
+            }
+
+            $storage_id = isset($batch_row['id']) && (int) $batch_row['id'] > 0
+                ? (string) (int) $batch_row['id']
+                : '';
+            if ($storage_id === '') {
+                continue;
+            }
+
+            $batch_uuid = isset($batch_row['batch_uuid'])
+                ? sanitize_text_field((string) $batch_row['batch_uuid'])
+                : '';
+            if ($batch_uuid === '') {
+                continue;
+            }
+
+            if (empty($stats_by_batch[$storage_id])) {
+                MjEventOccurrenceGenerationBatches::mark_deleted($event_id, $batch_uuid);
+                continue;
+            }
+
+            $stats = $stats_by_batch[$storage_id];
+            $config_raw = isset($batch_row['config_snapshot']) ? $batch_row['config_snapshot'] : null;
+            $config_arr = is_array($config_raw)
+                ? $config_raw
+                : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+            $config_arr = is_array($config_arr) ? $config_arr : array();
+
+            $config_arr['start'] = (string) $stats['min_start'];
+            $config_arr['end'] = (string) $stats['max_end'];
+            $config_arr['startDate'] = substr((string) $stats['min_start'], 0, 10);
+            $config_arr['endDate'] = substr((string) $stats['max_end'], 0, 10);
+
+            $summary_raw = isset($batch_row['summary']) ? $batch_row['summary'] : null;
+            $summary_arr = is_array($summary_raw)
+                ? $summary_raw
+                : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
+            $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+
+            $mode = isset($config_arr['mode']) ? sanitize_key((string) $config_arr['mode']) : '';
+            if (in_array($mode, array('manual_single', 'manual_range'), true)) {
+                $summary_arr['schedule_summary'] = $this->formatManualOccurrenceSummary(
+                    (string) $stats['min_start'],
+                    (string) $stats['max_end']
+                );
+            }
+
+            MjEventOccurrenceGenerationBatches::create($event_id, $batch_uuid, array(
+                'status' => isset($batch_row['status']) ? (string) $batch_row['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
+                'generated_by_member_id' => isset($batch_row['generated_by_member_id']) ? (int) $batch_row['generated_by_member_id'] : null,
+                'config_snapshot' => $config_arr,
+                'summary' => $summary_arr,
+                'occurrences_count' => (int) $stats['count'],
+            ));
+        }
     }
 
     /**

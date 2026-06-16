@@ -4525,6 +4525,8 @@
                     reason: occ && typeof occ.reason === 'string' ? occ.reason : '',
                     source: occ && typeof occ.source === 'string' ? occ.source : 'manual',
                     createAsManualLot: !!(occ && occ.createAsManualLot),
+                    createAsManualLotGroup: occ && typeof occ.createAsManualLotGroup === 'string' ? occ.createAsManualLotGroup : '',
+                    create_as_manual_lot_group: occ && typeof occ.createAsManualLotGroup === 'string' ? occ.createAsManualLotGroup : '',
                     generationBatchId: generationBatchValue,
                     visibility: occ && typeof occ.visibility === 'string' ? occ.visibility : 'tous',
                     noteSchedule: occ && typeof occ.noteSchedule === 'string' ? occ.noteSchedule : '',
