@@ -1089,7 +1089,7 @@
 }
 
 .mj-hour-encode-calendar__event-handle--bottom {
-    bottom: 4px;
+    bottom: -4px;
     transform: translateY(100%);
 }
 
