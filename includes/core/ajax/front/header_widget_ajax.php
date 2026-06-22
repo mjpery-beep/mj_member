@@ -100,51 +100,71 @@ final class HeaderWidgetController implements AjaxHandlerInterface
      */
     public function headerNextcloudNavigation(): void
     {
-        check_ajax_referer('mj-header-widget', 'nonce');
+        try {
+            check_ajax_referer('mj-header-widget', 'nonce');
 
-        if (!is_user_logged_in()) {
-            wp_send_json_error(array('message' => __('Vous devez être connecté.', 'mj-member')), 401);
-        }
+            if (!is_user_logged_in()) {
+                wp_send_json_error(array('message' => __('Vous devez être connecté.', 'mj-member')), 401);
+            }
 
-        if (!function_exists('mj_member_documents_get_current_member_nextcloud_credentials')) {
-            wp_send_json_error(array('message' => __('Module documents indisponible.', 'mj-member')), 503);
-        }
+            if (!function_exists('mj_member_documents_get_current_member_nextcloud_credentials')) {
+                wp_send_json_error(array('message' => __('Module documents indisponible.', 'mj-member')), 503);
+            }
 
-        $creds = mj_member_documents_get_current_member_nextcloud_credentials();
-        $login = isset($creds['login']) ? sanitize_user((string) $creds['login'], true) : '';
-        $password = isset($creds['password']) ? trim((string) $creds['password']) : '';
+            $creds = mj_member_documents_get_current_member_nextcloud_credentials();
+            $login = isset($creds['login']) ? sanitize_user((string) $creds['login'], true) : '';
+            $password = isset($creds['password']) ? trim((string) $creds['password']) : '';
 
-        if ($login === '' || $password === '') {
+            if ($login === '' || $password === '') {
+                wp_send_json_success(array(
+                    'linked'  => false,
+                    'apps'    => array(),
+                    'message' => __('Votre compte Nextcloud n\'est pas encore lié.', 'mj-member'),
+                ));
+            }
+
+            $baseUrl = rtrim(Config::nextcloudUrl(), '/');
+            if ($baseUrl === '') {
+                wp_send_json_error(array('message' => __('Configuration Nextcloud incomplète.', 'mj-member')), 503);
+            }
+
+            // Keep this endpoint responsive: avoid long proxy/PHP timeouts by limiting
+            // each upstream call.
+            $requestTimeout = 4;
+
+            $authResult = $this->nextcloudLogin($baseUrl, $login, $password, $requestTimeout);
+            if (!$authResult['ok']) {
+                wp_send_json_success(array(
+                    'linked'  => false,
+                    'apps'    => array(),
+                    'message' => __('Connexion Nextcloud impossible. Contactez un gestionnaire.', 'mj-member'),
+                ));
+            }
+
+            $appsResult = $this->nextcloudFetchNavigation($baseUrl, $authResult['auth'], $requestTimeout);
+            if (!$appsResult['ok']) {
+                wp_send_json_success(array(
+                    'linked'  => false,
+                    'apps'    => array(),
+                    'message' => __('Impossible de charger les applications Nextcloud pour le moment.', 'mj-member'),
+                ));
+            }
+
+            wp_send_json_success(array(
+                'linked' => true,
+                'apps'   => $appsResult['apps'],
+            ));
+        } catch (\Throwable $e) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('MJ Header Nextcloud AJAX error: ' . $e->getMessage());
+            }
+
             wp_send_json_success(array(
                 'linked'  => false,
                 'apps'    => array(),
-                'message' => __('Votre compte Nextcloud n\'est pas encore lié.', 'mj-member'),
+                'message' => __('Impossible de contacter Nextcloud pour le moment.', 'mj-member'),
             ));
         }
-
-        $baseUrl = rtrim(Config::nextcloudUrl(), '/');
-        if ($baseUrl === '') {
-            wp_send_json_error(array('message' => __('Configuration Nextcloud incomplète.', 'mj-member')), 503);
-        }
-
-        $authResult = $this->nextcloudLogin($baseUrl, $login, $password);
-        if (!$authResult['ok']) {
-            wp_send_json_success(array(
-                'linked'  => false,
-                'apps'    => array(),
-                'message' => __('Connexion Nextcloud impossible. Contactez un gestionnaire.', 'mj-member'),
-            ));
-        }
-
-        $appsResult = $this->nextcloudFetchNavigation($baseUrl, $authResult['auth']);
-        if (!$appsResult['ok']) {
-            wp_send_json_error(array('message' => __('Impossible de charger les applications Nextcloud.', 'mj-member')), 502);
-        }
-
-        wp_send_json_success(array(
-            'linked' => true,
-            'apps'   => $appsResult['apps'],
-        ));
     }
 
     /**
@@ -289,10 +309,10 @@ final class HeaderWidgetController implements AjaxHandlerInterface
     /**
      * @return array{ok:bool,auth:string}
      */
-    private function nextcloudLogin(string $baseUrl, string $login, string $password): array
+    private function nextcloudLogin(string $baseUrl, string $login, string $password, int $timeout = 4): array
     {
         $response = wp_remote_post($baseUrl . '/apps/mj_session_check/login', array(
-            'timeout' => 12,
+            'timeout' => max(1, $timeout),
             'headers' => array(
                 'Content-Type' => 'application/json',
             ),
@@ -327,10 +347,10 @@ final class HeaderWidgetController implements AjaxHandlerInterface
     /**
      * @return array{ok:bool,apps:array<int,array<string,mixed>>}
      */
-    private function nextcloudFetchNavigation(string $baseUrl, string $auth): array
+    private function nextcloudFetchNavigation(string $baseUrl, string $auth, int $timeout = 4): array
     {
         $response = wp_remote_get($baseUrl . '/apps/mj_session_check/navigation', array(
-            'timeout' => 12,
+            'timeout' => max(1, $timeout),
             'headers' => array(
                 'Authorization'  => 'Basic ' . $auth,
                 'OCS-APIREQUEST' => 'true',

@@ -250,6 +250,27 @@ if (!defined('ABSPATH')) {
                                         <small style="color:#15803d; display:block; margin-top:4px;">Groupes actifs : <?php echo esc_html(implode(', ', $nc_groups_resolved)); ?></small>
                                     <?php endif; ?>
                             </div>
+
+                                <div style="margin-top:16px; background:#f1f5f9; border-radius:6px; padding:14px 16px; border:1px solid #e2e8f0;">
+                                    <h4 style="margin:0 0 10px 0; color:#334155;">📁 Structure des dossiers</h4>
+                                    <div style="display:flex; flex-wrap:wrap; gap:12px;">
+                                        <div style="flex:1 1 200px;">
+                                            <label for="mj-nc-root-folder" style="font-weight:600; display:block; margin-bottom:4px;">Dossier racine</label>
+                                            <input type="text" id="mj-nc-root-folder" name="mj_member_nextcloud_root_folder" value="<?php echo esc_attr($nc_root_folder_option); ?>" class="regular-text" placeholder="ex: MJ-Pery" />
+                                            <small style="color:#64748b; display:block; margin-top:4px;">Dossier parent commun. Laissez vide pour utiliser la racine du compte de service.</small>
+                                        </div>
+                                        <div style="flex:1 1 180px;">
+                                            <label for="mj-nc-events-folder" style="font-weight:600; display:block; margin-bottom:4px;">Sous-dossier événements</label>
+                                            <input type="text" id="mj-nc-events-folder" name="mj_member_nextcloud_events_folder" value="<?php echo esc_attr($nc_events_folder_option); ?>" class="regular-text" placeholder="evenements" />
+                                            <small style="color:#64748b; display:block; margin-top:4px;">Défaut : <code>evenements</code>. Chemin : <em>racine/<strong>evenements</strong>/nom-event/photos|documents/</em></small>
+                                        </div>
+                                        <div style="flex:1 1 180px;">
+                                            <label for="mj-nc-members-folder" style="font-weight:600; display:block; margin-bottom:4px;">Sous-dossier membres</label>
+                                            <input type="text" id="mj-nc-members-folder" name="mj_member_nextcloud_members_folder" value="<?php echo esc_attr($nc_members_folder_option); ?>" class="regular-text" placeholder="membres" />
+                                            <small style="color:#64748b; display:block; margin-top:4px;">Défaut : <code>membres</code>. Chemin : <em>racine/<strong>membres</strong>/login/photos|documents/</em></small>
+                                        </div>
+                                    </div>
+                                </div>
                                 </div>
                         </div>
                     </div>

@@ -1358,6 +1358,32 @@
                                 batchDays[dayKey] = !!effectiveBatchConfig.days[dayKey];
                             });
                         }
+                        var batchOverridesSource = effectiveBatchConfig.overrides && typeof effectiveBatchConfig.overrides === 'object'
+                            ? effectiveBatchConfig.overrides
+                            : (effectiveBatchConfig.timeOverrides && typeof effectiveBatchConfig.timeOverrides === 'object'
+                                ? effectiveBatchConfig.timeOverrides
+                                : {});
+                        var batchOverrides = {};
+                        if (batchOverridesSource && typeof batchOverridesSource === 'object') {
+                            OCCURRENCE_WEEKDAY_KEYS.forEach(function (dayKey) {
+                                if (!batchOverridesSource[dayKey] || typeof batchOverridesSource[dayKey] !== 'object') {
+                                    return;
+                                }
+                                var overrideStart = sanitizeTimeValue(batchOverridesSource[dayKey].start);
+                                var overrideEnd = sanitizeTimeValue(batchOverridesSource[dayKey].end);
+                                if (!overrideStart && !overrideEnd) {
+                                    return;
+                                }
+                                var overrideEntry = {};
+                                if (overrideStart) {
+                                    overrideEntry.start = overrideStart;
+                                }
+                                if (overrideEnd) {
+                                    overrideEntry.end = overrideEnd;
+                                }
+                                batchOverrides[dayKey] = overrideEntry;
+                            });
+                        }
                         var updateBatchConfigDraft = function (changes) {
                             var payload = {
                                 mode: batchMode,
@@ -1369,6 +1395,7 @@
                                 monthlyOrdinal: batchMonthlyOrdinal,
                                 monthlyWeekday: batchMonthlyWeekday,
                                 days: batchDays,
+                                overrides: batchOverrides,
                             };
                             if (changes && typeof changes === 'object') {
                                 Object.keys(changes).forEach(function (key) {
@@ -1392,6 +1419,7 @@
                                 monthlyOrdinal: batchMonthlyOrdinal,
                                 monthlyWeekday: batchMonthlyWeekday,
                                 days: batchDays,
+                                overrides: batchOverrides,
                             };
                             handleUpdateBatchConfig(batchId, payload);
                         };
@@ -1704,24 +1732,79 @@
                                         ]),
                                     ]),
                                     (batchMode === 'weekly') && h('div', { class: 'mj-regmgr-occurrence__days mj-regmgr-occurrence__batch-card__days' }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, dayIndex) {
+                                        var isDayActive = !!batchDays[dayKey];
+                                        var dayOverride = batchOverrides[dayKey] || null;
+                                        var dayStartValue = dayOverride && dayOverride.start ? dayOverride.start : batchStartTime;
+                                        var dayEndValue = dayOverride && dayOverride.end ? dayOverride.end : batchEndTime;
+                                        var hasDayOverride = !!(dayOverride && (dayOverride.start || dayOverride.end));
                                         return h('label', {
                                             key: 'batch-day-' + batchId + '-' + dayKey,
                                             class: classNames('mj-regmgr-occurrence__day-row', {
-                                                'mj-regmgr-occurrence__day-row--active': !!batchDays[dayKey],
+                                                'mj-regmgr-occurrence__day-row--active': isDayActive,
+                                                'mj-regmgr-occurrence__day-row--override': hasDayOverride,
                                             }),
                                         }, [
                                             h('input', {
                                                 type: 'checkbox',
                                                 class: 'mj-regmgr-occurrence__day-row-checkbox',
-                                                checked: !!batchDays[dayKey],
+                                                checked: isDayActive,
                                                 disabled: isProcessing,
                                                 onChange: function (e) {
                                                     var nextDays = Object.assign({}, batchDays);
+                                                    var nextOverrides = Object.assign({}, batchOverrides);
                                                     nextDays[dayKey] = !!e.currentTarget.checked;
-                                                    updateBatchConfigDraft({ days: nextDays });
+                                                    if (!nextDays[dayKey] && nextOverrides[dayKey]) {
+                                                        delete nextOverrides[dayKey];
+                                                    }
+                                                    updateBatchConfigDraft({ days: nextDays, overrides: nextOverrides });
                                                 },
                                             }),
                                             h('span', { class: 'mj-regmgr-occurrence__day-row-label' }, weekdayLabels[dayIndex] || dayKey),
+                                            h('span', { class: 'mj-regmgr-occurrence__day-row-times' }, [
+                                                h('input', {
+                                                    type: 'time',
+                                                    class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--start', {
+                                                        'mj-regmgr-occurrence__day-row-input--override': hasDayOverride && !!(dayOverride && dayOverride.start),
+                                                    }),
+                                                    value: dayStartValue || '',
+                                                    disabled: !isDayActive || isProcessing,
+                                                    onInput: function (e) {
+                                                        var nextOverrides = Object.assign({}, batchOverrides);
+                                                        var nextOverride = nextOverrides[dayKey]
+                                                            ? Object.assign({ start: '', end: '' }, nextOverrides[dayKey])
+                                                            : { start: '', end: '' };
+                                                        nextOverride.start = sanitizeTimeValue(e.currentTarget.value);
+                                                        if (!nextOverride.start && !nextOverride.end) {
+                                                            delete nextOverrides[dayKey];
+                                                        } else {
+                                                            nextOverrides[dayKey] = nextOverride;
+                                                        }
+                                                        updateBatchConfigDraft({ overrides: nextOverrides });
+                                                    },
+                                                }),
+                                                h('span', { class: 'mj-regmgr-occurrence__day-row-separator' }, ' - '),
+                                                h('input', {
+                                                    type: 'time',
+                                                    class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--end', {
+                                                        'mj-regmgr-occurrence__day-row-input--override': hasDayOverride && !!(dayOverride && dayOverride.end),
+                                                    }),
+                                                    value: dayEndValue || '',
+                                                    disabled: !isDayActive || isProcessing,
+                                                    onInput: function (e) {
+                                                        var nextOverrides = Object.assign({}, batchOverrides);
+                                                        var nextOverride = nextOverrides[dayKey]
+                                                            ? Object.assign({ start: '', end: '' }, nextOverrides[dayKey])
+                                                            : { start: '', end: '' };
+                                                        nextOverride.end = sanitizeTimeValue(e.currentTarget.value);
+                                                        if (!nextOverride.start && !nextOverride.end) {
+                                                            delete nextOverrides[dayKey];
+                                                        } else {
+                                                            nextOverrides[dayKey] = nextOverride;
+                                                        }
+                                                        updateBatchConfigDraft({ overrides: nextOverrides });
+                                                    },
+                                                }),
+                                            ]),
                                         ]);
                                     })),
                                     (batchMode === 'monthly') && h('div', { class: 'mj-regmgr-occurrence__form-row mj-regmgr-occurrence__batch-card__grid' }, [

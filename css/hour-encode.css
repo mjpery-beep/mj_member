@@ -1086,11 +1086,13 @@
 .mj-hour-encode-calendar__event-handle--top {
     top: 4px;
     transform: translateY(-100%);
+    z-index: 85;
 }
 
 .mj-hour-encode-calendar__event-handle--bottom {
-    bottom: -4px;
+    bottom: 6px;
     transform: translateY(100%);
+    z-index: 84;
 }
 
 .mj-hour-encode-calendar__event--entry:hover .mj-hour-encode-calendar__event-handle,

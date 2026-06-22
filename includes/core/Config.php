@@ -284,6 +284,20 @@ final class Config
         return is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
     }
 
+    public static function nextcloudEventsFolder(): string
+    {
+        $option = \get_option('mj_member_nextcloud_events_folder', '');
+        $folder = is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
+        return $folder !== '' ? $folder : 'evenements';
+    }
+
+    public static function nextcloudMembersFolder(): string
+    {
+        $option = \get_option('mj_member_nextcloud_members_folder', '');
+        $folder = is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
+        return $folder !== '' ? $folder : 'membres';
+    }
+
     /**
      * @return array<int,string>
      */

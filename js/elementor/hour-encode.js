@@ -7118,6 +7118,39 @@
                             return null;
                         }
 
+                        function isRangeWithinWindows(windows, startMinutes, endMinutes) {
+                            for (var index = 0; index < windows.length; index++) {
+                                var windowRange = windows[index];
+                                if (startMinutes >= windowRange.start && endMinutes <= windowRange.end) {
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }
+
+                        function findShiftedRange(dayIso, startMinutes, durationMinutes, direction, excludeSelection) {
+                            var step = SLOT_STEP_MINUTES;
+                            var safeDirection = direction < 0 ? -1 : 1;
+                            var windows = getScheduleIntervalsForDay(dayIso);
+                            var busyIntervals = getBusyIntervalsForDay(dayIso, excludeSelection);
+                            var candidateStart = Math.round(startMinutes) + (safeDirection * step);
+
+                            while (candidateStart >= HOURS_START * 60 && (candidateStart + durationMinutes) <= HOURS_END * 60) {
+                                var candidateEnd = candidateStart + durationMinutes;
+                                var fitsWindows = isRangeWithinWindows(windows, candidateStart, candidateEnd);
+                                var hasConflict = Boolean(findConflict(candidateStart, candidateEnd, busyIntervals));
+                                if (fitsWindows && !hasConflict) {
+                                    return {
+                                        start: candidateStart,
+                                        end: candidateEnd
+                                    };
+                                }
+                                candidateStart += safeDirection * step;
+                            }
+
+                            return null;
+                        }
+
                         function minutesToTimeValue(minutes) {
                             var safe = clamp(Math.round(minutes), HOURS_START * 60, HOURS_END * 60);
                             var hours = Math.floor(safe / 60);
@@ -7643,6 +7676,125 @@
                                     setLoading(false);
                                 });
                         }
+
+                        hooks.useEffect(function() {
+                            if (typeof window === 'undefined') {
+                                return function() {};
+                            }
+
+                            function isInteractiveElement(target) {
+                                if (!target || !target.tagName) {
+                                    return false;
+                                }
+                                var tagName = String(target.tagName).toUpperCase();
+                                if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || tagName === 'BUTTON') {
+                                    return true;
+                                }
+                                if (target.isContentEditable) {
+                                    return true;
+                                }
+                                return false;
+                            }
+
+                            function shiftSelectedSlot(direction) {
+                                if (!selectedSlot || loading) {
+                                    return;
+                                }
+
+                                var dayIso = selectedSlot.dayIso;
+                                var dayDate = parseISODate(dayIso);
+                                var startMinutes = timeValueToMinutes(selectedSlot.formStart);
+                                var endMinutes = timeValueToMinutes(selectedSlot.formEnd);
+                                if (!dayDate || !Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
+                                    return;
+                                }
+
+                                if (isMidnightTimeValue(selectedSlot.formEnd) && endMinutes === 0 && startMinutes > 0) {
+                                    endMinutes = HOURS_END * 60;
+                                }
+
+                                var durationMinutes = endMinutes - startMinutes;
+                                if (durationMinutes <= 0) {
+                                    return;
+                                }
+
+                                var excludeSelection = selectedSlot.isEditing
+                                    ? {
+                                        hourId: selectedSlot.hourId || null,
+                                        entryId: selectedSlot.entryId || null
+                                    }
+                                    : null;
+
+                                var nextRange = findShiftedRange(dayIso, startMinutes, durationMinutes, direction, excludeSelection);
+                                if (!nextRange) {
+                                    setSelectedSlot(function(previous) {
+                                        if (!previous) {
+                                            return previous;
+                                        }
+                                        return Object.assign({}, previous, {
+                                            error: config.labels.selectionErrorOverlap || 'Une plage est déjà encodée sur ces horaires.'
+                                        });
+                                    });
+                                    return;
+                                }
+
+                                var nextStartDate = dateFromDayMinutes(dayDate, nextRange.start);
+                                var nextEndDate = dateFromDayMinutes(dayDate, nextRange.end);
+                                setSelectedSlot(function(previous) {
+                                    if (!previous) {
+                                        return previous;
+                                    }
+                                    return Object.assign({}, previous, {
+                                        baseStartIso: nextStartDate.toISOString(),
+                                        baseEndIso: nextEndDate.toISOString(),
+                                        durationMinutes: nextRange.end - nextRange.start,
+                                        formStart: minutesToTimeValue(nextRange.start),
+                                        formEnd: minutesToTimeValue(nextRange.end),
+                                        error: ''
+                                    });
+                                });
+                            }
+
+                            function handleKeyboardShortcuts(event) {
+                                if (!selectedSlot) {
+                                    return;
+                                }
+                                if (event.defaultPrevented) {
+                                    return;
+                                }
+                                if (isInteractiveElement(event.target)) {
+                                    return;
+                                }
+
+                                if (event.key === 'ArrowUp' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+                                    event.preventDefault();
+                                    shiftSelectedSlot(-1);
+                                    return;
+                                }
+
+                                if (event.key === 'ArrowDown' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+                                    event.preventDefault();
+                                    shiftSelectedSlot(1);
+                                    return;
+                                }
+
+                                if ((event.key === 'Delete' || event.key === 'Del') && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                                    event.preventDefault();
+                                    handleSelectionDelete();
+                                    return;
+                                }
+
+                                if ((event.key === 'd' || event.key === 'D') && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+                                    event.preventDefault();
+                                    handleSelectionDuplicate();
+                                }
+                            }
+
+                            window.addEventListener('keydown', handleKeyboardShortcuts);
+                            return function() {
+                                window.removeEventListener('keydown', handleKeyboardShortcuts);
+                            };
+                        }, [selectedSlot, loading, config.labels, handleSelectionDelete, handleSelectionDuplicate]);
 
                         var activeVisibleDayIso = visibleDays.length > 0 ? visibleDays[0].iso : null;
                         var allDaysForPicker = Array.isArray(calendarModel.days) ? calendarModel.days : [];

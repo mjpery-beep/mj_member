@@ -589,6 +589,12 @@ function mj_settings_page() {
         $nc_root_folder = isset($_POST['mj_member_nextcloud_root_folder'])
             ? sanitize_text_field(wp_unslash($_POST['mj_member_nextcloud_root_folder']))
             : '';
+        $nc_events_folder = isset($_POST['mj_member_nextcloud_events_folder'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_member_nextcloud_events_folder']))
+            : '';
+        $nc_members_folder = isset($_POST['mj_member_nextcloud_members_folder'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_member_nextcloud_members_folder']))
+            : '';
         $nc_groups = isset($_POST['mj_member_nextcloud_groups'])
             ? sanitize_textarea_field(wp_unslash($_POST['mj_member_nextcloud_groups']))
             : '';
@@ -599,6 +605,8 @@ function mj_settings_page() {
             update_option('mj_member_nextcloud_password', $nc_password);
         }
         update_option('mj_member_nextcloud_root_folder', $nc_root_folder);
+        update_option('mj_member_nextcloud_events_folder', $nc_events_folder);
+        update_option('mj_member_nextcloud_members_folder', $nc_members_folder);
         update_option('mj_member_nextcloud_groups', $nc_groups);
 
         // --- Photo import settings ---
@@ -1124,6 +1132,8 @@ function mj_settings_page() {
     $nc_user_option = get_option('mj_member_nextcloud_user', '');
     $nc_password_option = get_option('mj_member_nextcloud_password', '');
     $nc_root_folder_option = get_option('mj_member_nextcloud_root_folder', '');
+    $nc_events_folder_option = get_option('mj_member_nextcloud_events_folder', '');
+    $nc_members_folder_option = get_option('mj_member_nextcloud_members_folder', '');
     $nc_groups_option = get_option('mj_member_nextcloud_groups', '');
     $nc_groups_resolved = Config::nextcloudGroups();
     $nc_is_ready = Config::nextcloudIsReady();
