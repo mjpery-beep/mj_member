@@ -2,3 +2,4 @@
 /vendor/
 /user-grimlins/
 data/fixtures/mj_members.jsonl
+data/fixtures/config_mj_member.json
