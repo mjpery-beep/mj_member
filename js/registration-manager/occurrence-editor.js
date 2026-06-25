@@ -899,13 +899,18 @@
             }
 
             var assignmentParts = [];
-            if (assignedLocationName) {
+            var includeLocationInSchedulePreview = !Object.prototype.hasOwnProperty.call(summary, 'include_location_in_schedule_preview')
+                || !!summary.include_location_in_schedule_preview;
+            var includeMembersInSchedulePreview = !Object.prototype.hasOwnProperty.call(summary, 'include_members_in_schedule_preview')
+                || !!summary.include_members_in_schedule_preview;
+
+            if (includeLocationInSchedulePreview && assignedLocationName) {
                 assignmentParts.push(
                     getString(strings, 'occurrenceGenerationPreviewLocationPrefix', 'Lieu : {{value}}')
                         .replace('{{value}}', assignedLocationName)
                 );
             }
-            if (assignedMemberNames.length > 0) {
+            if (includeMembersInSchedulePreview && assignedMemberNames.length > 0) {
                 assignmentParts.push(
                     getString(strings, 'occurrenceGenerationPreviewMembersPrefix', 'Animateur : {{value}}')
                         .replace('{{value}}', assignedMemberNames.join(', '))
@@ -1314,10 +1319,20 @@
                         var lotEndLabel = formatBatchPreviewDate(lotEndRaw);
                         var includeInGlobalSchedule = !!batchSummary.include_in_global_schedule;
                         var includeDatesInSchedulePreview = !!batchSummary.include_dates_in_schedule_preview;
+                        var includeLocationInSchedulePreview = !Object.prototype.hasOwnProperty.call(batchSummary, 'include_location_in_schedule_preview')
+                            || !!batchSummary.include_location_in_schedule_preview;
+                        var includeMembersInSchedulePreview = !Object.prototype.hasOwnProperty.call(batchSummary, 'include_members_in_schedule_preview')
+                            || !!batchSummary.include_members_in_schedule_preview;
                         var assignedLocationId = batchSummary.assigned_location_id ? parseInt(batchSummary.assigned_location_id, 10) : 0;
                         var assignedMemberIds = Array.isArray(batchSummary.assigned_member_ids)
                             ? batchSummary.assigned_member_ids.map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; })
                             : (batchSummary.assigned_member_id ? [parseInt(batchSummary.assigned_member_id, 10)] : []);
+                        if (Object.prototype.hasOwnProperty.call(effectiveBatchConfig, 'includeLocationInSchedulePreview')) {
+                            includeLocationInSchedulePreview = !!effectiveBatchConfig.includeLocationInSchedulePreview;
+                        }
+                        if (Object.prototype.hasOwnProperty.call(effectiveBatchConfig, 'includeMembersInSchedulePreview')) {
+                            includeMembersInSchedulePreview = !!effectiveBatchConfig.includeMembersInSchedulePreview;
+                        }
                         var batchOccurrenceStatus = 'planned';
                         if (typeof batchSummary.generated_occurrence_status === 'string' && batchSummary.generated_occurrence_status !== '') {
                             batchOccurrenceStatus = normalizeOccurrenceStatus(batchSummary.generated_occurrence_status);
@@ -1396,6 +1411,8 @@
                                 monthlyWeekday: batchMonthlyWeekday,
                                 days: batchDays,
                                 overrides: batchOverrides,
+                                includeLocationInSchedulePreview: includeLocationInSchedulePreview,
+                                includeMembersInSchedulePreview: includeMembersInSchedulePreview,
                             };
                             if (changes && typeof changes === 'object') {
                                 Object.keys(changes).forEach(function (key) {
@@ -1420,6 +1437,8 @@
                                 monthlyWeekday: batchMonthlyWeekday,
                                 days: batchDays,
                                 overrides: batchOverrides,
+                                includeLocationInSchedulePreview: includeLocationInSchedulePreview,
+                                includeMembersInSchedulePreview: includeMembersInSchedulePreview,
                             };
                             handleUpdateBatchConfig(batchId, payload);
                         };
@@ -1625,6 +1644,28 @@
                                                 },
                                             }),
                                             h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationIncludeDatesInPreview', 'Ajouter date début/fin dans l\'aperçu horaire')),
+                                        ]),
+                                        h('label', { class: 'mj-regmgr-occurrence__history-item-flag mj-regmgr-occurrence__batch-card__flag', style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '16px', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(148, 163, 184, 0.16)' } }, [
+                                            h('input', {
+                                                type: 'checkbox',
+                                                checked: includeLocationInSchedulePreview,
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    updateBatchConfigDraft({ includeLocationInSchedulePreview: !!e.currentTarget.checked });
+                                                },
+                                            }),
+                                            h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationIncludeLocationInPreview', 'Afficher le lieu dans l\'aperçu horaire')),
+                                        ]),
+                                        h('label', { class: 'mj-regmgr-occurrence__history-item-flag mj-regmgr-occurrence__batch-card__flag', style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '16px', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(148, 163, 184, 0.16)' } }, [
+                                            h('input', {
+                                                type: 'checkbox',
+                                                checked: includeMembersInSchedulePreview,
+                                                disabled: isProcessing,
+                                                onChange: function (e) {
+                                                    updateBatchConfigDraft({ includeMembersInSchedulePreview: !!e.currentTarget.checked });
+                                                },
+                                            }),
+                                            h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationIncludeMembersInPreview', 'Afficher les animateurs dans l\'aperçu horaire')),
                                         ]),
                                     ]),
                                     h('div', { class: 'mj-regmgr-occurrence__form-row mj-regmgr-occurrence__batch-card__grid' }, [

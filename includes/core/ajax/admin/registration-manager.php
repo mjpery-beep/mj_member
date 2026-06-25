@@ -6347,6 +6347,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                         'schedule_summary' => $submitted_schedule_summary,
                         'include_in_global_schedule' => true,
                         'include_dates_in_schedule_preview' => false,
+                        'include_location_in_schedule_preview' => true,
+                        'include_members_in_schedule_preview' => true,
                         'schedule_mode' => isset($event->schedule_mode) && $event->schedule_mode !== ''
                             ? sanitize_key((string) $event->schedule_mode)
                             : 'fixed',
@@ -6441,6 +6443,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                         'schedule_summary' => $manual_summary,
                         'include_in_global_schedule' => true,
                         'include_dates_in_schedule_preview' => false,
+                        'include_location_in_schedule_preview' => true,
+                        'include_members_in_schedule_preview' => true,
                         'schedule_mode' => 'manual',
                     ),
                     'occurrences_count' => count($group_data['indexes']),
@@ -7739,6 +7743,28 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $summary_raw = isset($existing['summary']) ? $existing['summary'] : null;
         $summary_arr = is_array($summary_raw) ? $summary_raw : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
         $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+
+        $include_location_in_preview = array_key_exists('include_location_in_schedule_preview', $summary_arr)
+            ? $this->toBool($summary_arr['include_location_in_schedule_preview'], true)
+            : true;
+        $include_members_in_preview = array_key_exists('include_members_in_schedule_preview', $summary_arr)
+            ? $this->toBool($summary_arr['include_members_in_schedule_preview'], true)
+            : true;
+
+        if (array_key_exists('includeLocationInSchedulePreview', $incoming_config)) {
+            $include_location_in_preview = $this->toBool($incoming_config['includeLocationInSchedulePreview'], $include_location_in_preview);
+        } elseif (array_key_exists('include_location_in_schedule_preview', $incoming_config)) {
+            $include_location_in_preview = $this->toBool($incoming_config['include_location_in_schedule_preview'], $include_location_in_preview);
+        }
+
+        if (array_key_exists('includeMembersInSchedulePreview', $incoming_config)) {
+            $include_members_in_preview = $this->toBool($incoming_config['includeMembersInSchedulePreview'], $include_members_in_preview);
+        } elseif (array_key_exists('include_members_in_schedule_preview', $incoming_config)) {
+            $include_members_in_preview = $this->toBool($incoming_config['include_members_in_schedule_preview'], $include_members_in_preview);
+        }
+
+        $summary_arr['include_location_in_schedule_preview'] = $include_location_in_preview;
+        $summary_arr['include_members_in_schedule_preview'] = $include_members_in_preview;
 
         $allowed_front_occurrence_statuses = array('planned', 'confirmed', 'cancelled');
         $occurrence_status_front = 'planned';
