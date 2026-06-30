@@ -35,6 +35,7 @@
         var occurrencesProp = Array.isArray(props.occurrences) ? props.occurrences : [];
         var strings = props.strings || {};
         var locale = props.locale || 'fr';
+        var initialViewMode = sanitizeOccurrenceViewMode(props.initialViewMode);
         var onPersistOccurrences = typeof props.onPersistOccurrences === 'function' ? props.onPersistOccurrences : null;
         var apiPost = typeof props.apiPost === 'function' ? props.apiPost : null;
         var onBatchesUpdate = typeof props.onBatchesUpdate === 'function' ? props.onBatchesUpdate : null;
@@ -142,7 +143,7 @@
             });
         }, [initialPivotDate, viewMode]);
 
-        var _viewMode = useState('quarter');
+        var _viewMode = useState(initialViewMode);
         var viewMode = _viewMode[0];
         var setViewMode = _viewMode[1];
 
@@ -630,12 +631,60 @@
         var batchConfigDrafts = _batchConfigDrafts[0];
         var setBatchConfigDrafts = _batchConfigDrafts[1];
 
+        var batchModeHintsById = useMemo(function () {
+            var hints = {};
+            localOccurrences.forEach(function (occurrence) {
+                if (!occurrence || !occurrence.generationBatchId) {
+                    return;
+                }
+                var batchId = String(occurrence.generationBatchId);
+                if (!hints[batchId]) {
+                    hints[batchId] = { count: 0, mode: '', hasManualMode: '' };
+                }
+                hints[batchId].count += 1;
+                if (typeof occurrence.createAsManualLotMode === 'string' && occurrence.createAsManualLotMode) {
+                    hints[batchId].hasManualMode = occurrence.createAsManualLotMode;
+                }
+            });
+            return hints;
+        }, [localOccurrences]);
+
+        var normalizeGenerationBatch = useCallback(function (batch) {
+            if (!batch || typeof batch !== 'object') {
+                return batch;
+            }
+            var batchId = batch.batchId ? String(batch.batchId) : '';
+            var configSnapshot = batch.configSnapshot && typeof batch.configSnapshot === 'object'
+                ? Object.assign({}, batch.configSnapshot)
+                : {};
+            var summary = batch.summary && typeof batch.summary === 'object'
+                ? Object.assign({}, batch.summary)
+                : {};
+            var hint = batchId && batchModeHintsById[batchId] ? batchModeHintsById[batchId] : null;
+            var inferredMode = typeof configSnapshot.mode === 'string' && configSnapshot.mode !== ''
+                ? configSnapshot.mode
+                : (typeof summary.mode === 'string' && summary.mode !== ''
+                    ? summary.mode
+                    : (hint && typeof hint.hasManualMode === 'string' && hint.hasManualMode !== ''
+                        ? hint.hasManualMode
+                        : ((hint && hint.count > 1) || (batch.occurrencesCount && parseInt(batch.occurrencesCount, 10) > 1) ? 'range' : 'custom')));
+            if (inferredMode !== 'weekly' && inferredMode !== 'monthly' && inferredMode !== 'range' && inferredMode !== 'custom') {
+                inferredMode = (hint && hint.count > 1) ? 'range' : 'custom';
+            }
+            configSnapshot.mode = inferredMode;
+            summary.mode = inferredMode;
+            return Object.assign({}, batch, {
+                configSnapshot: configSnapshot,
+                summary: summary,
+            });
+        }, [batchModeHintsById]);
+
         var generationHistory = (localBatches !== null
             ? localBatches
             : (event && Array.isArray(event.occurrenceGenerationBatches)
                 ? event.occurrenceGenerationBatches
                 : [])
-        ).filter(function (batch) {
+        ).map(normalizeGenerationBatch).filter(function (batch) {
             return batch && isOccurrenceBatchActive(batch.status);
         });
 
@@ -1339,7 +1388,14 @@
                         } else if (typeof effectiveBatchConfig.occurrenceStatus === 'string' && effectiveBatchConfig.occurrenceStatus !== '') {
                             batchOccurrenceStatus = normalizeOccurrenceStatus(effectiveBatchConfig.occurrenceStatus);
                         }
-                        var batchMode = typeof effectiveBatchConfig.mode === 'string' && effectiveBatchConfig.mode !== '' ? effectiveBatchConfig.mode : 'weekly';
+                        var batchMode = typeof effectiveBatchConfig.mode === 'string' && effectiveBatchConfig.mode !== ''
+                            ? effectiveBatchConfig.mode
+                            : (typeof batchSummary.mode === 'string' && batchSummary.mode !== ''
+                                ? batchSummary.mode
+                                : ((batchStartDate && batchEndDate && batchStartDate !== batchEndDate) || count > 1 ? 'range' : 'custom'));
+                        if (batchMode !== 'weekly' && batchMode !== 'monthly' && batchMode !== 'range' && batchMode !== 'custom') {
+                            batchMode = count > 1 ? 'range' : 'custom';
+                        }
                         var batchFrequency = typeof effectiveBatchConfig.frequency === 'string' && effectiveBatchConfig.frequency !== ''
                             ? effectiveBatchConfig.frequency
                             : 'every_week';
@@ -2604,9 +2660,8 @@
                 if (!dateList.length) {
                     dateList = [startIso];
                 }
-                var manualLotGroup = dateList.length > 1
-                    ? ('manual-range-' + Date.now() + '-' + Math.floor(Math.random() * 100000))
-                    : '';
+                var manualLotMode = dateList.length > 1 ? 'range' : 'custom';
+                var manualLotGroup = 'manual-' + manualLotMode + '-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
                 var newOccurrences = dateList.map(function (dateIso, index) {
                     return {
                         id: generateOccurrenceId(dateIso, resolvedStartTime || editorState.startTime, localOccurrences.length + index),
@@ -2620,6 +2675,7 @@
                         noteCalendar: titleValue,
                         createAsManualLot: true,
                         createAsManualLotGroup: manualLotGroup,
+                        createAsManualLotMode: manualLotMode,
                     };
                 });
                 var firstNewOccurrence = newOccurrences[0] || null;
@@ -4317,6 +4373,14 @@
             noteCalendar: occurrence && typeof occurrence.noteCalendar === 'string' ? occurrence.noteCalendar : '',
             title: titleValue,
         };
+    }
+
+    function sanitizeOccurrenceViewMode(value) {
+        var mode = typeof value === 'string' ? value.trim().toLowerCase() : '';
+        if (mode === 'month' || mode === 'week' || mode === 'quarter') {
+            return mode;
+        }
+        return 'quarter';
     }
 
     function normalizeIsoDateRange(startIso, endIso) {

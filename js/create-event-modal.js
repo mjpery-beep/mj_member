@@ -104,7 +104,8 @@
             occurrences: [],
             summary: '',
             generator: null,
-            options: null
+            options: null,
+            batches: []
         };
 
         function normalizeLegacyMode(mode) {
@@ -128,16 +129,266 @@
                 var occ = item && typeof item === 'object' ? item : {};
                 var start = normalizeOccurrenceDateTime(occ.start);
                 var end = normalizeOccurrenceDateTime(occ.end);
+                if (!start && occ.date && occ.startTime) {
+                    start = normalizeOccurrenceDateTime(String(occ.date) + ' ' + String(occ.startTime));
+                }
+                if (!end && occ.date && occ.endTime) {
+                    end = normalizeOccurrenceDateTime(String(occ.date) + ' ' + String(occ.endTime));
+                }
+                var generationBatchId = '';
+                if (occ.generationBatchId) generationBatchId = String(occ.generationBatchId);
+                else if (occ.generation_batch_id) generationBatchId = String(occ.generation_batch_id);
+                else if (occ.batch_id) generationBatchId = String(occ.batch_id);
+                var manualLotGroup = occ.createAsManualLotGroup ? String(occ.createAsManualLotGroup) : '';
+                var manualLotMode = occ.createAsManualLotMode ? String(occ.createAsManualLotMode) : '';
                 return {
                     id: occ.id ? String(occ.id) : '',
                     date: occ.date ? String(occ.date) : (start ? String(start).slice(0, 10) : ''),
                     start: start,
                     end: end,
-                    status: occ.status ? String(occ.status) : 'planned'
+                    startTime: occ.startTime ? String(occ.startTime) : (start ? String(start).slice(11, 16) : '09:00'),
+                    endTime: occ.endTime ? String(occ.endTime) : (end ? String(end).slice(11, 16) : '10:00'),
+                    isAllDay: !!occ.isAllDay,
+                    status: occ.status ? String(occ.status) : 'planned',
+                    title: occ.title ? String(occ.title) : '',
+                    noteCalendar: occ.noteCalendar ? String(occ.noteCalendar) : '',
+                    generationBatchId: generationBatchId,
+                    createAsManualLot: !!occ.createAsManualLot,
+                    createAsManualLotGroup: manualLotGroup,
+                    createAsManualLotMode: manualLotMode
                 };
             }).filter(function (occ) {
                 return !!(occ.start && occ.end);
             });
+        }
+
+        function parseDateTimeParts(value) {
+            var raw = normalizeOccurrenceDateTime(value);
+            if (!raw) {
+                return { date: '', time: '' };
+            }
+            var parts = raw.split(' ');
+            return {
+                date: parts[0] || '',
+                time: parts[1] ? String(parts[1]).slice(0, 5) : ''
+            };
+        }
+
+        function normalizeBatchList(list) {
+            if (!Array.isArray(list)) return [];
+            return list.filter(function (batch) {
+                return !!(batch && typeof batch === 'object' && batch.batchId);
+            });
+        }
+
+        function hydrateBatchesFromOccurrences(normalizedList) {
+            var list = Array.isArray(normalizedList) ? normalizedList.slice() : [];
+            var previousById = {};
+            normalizeBatchList(occurrenceState.batches).forEach(function (batch) {
+                previousById[String(batch.batchId)] = batch;
+            });
+
+            var grouped = {};
+            list.forEach(function (occ) {
+                if (!occ || typeof occ !== 'object') return;
+                var batchId = occ.generationBatchId ? String(occ.generationBatchId) : '';
+                if (!batchId && occ.createAsManualLotGroup) {
+                    batchId = 'manual-' + String(occ.createAsManualLotGroup);
+                    occ.generationBatchId = batchId;
+                }
+                if (!batchId) return;
+                if (!grouped[batchId]) grouped[batchId] = [];
+                grouped[batchId].push(occ);
+            });
+
+            var batches = Object.keys(grouped).map(function (batchId) {
+                var group = grouped[batchId] || [];
+                var first = group[0] || {};
+                var prev = previousById[batchId] || {};
+                var prevSummary = prev.summary && typeof prev.summary === 'object' ? prev.summary : {};
+                var prevConfig = prev.configSnapshot && typeof prev.configSnapshot === 'object' ? prev.configSnapshot : {};
+                var firstStart = parseDateTimeParts(first.start);
+                var firstEnd = parseDateTimeParts(first.end);
+                var title = typeof prevSummary.batch_title === 'string' ? prevSummary.batch_title : '';
+                var manualMode = first.createAsManualLotMode ? String(first.createAsManualLotMode) : '';
+                var resolvedMode = prevConfig.mode || manualMode || occurrenceState.mode || (group.length > 1 ? 'range' : 'custom');
+
+                return {
+                    batchId: batchId,
+                    status: 'active',
+                    createdAt: prev.createdAt || new Date().toISOString(),
+                    occurrencesCount: group.length,
+                    configSnapshot: {
+                        mode: resolvedMode,
+                        frequency: prevConfig.frequency || 'every_week',
+                        startDate: prevConfig.startDate || first.date || firstStart.date || '',
+                        endDate: prevConfig.endDate || first.date || firstEnd.date || '',
+                        startTime: prevConfig.startTime || first.startTime || firstStart.time || '09:00',
+                        endTime: prevConfig.endTime || first.endTime || firstEnd.time || '10:00',
+                        days: prevConfig.days || {},
+                        overrides: prevConfig.overrides || {},
+                        includeLocationInSchedulePreview: Object.prototype.hasOwnProperty.call(prevConfig, 'includeLocationInSchedulePreview')
+                            ? !!prevConfig.includeLocationInSchedulePreview
+                            : true,
+                        includeMembersInSchedulePreview: Object.prototype.hasOwnProperty.call(prevConfig, 'includeMembersInSchedulePreview')
+                            ? !!prevConfig.includeMembersInSchedulePreview
+                            : true
+                    },
+                    summary: {
+                        batch_title: title,
+                        schedule_summary: prevSummary.schedule_summary || (occurrenceState.summary || ''),
+                        include_in_global_schedule: Object.prototype.hasOwnProperty.call(prevSummary, 'include_in_global_schedule')
+                            ? !!prevSummary.include_in_global_schedule
+                            : true,
+                        include_dates_in_schedule_preview: Object.prototype.hasOwnProperty.call(prevSummary, 'include_dates_in_schedule_preview')
+                            ? !!prevSummary.include_dates_in_schedule_preview
+                            : true,
+                        include_location_in_schedule_preview: Object.prototype.hasOwnProperty.call(prevSummary, 'include_location_in_schedule_preview')
+                            ? !!prevSummary.include_location_in_schedule_preview
+                            : true,
+                        include_members_in_schedule_preview: Object.prototype.hasOwnProperty.call(prevSummary, 'include_members_in_schedule_preview')
+                            ? !!prevSummary.include_members_in_schedule_preview
+                            : true,
+                        assigned_location_id: prevSummary.assigned_location_id || 0,
+                        assigned_member_ids: Array.isArray(prevSummary.assigned_member_ids) ? prevSummary.assigned_member_ids.slice() : [],
+                        generated_occurrence_status: prevSummary.generated_occurrence_status || first.status || 'planned'
+                    }
+                };
+            });
+
+            return {
+                occurrences: list,
+                batches: batches
+            };
+        }
+
+        function applyBatchSummaryPatch(batchId, patch) {
+            var target = String(batchId || '');
+            occurrenceState.batches = normalizeBatchList(occurrenceState.batches).map(function (batch) {
+                if (!batch || String(batch.batchId) !== target) return batch;
+                var nextSummary = Object.assign({}, batch.summary || {}, patch || {});
+                return Object.assign({}, batch, { summary: nextSummary });
+            });
+            return occurrenceState.batches;
+        }
+
+        function applyBatchConfigPatch(batchId, patch) {
+            var target = String(batchId || '');
+            occurrenceState.batches = normalizeBatchList(occurrenceState.batches).map(function (batch) {
+                if (!batch || String(batch.batchId) !== target) return batch;
+                var nextConfig = Object.assign({}, batch.configSnapshot || {}, patch || {});
+                return Object.assign({}, batch, { configSnapshot: nextConfig });
+            });
+            return occurrenceState.batches;
+        }
+
+        function localOccurrenceApiPost(action, payload) {
+            var data = payload && typeof payload === 'object' ? payload : {};
+            var batchId = data.batchId ? String(data.batchId) : '';
+
+            if (action === 'mj_regmgr_get_event_editor') {
+                return Promise.resolve({
+                    form: {
+                        options: {
+                            locations: mapLocationsForOccurrenceEditor(config.createLocations || {}),
+                            animateurs: mapMembersForOccurrenceEditor(config.createAnimateurs || {})
+                        }
+                    }
+                });
+            }
+
+            if (action === 'mj_regmgr_save_event_schedule_preview') {
+                return Promise.resolve({ success: true });
+            }
+
+            if (action === 'mj_regmgr_delete_occurrence_batch') {
+                occurrenceState.occurrences = normalizeOccurrenceList(occurrenceState.occurrences).filter(function (occ) {
+                    return String(occ.generationBatchId || '') !== batchId;
+                });
+                occurrenceState.batches = normalizeBatchList(occurrenceState.batches).filter(function (batch) {
+                    return String(batch.batchId || '') !== batchId;
+                });
+                return Promise.resolve({
+                    occurrenceGenerationBatches: normalizeBatchList(occurrenceState.batches),
+                    occurrences: normalizeOccurrenceList(occurrenceState.occurrences)
+                });
+            }
+
+            if (action === 'mj_regmgr_update_batch_schedule_flag') {
+                var includeInSchedule = !!data.includeInGlobalSchedule;
+                return Promise.resolve({
+                    occurrenceGenerationBatches: applyBatchSummaryPatch(batchId, { include_in_global_schedule: includeInSchedule })
+                });
+            }
+
+            if (action === 'mj_regmgr_update_batch_preview_dates_flag') {
+                var includeDates = !!data.includeDatesInSchedulePreview;
+                return Promise.resolve({
+                    occurrenceGenerationBatches: applyBatchSummaryPatch(batchId, { include_dates_in_schedule_preview: includeDates })
+                });
+            }
+
+            if (action === 'mj_regmgr_update_batch_title') {
+                return Promise.resolve({
+                    occurrenceGenerationBatches: applyBatchSummaryPatch(batchId, { batch_title: String(data.title || '').trim() })
+                });
+            }
+
+            if (action === 'mj_regmgr_update_batch_assignment') {
+                var locationId = parseInt(data.locationId, 10);
+                var memberIds = Array.isArray(data.memberIds)
+                    ? data.memberIds.map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; })
+                    : [];
+                var occurrenceStatus = data.occurrenceStatus ? String(data.occurrenceStatus) : 'planned';
+                occurrenceState.occurrences = normalizeOccurrenceList(occurrenceState.occurrences).map(function (occ) {
+                    if (!occ || String(occ.generationBatchId || '') !== batchId) return occ;
+                    return Object.assign({}, occ, { status: occurrenceStatus });
+                });
+                return Promise.resolve({
+                    occurrenceGenerationBatches: applyBatchSummaryPatch(batchId, {
+                        assigned_location_id: locationId > 0 ? locationId : 0,
+                        assigned_member_ids: memberIds,
+                        generated_occurrence_status: occurrenceStatus
+                    }),
+                    occurrences: normalizeOccurrenceList(occurrenceState.occurrences)
+                });
+            }
+
+            if (action === 'mj_regmgr_update_occurrence_batch_config') {
+                var configPatch = data.config && typeof data.config === 'object' ? data.config : {};
+                var nextBatches = applyBatchConfigPatch(batchId, configPatch);
+                var targetBatch = nextBatches.filter(function (batch) {
+                    return batch && String(batch.batchId || '') === batchId;
+                })[0] || null;
+                if (targetBatch && targetBatch.configSnapshot) {
+                    var cfg = targetBatch.configSnapshot;
+                    var startTime = cfg.startTime ? String(cfg.startTime) : '09:00';
+                    var endTime = cfg.endTime ? String(cfg.endTime) : '10:00';
+                    var startDate = cfg.startDate ? String(cfg.startDate) : '';
+                    occurrenceState.occurrences = normalizeOccurrenceList(occurrenceState.occurrences).map(function (occ) {
+                        if (!occ || String(occ.generationBatchId || '') !== batchId) return occ;
+                        var date = occ.date ? String(occ.date) : startDate;
+                        if (startDate && cfg.mode === 'custom') {
+                            date = startDate;
+                        }
+                        var nextStart = date ? (date + ' ' + startTime) : occ.start;
+                        var nextEnd = date ? (date + ' ' + endTime) : occ.end;
+                        return Object.assign({}, occ, {
+                            date: date,
+                            startTime: startTime,
+                            endTime: endTime,
+                            start: nextStart,
+                            end: nextEnd
+                        });
+                    });
+                }
+                return Promise.resolve({
+                    occurrenceGenerationBatches: normalizeBatchList(occurrenceState.batches),
+                    occurrences: normalizeOccurrenceList(occurrenceState.occurrences)
+                });
+            }
+
+            return Promise.reject(new Error('Action locale non supportée: ' + String(action || '')));
         }
 
         function mapLocationsForOccurrenceEditor(raw) {
@@ -173,7 +424,8 @@
 
         function mountOccurrenceEncoder() {
             var app = window.MjRegMgrApp || {};
-            var OccurrenceEncoderPanel = app.OccurrenceEncoderPanel;
+            var occurrenceEditorModule = window.MjRegMgrOccurrenceEditor || {};
+            var OccurrenceEncoderPanel = app.OccurrenceEncoderPanel || occurrenceEditorModule.OccurrenceEncoderPanel;
             var preact = window.preact;
             if (!occurrenceMount || !OccurrenceEncoderPanel || !preact || typeof preact.h !== 'function' || typeof preact.render !== 'function') {
                 occurrenceEditorEnabled = false;
@@ -192,7 +444,7 @@
                 occurrenceScheduleSummary: occurrenceState.summary || '',
                 inlineSchedulePreview: null,
                 occurrenceGenerator: occurrenceState.generator || null,
-                occurrenceGenerationBatches: []
+                occurrenceGenerationBatches: normalizeBatchList(occurrenceState.batches)
             };
 
             preact.render(
@@ -202,12 +454,56 @@
                     occurrences: normalizeOccurrenceList(occurrenceState.occurrences),
                     strings: strings,
                     locale: (config && config.locale) ? config.locale : 'fr',
-                    apiPost: null,
+                    initialViewMode: 'month',
+                    apiPost: localOccurrenceApiPost,
                     globalLocationOptions: mapLocationsForOccurrenceEditor(config.createLocations || {}),
                     globalMemberOptions: mapMembersForOccurrenceEditor(config.createAnimateurs || {}),
                     onPersistOccurrences: function (nextList, summaryPayload, generatorPayload, optionsPayload) {
-                        occurrenceState.occurrences = normalizeOccurrenceList(nextList);
-                        occurrenceState.summary = summaryPayload && summaryPayload.value ? String(summaryPayload.value) : '';
+                        var rawList = Array.isArray(nextList)
+                            ? nextList.map(function (item) {
+                                return item && typeof item === 'object' ? Object.assign({}, item) : item;
+                            })
+                            : [];
+                        var hasGeneratedWithoutBatch = rawList.some(function (item) {
+                            if (!item || typeof item !== 'object') {
+                                return false;
+                            }
+                            var source = typeof item.source === 'string' ? item.source : '';
+                            var hasBatch = !!(item.generationBatchId || item.generation_batch_id || item.batch_id);
+                            return source === 'generated' && !hasBatch;
+                        });
+                        if (hasGeneratedWithoutBatch) {
+                            var generatedMode = (generatorPayload && typeof generatorPayload.mode === 'string' && generatorPayload.mode)
+                                ? String(generatorPayload.mode)
+                                : 'weekly';
+                            if (generatedMode !== 'weekly' && generatedMode !== 'monthly' && generatedMode !== 'range' && generatedMode !== 'custom') {
+                                generatedMode = 'weekly';
+                            }
+                            var generatedGroup = 'generated-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+                            var generatedBatchId = 'tmp-' + generatedGroup;
+                            rawList = rawList.map(function (item) {
+                                if (!item || typeof item !== 'object') {
+                                    return item;
+                                }
+                                var source = typeof item.source === 'string' ? item.source : '';
+                                var hasBatch = !!(item.generationBatchId || item.generation_batch_id || item.batch_id);
+                                if (source !== 'generated' || hasBatch) {
+                                    return item;
+                                }
+                                return Object.assign({}, item, {
+                                    generationBatchId: generatedBatchId,
+                                    createAsManualLotMode: generatedMode,
+                                });
+                            });
+                        }
+
+                        var normalized = normalizeOccurrenceList(rawList);
+                        var hydration = hydrateBatchesFromOccurrences(normalized);
+                        occurrenceState.occurrences = hydration.occurrences;
+                        occurrenceState.batches = hydration.batches;
+                        occurrenceState.summary = typeof summaryPayload === 'string'
+                            ? String(summaryPayload)
+                            : (summaryPayload && summaryPayload.value ? String(summaryPayload.value) : '');
                         occurrenceState.generator = generatorPayload || null;
                         occurrenceState.options = optionsPayload || null;
                         if (generatorPayload && generatorPayload.mode) {
@@ -217,9 +513,14 @@
                         } else if (occurrenceState.occurrences.length === 1) {
                             occurrenceState.mode = 'fixed';
                         }
+
+                        occurrenceEditorSession += 1;
+                        mountOccurrenceEncoder();
                         return Promise.resolve();
                     },
-                    onBatchesUpdate: function () {}
+                    onBatchesUpdate: function (nextBatches) {
+                        occurrenceState.batches = normalizeBatchList(nextBatches);
+                    }
                 }),
                 occurrenceMount
             );
@@ -482,6 +783,57 @@
                 + '</div>';
         }
 
+        function ensureDefaultOccurrenceLotForSelectedDay() {
+            if (!occurrenceEditorEnabled) {
+                return;
+            }
+            if (!selectedDay) {
+                return;
+            }
+            if (Array.isArray(occurrenceState.occurrences) && occurrenceState.occurrences.length > 0) {
+                return;
+            }
+
+            var startTime = startInput ? String(startInput.value || '').trim() : '';
+            var endTime = endInput ? String(endInput.value || '').trim() : '';
+            if (!/^\d{2}:\d{2}$/.test(startTime)) {
+                startTime = '14:00';
+            }
+            if (!/^\d{2}:\d{2}$/.test(endTime) || endTime <= startTime) {
+                endTime = '17:00';
+            }
+
+            var nowTs = Date.now();
+            var lotGroup = 'manual-custom-' + nowTs + '-' + Math.floor(Math.random() * 100000);
+            var batchId = 'manual-' + lotGroup;
+            var occurrenceId = 'ccm-occ-' + selectedDay + '-' + startTime.replace(':', '') + '-' + nowTs;
+            occurrenceState.occurrences = normalizeOccurrenceList([
+                {
+                    id: occurrenceId,
+                    date: selectedDay,
+                    startTime: startTime,
+                    endTime: endTime,
+                    start: selectedDay + ' ' + startTime,
+                    end: selectedDay + ' ' + endTime,
+                    isAllDay: false,
+                    status: 'planned',
+                    source: 'manual',
+                    generationBatchId: batchId,
+                    createAsManualLot: true,
+                    createAsManualLotGroup: lotGroup,
+                    createAsManualLotMode: 'custom'
+                }
+            ]);
+            occurrenceState.mode = 'fixed';
+
+            var hydration = hydrateBatchesFromOccurrences(occurrenceState.occurrences);
+            occurrenceState.occurrences = hydration.occurrences;
+            occurrenceState.batches = hydration.batches;
+
+            occurrenceEditorSession += 1;
+            mountOccurrenceEncoder();
+        }
+
         function syncStep() {
             panels.forEach(function (panel) {
                 var ps = parseInt(panel.getAttribute('data-ccm-panel') || '0', 10);
@@ -502,6 +854,7 @@
             if (nextButton) { nextButton.hidden = currentStep >= totalSteps; nextButton.disabled = isSubmitting; }
             if (submitButton) { submitButton.hidden = currentStep < totalSteps || config.showEditButton === false; submitButton.disabled = isSubmitting; }
             if (onlyButton) { onlyButton.hidden = currentStep < totalSteps; onlyButton.disabled = isSubmitting; }
+            if (currentStep === 3) ensureDefaultOccurrenceLotForSelectedDay();
             if (currentStep === 4) updateSummary();
         }
 
@@ -549,7 +902,8 @@
                 occurrences: [],
                 summary: '',
                 generator: null,
-                options: null
+                options: null,
+                batches: []
             };
             occurrenceEditorSession += 1;
             mountOccurrenceEncoder();

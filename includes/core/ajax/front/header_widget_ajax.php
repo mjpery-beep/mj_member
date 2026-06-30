@@ -100,71 +100,56 @@ final class HeaderWidgetController implements AjaxHandlerInterface
      */
     public function headerNextcloudNavigation(): void
     {
-        try {
-            check_ajax_referer('mj-header-widget', 'nonce');
+        check_ajax_referer('mj-header-widget', 'nonce');
 
-            if (!is_user_logged_in()) {
-                wp_send_json_error(array('message' => __('Vous devez être connecté.', 'mj-member')), 401);
-            }
+        if (!is_user_logged_in()) {
+            wp_send_json_error(array('message' => __('Vous devez être connecté.', 'mj-member')), 401);
+        }
 
-            if (!function_exists('mj_member_documents_get_current_member_nextcloud_credentials')) {
-                wp_send_json_error(array('message' => __('Module documents indisponible.', 'mj-member')), 503);
-            }
+        $baseUrl = rtrim(Config::nextcloudUrl(), '/');
+        if ($baseUrl === '') {
+            error_log('[mj_header_nextcloud] MJ_MEMBER_NEXTCLOUD_URL non configuré.');
+            wp_send_json_error(array('message' => __('Configuration Nextcloud incomplète.', 'mj-member')), 503);
+        }
 
-            $creds = mj_member_documents_get_current_member_nextcloud_credentials();
-            $login = isset($creds['login']) ? sanitize_user((string) $creds['login'], true) : '';
+        // Tentative d'auth avec les credentials du membre (optionnel — l'endpoint /navigation
+        // est public et retourne les apps même sans authentification).
+        $authBase64 = '';
+        $linked     = false;
+
+        if (function_exists('mj_member_documents_get_current_member_nextcloud_credentials')) {
+            $creds    = mj_member_documents_get_current_member_nextcloud_credentials();
+            $login    = isset($creds['login']) ? sanitize_user((string) $creds['login'], true) : '';
             $password = isset($creds['password']) ? trim((string) $creds['password']) : '';
 
-            if ($login === '' || $password === '') {
-                wp_send_json_success(array(
-                    'linked'  => false,
-                    'apps'    => array(),
-                    'message' => __('Votre compte Nextcloud n\'est pas encore lié.', 'mj-member'),
-                ));
+            if ($login !== '' && $password !== '') {
+                $authResult = $this->nextcloudLogin($baseUrl, $login, $password);
+                if ($authResult['ok']) {
+                    $linked     = true;
+                    $authBase64 = $authResult['auth'];
+                } else {
+                    error_log('[mj_header_nextcloud] Login échoué pour le compte : ' . $login);
+                }
+            } else {
+                error_log('[mj_header_nextcloud] Credentials Nextcloud absents pour user_id=' . get_current_user_id());
             }
-
-            $baseUrl = rtrim(Config::nextcloudUrl(), '/');
-            if ($baseUrl === '') {
-                wp_send_json_error(array('message' => __('Configuration Nextcloud incomplète.', 'mj-member')), 503);
-            }
-
-            // Keep this endpoint responsive: avoid long proxy/PHP timeouts by limiting
-            // each upstream call.
-            $requestTimeout = 4;
-
-            $authResult = $this->nextcloudLogin($baseUrl, $login, $password, $requestTimeout);
-            if (!$authResult['ok']) {
-                wp_send_json_success(array(
-                    'linked'  => false,
-                    'apps'    => array(),
-                    'message' => __('Connexion Nextcloud impossible. Contactez un gestionnaire.', 'mj-member'),
-                ));
-            }
-
-            $appsResult = $this->nextcloudFetchNavigation($baseUrl, $authResult['auth'], $requestTimeout);
-            if (!$appsResult['ok']) {
-                wp_send_json_success(array(
-                    'linked'  => false,
-                    'apps'    => array(),
-                    'message' => __('Impossible de charger les applications Nextcloud pour le moment.', 'mj-member'),
-                ));
-            }
-
-            wp_send_json_success(array(
-                'linked' => true,
-                'apps'   => $appsResult['apps'],
-            ));
-        } catch (\Throwable $e) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('MJ Header Nextcloud AJAX error: ' . $e->getMessage());
-            }
-
-            wp_send_json_success(array(
-                'linked'  => false,
-                'apps'    => array(),
-                'message' => __('Impossible de contacter Nextcloud pour le moment.', 'mj-member'),
-            ));
         }
+
+        // Récupère les apps Nextcloud — fonctionne sans auth (endpoint public).
+        $appsResult = $this->nextcloudFetchNavigation($baseUrl, $authBase64);
+
+        if (!$appsResult['ok']) {
+            error_log('[mj_header_nextcloud] Impossible de récupérer la navigation depuis ' . $baseUrl);
+            wp_send_json_error(
+                array('message' => __('Impossible de charger les applications Nextcloud pour le moment.', 'mj-member')),
+                502
+            );
+        }
+
+        wp_send_json_success(array(
+            'linked' => $linked || count($appsResult['apps']) > 0,
+            'apps'   => $appsResult['apps'],
+        ));
     }
 
     /**
@@ -309,10 +294,10 @@ final class HeaderWidgetController implements AjaxHandlerInterface
     /**
      * @return array{ok:bool,auth:string}
      */
-    private function nextcloudLogin(string $baseUrl, string $login, string $password, int $timeout = 4): array
+    private function nextcloudLogin(string $baseUrl, string $login, string $password): array
     {
         $response = wp_remote_post($baseUrl . '/apps/mj_session_check/login', array(
-            'timeout' => max(1, $timeout),
+            'timeout' => 12,
             'headers' => array(
                 'Content-Type' => 'application/json',
             ),
@@ -347,14 +332,16 @@ final class HeaderWidgetController implements AjaxHandlerInterface
     /**
      * @return array{ok:bool,apps:array<int,array<string,mixed>>}
      */
-    private function nextcloudFetchNavigation(string $baseUrl, string $auth, int $timeout = 4): array
+    private function nextcloudFetchNavigation(string $baseUrl, string $auth = ''): array
     {
+        $headers = array('OCS-APIREQUEST' => 'true');
+        if ($auth !== '') {
+            $headers['Authorization'] = 'Basic ' . $auth;
+        }
+
         $response = wp_remote_get($baseUrl . '/apps/mj_session_check/navigation', array(
-            'timeout' => max(1, $timeout),
-            'headers' => array(
-                'Authorization'  => 'Basic ' . $auth,
-                'OCS-APIREQUEST' => 'true',
-            ),
+            'timeout' => 12,
+            'headers' => $headers,
         ));
 
         if (is_wp_error($response)) {

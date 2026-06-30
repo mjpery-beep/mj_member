@@ -335,7 +335,7 @@ final class AssetsManager
         self::registerScript('mj-member-event-toggles', 'js/event-toggles.js');
         self::registerScript('mj-member-animateur-account', 'js/animateur-account.js', array('jquery', 'mj-member-utils'));
         self::registerScript('mj-member-member-account', 'js/member-account.js', array(), false);
-        self::registerScript('mj-member-create-event-modal', 'js/create-event-modal.js', array('mj-member-utils', 'mj-member-regmgr-emoji-picker'));
+        self::registerScript('mj-member-create-event-modal', 'js/create-event-modal.js', array('mj-member-utils', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-occurrence-editor'));
         self::registerStyle('mj-member-create-event-modal', 'css/create-event-modal.css');
         self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils', 'mj-member-create-event-modal'));
         self::registerScript('mj-member-registrations-widget', 'js/elementor/registrations-widget.js', array('mj-member-utils'));
@@ -441,7 +441,7 @@ final class AssetsManager
         self::registerScript('mj-member-regmgr-modals', 'js/registration-manager/modals.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-modal-ia', 'js/registration-manager/modal-ia.js', array('mj-member-regmgr-hooks', 'mj-member-regmgr-modals'));
         self::registerScript('mj-member-regmgr-tabs', 'js/registration-manager/tabs.js', array('mj-member-regmgr-hooks', 'mj-member-utils'));
-        self::registerScript('mj-member-regmgr-occurrence-editor', 'js/registration-manager/occurrence-editor.js', array('mj-member-regmgr-hooks', 'mj-member-utils'));
+        self::registerScript('mj-member-regmgr-occurrence-editor', 'js/registration-manager/occurrence-editor.js', array('mj-member-regmgr-hooks', 'mj-member-utils', 'mj-member-regmgr-modals'));
         self::registerStyle('mj-member-regmgr-nextcloud-files', 'css/nextcloud-files.css', array('mj-member-registration-manager'));
         self::registerScript('mj-member-regmgr-nextcloud-files', 'js/registration-manager/nextcloud-files.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-app', 'js/registration-manager/app.js', array(
@@ -561,6 +561,8 @@ final class AssetsManager
                 break;
 
             case 'events-calendar':
+                // Reuse occurrence editor styles inside the shared create-event modal.
+                wp_enqueue_style('mj-member-registration-manager');
                 wp_enqueue_style('mj-member-events-calendar');
                 wp_enqueue_script('mj-member-events-calendar');
                 break;

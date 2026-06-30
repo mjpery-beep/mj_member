@@ -1,0 +1,21 @@
+{
+    "slug": "config_supertool",
+    "generated_at": "2026-06-30 09:44:54",
+    "items": {
+        "mjet_migrated_template_ids": [
+            3029,
+            1058,
+            799,
+            666,
+            486,
+            403
+        ],
+        "mjet_migrated_templates_count": "6",
+        "mjet_template_fix_version": "1.0.2",
+        "elementor_cpt_support": [
+            "post",
+            "page",
+            "mjet-template"
+        ]
+    }
+}

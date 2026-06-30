@@ -122,9 +122,9 @@ function mj_nc_event_folder(int $eventId, string $type)
         $slug = 'evenement-' . $eventId;
     }
 
-    $root = rtrim(Config::nextcloudRootFolder(), '/');
+    $root = Config::nextcloudRootFolder();
     $eventsFolder = Config::nextcloudEventsFolder();
-    return ($root !== '' ? $root . '/' : '') . $eventsFolder . '/' . $slug . '/' . $type;
+    return mj_nc_join_paths($root, $eventsFolder, $slug, $type);
 }
 
 /**
@@ -158,9 +158,9 @@ function mj_nc_member_folder(int $memberId, string $type)
         $login     = trim($firstName . '-' . $lastName, '-') ?: ('membre-' . $memberId);
     }
 
-    $root = rtrim(Config::nextcloudRootFolder(), '/');
+    $root = Config::nextcloudRootFolder();
     $membersFolder = Config::nextcloudMembersFolder();
-    return ($root !== '' ? $root . '/' : '') . $membersFolder . '/' . $login . '/' . $type;
+    return mj_nc_join_paths($root, $membersFolder, $login, $type);
 }
 
 /**
@@ -190,6 +190,22 @@ function mj_nc_sanitize_relative_path(string $path): string
     }));
 
     return implode('/', $segments);
+}
+
+/**
+ * Join and normalize multiple relative path segments.
+ */
+function mj_nc_join_paths(string ...$segments): string
+{
+    $normalized = [];
+    foreach ($segments as $segment) {
+        $clean = mj_nc_sanitize_relative_path((string) $segment);
+        if ($clean !== '') {
+            $normalized[] = $clean;
+        }
+    }
+
+    return implode('/', $normalized);
 }
 
 /**
@@ -1060,12 +1076,14 @@ function mj_nc_is_allowed_public_path(string $filePath): bool
         return false;
     }
 
-    $root = trim(str_replace('\\', '/', (string) Config::nextcloudRootFolder()), '/');
-    $prefix = $root !== '' ? ($root . '/') : '';
+    $root = Config::nextcloudRootFolder();
     $eventsFolder = Config::nextcloudEventsFolder();
     $membersFolder = Config::nextcloudMembersFolder();
 
-    return strpos($filePath, $prefix . $eventsFolder . '/') === 0 || strpos($filePath, $prefix . $membersFolder . '/') === 0;
+    $eventsBase = mj_nc_join_paths($root, $eventsFolder);
+    $membersBase = mj_nc_join_paths($root, $membersFolder);
+
+    return strpos($filePath, $eventsBase . '/') === 0 || strpos($filePath, $membersBase . '/') === 0;
 }
 
 /**

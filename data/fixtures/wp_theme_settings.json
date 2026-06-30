@@ -1,4 +1,16 @@
 {
     "slug": "wp_theme_settings",
-    "generated_at": "2026-06-16 00:43:41"
+    "generated_at": "2026-06-30 09:44:54",
+    "items": {
+        "stylesheet": "hello-biz",
+        "theme_mods": {
+            "0": false,
+            "nav_menu_locations": {
+                "menu-2": 10
+            },
+            "custom_css_post_id": -1,
+            "custom_logo": 129
+        },
+        "custom_css": ""
+    }
 }
