@@ -4,6 +4,7 @@ namespace Mj\Member\Classes\Crud;
 
 use DateTimeInterface;
 use Mj\Member\Classes\MjEventSchedule;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\Value\EventData;
 use WP_Error;
 
@@ -14,6 +15,10 @@ if (!defined('ABSPATH')) {
 class MjEvents implements CrudRepositoryInterface {
     const TABLE = 'mj_events';
     const REG_TABLE = 'mj_event_registrations';
+    const CUSTOM_TYPES_OPTION = 'mj_member_event_custom_types';
+    const TYPE_LABEL_OVERRIDES_OPTION = 'mj_member_event_type_label_overrides';
+    const TYPE_VISIBILITY_OPTION = 'mj_member_event_type_visibility';
+    const TYPE_COLOR_OVERRIDES_OPTION = 'mj_member_event_type_color_overrides';
 
     const STATUS_ACTIVE = 'actif';
     const STATUS_DRAFT = 'brouillon';
@@ -262,6 +267,53 @@ class MjEvents implements CrudRepositoryInterface {
      * @return array<string, string>
      */
     public static function get_type_labels() {
+        $default = self::get_default_type_labels();
+        $overrides = self::get_type_label_overrides();
+        foreach ($overrides as $type_key => $label) {
+            if (isset($default[$type_key])) {
+                $default[$type_key] = $label;
+            }
+        }
+
+        return array_merge(
+            $default,
+            self::get_custom_type_labels()
+        );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function get_type_label_overrides() {
+        $stored = get_option(self::TYPE_LABEL_OVERRIDES_OPTION, array());
+        if (!is_array($stored) || empty($stored)) {
+            return array();
+        }
+
+        $defaults = self::get_default_type_labels();
+        $overrides = array();
+
+        foreach ($stored as $rawKey => $rawLabel) {
+            $key = sanitize_key((string) $rawKey);
+            if ($key === '' || !isset($defaults[$key])) {
+                continue;
+            }
+
+            $label = sanitize_text_field((string) $rawLabel);
+            if ($label === '') {
+                continue;
+            }
+
+            $overrides[$key] = $label;
+        }
+
+        return $overrides;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function get_default_type_labels() {
         return array(
             self::TYPE_STAGE => 'Stage',
             self::TYPE_SOIREE => 'Soiree',
@@ -274,15 +326,300 @@ class MjEvents implements CrudRepositoryInterface {
     /**
      * @return array<string, string>
      */
-    public static function get_type_colors() {
+    public static function get_custom_type_labels() {
+        $stored = get_option(self::CUSTOM_TYPES_OPTION, array());
+        if (!is_array($stored) || empty($stored)) {
+            return array();
+        }
+
+        $defaults = self::get_default_type_labels();
+        $custom = array();
+
+        foreach ($stored as $rawKey => $rawLabel) {
+            $key = sanitize_key((string) $rawKey);
+            if ($key === '' || isset($defaults[$key])) {
+                continue;
+            }
+
+            $label = sanitize_text_field((string) $rawLabel);
+            if ($label === '') {
+                continue;
+            }
+
+            $custom[$key] = $label;
+        }
+
+        return $custom;
+    }
+
+    /**
+     * @param string $type_key
+     * @param string $type_label
+     * @return true|WP_Error
+     */
+    public static function add_custom_type($type_key, $type_label) {
+        $type_key = sanitize_key((string) $type_key);
+        $type_label = sanitize_text_field((string) $type_label);
+
+        if ($type_key === '') {
+            return new WP_Error('mj_event_type_key_required', 'La clé du type est obligatoire.');
+        }
+
+        if ($type_label === '') {
+            return new WP_Error('mj_event_type_label_required', 'Le libellé du type est obligatoire.');
+        }
+
+        $defaults = self::get_default_type_labels();
+        if (isset($defaults[$type_key])) {
+            return new WP_Error('mj_event_type_exists', 'Ce type existe déjà dans les types par défaut.');
+        }
+
+        $custom = self::get_custom_type_labels();
+        if (isset($custom[$type_key])) {
+            return new WP_Error('mj_event_type_exists', 'Ce type personnalisé existe déjà.');
+        }
+
+        $custom[$type_key] = $type_label;
+        update_option(self::CUSTOM_TYPES_OPTION, $custom, false);
+
+        return true;
+    }
+
+    /**
+     * @param string $type_key
+     * @return true|WP_Error
+     */
+    public static function remove_custom_type($type_key) {
+        $type_key = sanitize_key((string) $type_key);
+        if ($type_key === '') {
+            return new WP_Error('mj_event_type_key_required', 'Le type à supprimer est invalide.');
+        }
+
+        $defaults = self::get_default_type_labels();
+        if (isset($defaults[$type_key])) {
+            return new WP_Error('mj_event_type_protected', 'Les types par défaut ne peuvent pas être supprimés.');
+        }
+
+        $custom = self::get_custom_type_labels();
+        if (!isset($custom[$type_key])) {
+            return new WP_Error('mj_event_type_missing', 'Le type personnalisé est introuvable.');
+        }
+
+        $used_count = self::count(array('types' => array($type_key)));
+        if ($used_count > 0) {
+            return new WP_Error('mj_event_type_in_use', 'Ce type est utilisé par des événements existants et ne peut pas être supprimé.');
+        }
+
+        unset($custom[$type_key]);
+        update_option(self::CUSTOM_TYPES_OPTION, $custom, false);
+
+        $visibility = get_option(self::TYPE_VISIBILITY_OPTION, array());
+        if (is_array($visibility) && isset($visibility[$type_key])) {
+            unset($visibility[$type_key]);
+            update_option(self::TYPE_VISIBILITY_OPTION, $visibility, false);
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    public static function get_visibility_roles() {
         return array(
+            MjRoles::COORDINATEUR => 'Coordinateur',
+            MjRoles::ANIMATEUR => 'Animateur',
+            MjRoles::JEUNE => 'Jeune',
+        );
+    }
+
+    /**
+     * @return array<string,bool>
+     */
+    private static function default_type_visibility() {
+        $defaults = array();
+        foreach (array_keys(self::get_visibility_roles()) as $role_key) {
+            $defaults[$role_key] = true;
+        }
+
+        return $defaults;
+    }
+
+    /**
+     * @return array<string,array<string,bool>>
+     */
+    public static function get_type_visibility_map() {
+        $stored = get_option(self::TYPE_VISIBILITY_OPTION, array());
+        if (!is_array($stored)) {
+            $stored = array();
+        }
+
+        $roles = array_keys(self::get_visibility_roles());
+        $base_visibility = self::default_type_visibility();
+        $map = array();
+
+        foreach (array_keys(self::get_type_labels()) as $type_key) {
+            $entry = isset($stored[$type_key]) && is_array($stored[$type_key]) ? $stored[$type_key] : array();
+            $type_visibility = $base_visibility;
+
+            foreach ($roles as $role_key) {
+                if (array_key_exists($role_key, $entry)) {
+                    $type_visibility[$role_key] = !empty($entry[$role_key]);
+                }
+            }
+
+            $map[$type_key] = $type_visibility;
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param array<string,mixed> $labels
+     * @param array<string,mixed> $visibility
+        * @param array<string,mixed> $colors
+     * @return true|WP_Error
+     */
+        public static function save_type_settings(array $labels, array $visibility, array $colors = array()) {
+        $defaults = self::get_default_type_labels();
+        $default_keys = array_keys($defaults);
+        $custom = self::get_custom_type_labels();
+        $known_types = self::get_type_labels();
+
+        $label_overrides = self::get_type_label_overrides();
+        foreach ($known_types as $type_key => $current_label) {
+            if (!array_key_exists($type_key, $labels)) {
+                continue;
+            }
+
+            $new_label = sanitize_text_field((string) $labels[$type_key]);
+            if ($new_label === '') {
+                return new WP_Error('mj_event_type_label_required', 'Le libellé du type ne peut pas être vide.');
+            }
+
+            if (in_array($type_key, $default_keys, true)) {
+                if ($new_label === $defaults[$type_key]) {
+                    unset($label_overrides[$type_key]);
+                } else {
+                    $label_overrides[$type_key] = $new_label;
+                }
+                continue;
+            }
+
+            if (isset($custom[$type_key])) {
+                $custom[$type_key] = $new_label;
+            }
+        }
+
+        update_option(self::TYPE_LABEL_OVERRIDES_OPTION, $label_overrides, false);
+        update_option(self::CUSTOM_TYPES_OPTION, $custom, false);
+
+        $roles = array_keys(self::get_visibility_roles());
+        $existing_visibility = get_option(self::TYPE_VISIBILITY_OPTION, array());
+        if (!is_array($existing_visibility)) {
+            $existing_visibility = array();
+        }
+
+        foreach (array_keys($known_types) as $type_key) {
+            $entry = isset($visibility[$type_key]) && is_array($visibility[$type_key])
+                ? $visibility[$type_key]
+                : array();
+
+            $stored_entry = array();
+            foreach ($roles as $role_key) {
+                $stored_entry[$role_key] = !empty($entry[$role_key]) ? 1 : 0;
+            }
+
+            $existing_visibility[$type_key] = $stored_entry;
+        }
+
+        update_option(self::TYPE_VISIBILITY_OPTION, $existing_visibility, false);
+
+        $default_colors = array(
             self::TYPE_STAGE => '#0026FF',
             self::TYPE_SOIREE => '#C300FF',
             self::TYPE_SORTIE => '#FF5100',
             self::TYPE_ATELIER => '#0C8301',
             self::TYPE_INTERNE => '#5050A4',
-
         );
+
+        $existing_color_overrides = self::get_type_color_overrides();
+        foreach (array_keys($known_types) as $type_key) {
+            if (!array_key_exists($type_key, $colors)) {
+                continue;
+            }
+
+            $normalized_color = self::normalize_hex_color($colors[$type_key]);
+            if ($normalized_color === '') {
+                $normalized_color = '#6C757D';
+            }
+
+            if (isset($default_colors[$type_key]) && strtoupper($normalized_color) === strtoupper($default_colors[$type_key])) {
+                unset($existing_color_overrides[$type_key]);
+                continue;
+            }
+
+            $existing_color_overrides[$type_key] = $normalized_color;
+        }
+
+        update_option(self::TYPE_COLOR_OVERRIDES_OPTION, $existing_color_overrides, false);
+
+        return true;
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private static function get_type_color_overrides() {
+        $stored = get_option(self::TYPE_COLOR_OVERRIDES_OPTION, array());
+        if (!is_array($stored) || empty($stored)) {
+            return array();
+        }
+
+        $overrides = array();
+        foreach ($stored as $raw_key => $raw_color) {
+            $type_key = sanitize_key((string) $raw_key);
+            if ($type_key === '') {
+                continue;
+            }
+
+            $normalized = self::normalize_hex_color($raw_color);
+            if ($normalized === '') {
+                continue;
+            }
+
+            $overrides[$type_key] = $normalized;
+        }
+
+        return $overrides;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function get_type_colors() {
+        $colors = array(
+            self::TYPE_STAGE => '#0026FF',
+            self::TYPE_SOIREE => '#C300FF',
+            self::TYPE_SORTIE => '#FF5100',
+            self::TYPE_ATELIER => '#0C8301',
+            self::TYPE_INTERNE => '#5050A4',
+        );
+
+        foreach (self::get_custom_type_labels() as $type_key => $unused_label) {
+            if (!isset($colors[$type_key])) {
+                $colors[$type_key] = '#6C757D';
+            }
+        }
+
+        $overrides = self::get_type_color_overrides();
+        foreach ($overrides as $type_key => $color_value) {
+            if (isset($colors[$type_key])) {
+                $colors[$type_key] = $color_value;
+            }
+        }
+
+        return $colors;
     }
     
 

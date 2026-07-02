@@ -174,6 +174,34 @@
             };
         }
 
+        function buildIsoDateRange(startIso, endIso) {
+            if (!startIso || !endIso) {
+                return [];
+            }
+            var startDate = new Date(startIso + 'T00:00:00');
+            var endDate = new Date(endIso + 'T00:00:00');
+            if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+                return [];
+            }
+            if (endDate < startDate) {
+                var tmp = startDate;
+                startDate = endDate;
+                endDate = tmp;
+            }
+            var list = [];
+            var cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+            var guard = 0;
+            while (cursor <= endDate && guard < 731) {
+                var yyyy = String(cursor.getFullYear());
+                var mm = String(cursor.getMonth() + 1).padStart(2, '0');
+                var dd = String(cursor.getDate()).padStart(2, '0');
+                list.push(yyyy + '-' + mm + '-' + dd);
+                cursor.setDate(cursor.getDate() + 1);
+                guard += 1;
+            }
+            return list;
+        }
+
         function normalizeBatchList(list) {
             if (!Array.isArray(list)) return [];
             return list.filter(function (batch) {
@@ -362,25 +390,57 @@
                 })[0] || null;
                 if (targetBatch && targetBatch.configSnapshot) {
                     var cfg = targetBatch.configSnapshot;
+                    var mode = cfg.mode ? String(cfg.mode) : 'custom';
                     var startTime = cfg.startTime ? String(cfg.startTime) : '09:00';
                     var endTime = cfg.endTime ? String(cfg.endTime) : '10:00';
                     var startDate = cfg.startDate ? String(cfg.startDate) : '';
-                    occurrenceState.occurrences = normalizeOccurrenceList(occurrenceState.occurrences).map(function (occ) {
-                        if (!occ || String(occ.generationBatchId || '') !== batchId) return occ;
-                        var date = occ.date ? String(occ.date) : startDate;
-                        if (startDate && cfg.mode === 'custom') {
-                            date = startDate;
-                        }
-                        var nextStart = date ? (date + ' ' + startTime) : occ.start;
-                        var nextEnd = date ? (date + ' ' + endTime) : occ.end;
-                        return Object.assign({}, occ, {
-                            date: date,
-                            startTime: startTime,
-                            endTime: endTime,
-                            start: nextStart,
-                            end: nextEnd
-                        });
+                    var endDate = cfg.endDate ? String(cfg.endDate) : startDate;
+                    var currentOccurrences = normalizeOccurrenceList(occurrenceState.occurrences);
+                    var batchOccurrences = currentOccurrences.filter(function (occ) {
+                        return occ && String(occ.generationBatchId || '') === batchId;
                     });
+                    var otherOccurrences = currentOccurrences.filter(function (occ) {
+                        return !occ || String(occ.generationBatchId || '') !== batchId;
+                    });
+                    var template = batchOccurrences[0] || null;
+                    var updatedBatchOccurrences = [];
+
+                    if (template) {
+                        if (mode === 'range' && startDate && endDate) {
+                            var rangeDates = buildIsoDateRange(startDate, endDate);
+                            updatedBatchOccurrences = rangeDates.map(function (dateIso, index) {
+                                var source = batchOccurrences[index] || template;
+                                return Object.assign({}, source, {
+                                    id: source.id || ('ccm-occ-' + batchId + '-' + index + '-' + Date.now()),
+                                    date: dateIso,
+                                    startTime: startTime,
+                                    endTime: endTime,
+                                    start: dateIso + ' ' + startTime,
+                                    end: dateIso + ' ' + endTime,
+                                    generationBatchId: String(batchId),
+                                    createAsManualLotMode: 'range',
+                                });
+                            });
+                        } else {
+                            var targetDate = startDate || template.date || '';
+                            updatedBatchOccurrences = [Object.assign({}, template, {
+                                date: targetDate,
+                                startTime: startTime,
+                                endTime: endTime,
+                                start: targetDate ? (targetDate + ' ' + startTime) : template.start,
+                                end: targetDate ? (targetDate + ' ' + endTime) : template.end,
+                                generationBatchId: String(batchId),
+                                createAsManualLotMode: mode === 'custom' ? 'custom' : mode,
+                            })];
+                        }
+                    }
+
+                    occurrenceState.occurrences = normalizeOccurrenceList(otherOccurrences.concat(updatedBatchOccurrences));
+
+                    var hydration = hydrateBatchesFromOccurrences(occurrenceState.occurrences);
+                    occurrenceState.occurrences = hydration.occurrences;
+                    occurrenceState.batches = hydration.batches;
+                    applyBatchConfigPatch(batchId, configPatch);
                 }
                 return Promise.resolve({
                     occurrenceGenerationBatches: normalizeBatchList(occurrenceState.batches),

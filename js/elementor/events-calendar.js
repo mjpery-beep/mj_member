@@ -421,7 +421,7 @@
         if (mobileModal) {
             // Day cell click handler
             root.addEventListener('click', function(e) {
-                var dayCell = e.target.closest('.mj-cal-mobile__day.has-events');
+                var dayCell = e.target.closest('.mj-cal-mobile__day');
                 if (!dayCell) {
                     return;
                 }
@@ -430,7 +430,15 @@
                     return;
                 }
                 var dayKey = dayCell.getAttribute('data-calendar-day');
-                if (dayKey) {
+                if (!dayKey) {
+                    return;
+                }
+
+                if (dayCell.classList.contains('is-padding')) {
+                    return;
+                }
+
+                if (root.querySelector('template[data-mobile-day-events="' + dayKey + '"]')) {
                     openMobileModal(dayKey);
                 }
             });
@@ -474,6 +482,38 @@
         var next = root.querySelector('[data-calendar-nav="next"]');
         var label = root.querySelector('[data-calendar-active-label]');
         var todayBtn = root.querySelector('[data-calendar-action="today"]');
+        var openPrintBtn = root.querySelector('[data-calendar-action="open-print"]');
+        var printNowBtn = root.querySelector('[data-calendar-action="print-now"]');
+        var printModal = root.querySelector('[data-calendar-print-modal]');
+        var printPreviewFrame = root.querySelector('[data-calendar-print-preview]');
+        var printCloseBtns = toArray(root.querySelectorAll('[data-calendar-print-close]'));
+        var printModeInput = root.querySelector('[data-print-option="mode"]');
+        var printMonthInput = root.querySelector('[data-print-option="month"]');
+        var printMonthYearInput = root.querySelector('[data-print-option="month-year"]');
+        var printWeekInput = root.querySelector('[data-print-option="week"]');
+        var printWeekYearInput = root.querySelector('[data-print-option="week-year"]');
+        var printMonthPickerWrap = root.querySelector('[data-print-month-picker]');
+        var printMonthYearPickerWrap = root.querySelector('[data-print-month-year-picker]');
+        var printWeekPickerWrap = root.querySelector('[data-print-week-picker]');
+        var printWeekYearPickerWrap = root.querySelector('[data-print-week-year-picker]');
+        var printPadPageInput = root.querySelector('[data-print-option="pad-page"]');
+        var printPadDayInput = root.querySelector('[data-print-option="pad-day"]');
+        var printPadEventInput = root.querySelector('[data-print-option="pad-event"]');
+        var printSpanInput = root.querySelector('[data-print-option="span"]');
+        var printDetailsInput = root.querySelector('[data-print-option="details"]');
+        var printCoverInput = root.querySelector('[data-print-option="cover"]');
+        var printTimeRangeInput = root.querySelector('[data-print-option="time-range"]');
+        var printEventEmojiInput = root.querySelector('[data-print-option="event-emoji"]');
+        var printEventColorInput = root.querySelector('[data-print-option="event-color"]');
+        var printPageBreakInput = root.querySelector('[data-print-option="page-break"]');
+        var printPageBreakLabel = root.querySelector('[data-print-option-page-break-label]');
+        var printTypeFiltersWrap = root.querySelector('[data-print-type-filters]');
+        var printTypeFilterInputs = [];
+        var printSelectedMonthKey = '';
+        var printSelectedWeekStartKey = '';
+        var printMonthEntries = [];
+        var printWeekEntries = [];
+        var printConfig = (config && config.print) ? config.print : {};
         var todayMonthKey = root.getAttribute('data-calendar-today') || '';
         if (config && config.todayMonth) {
             todayMonthKey = config.todayMonth;
@@ -597,6 +637,7 @@
         function applyFilters() {
             if (!filterInputs.length) {
                 updateDayStates();
+                refreshPrintPreview();
                 return;
             }
 
@@ -620,6 +661,933 @@
             });
 
             updateDayStates();
+            refreshPrintPreview();
+        }
+
+        function escapeHtml(value) {
+            if (value === null || typeof value === 'undefined') {
+                return '';
+            }
+
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function startOfWeekMonday(date) {
+            var start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            var day = start.getDay();
+            var diff = (day + 6) % 7;
+            start.setDate(start.getDate() - diff);
+            start.setHours(0, 0, 0, 0);
+            return start;
+        }
+
+        function addDays(date, days) {
+            var nextDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            nextDate.setDate(nextDate.getDate() + days);
+            return nextDate;
+        }
+
+        function formatDayKey(date) {
+            var y = String(date.getFullYear());
+            var m = String(date.getMonth() + 1).padStart(2, '0');
+            var d = String(date.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + d;
+        }
+
+        function getPrintMode() {
+            if (!printModeInput) {
+                return 'week';
+            }
+            return printModeInput.value === 'month' ? 'month' : 'week';
+        }
+
+        function parseMonthKey(monthKey) {
+            if (!/^\d{4}-\d{2}$/.test(monthKey || '')) {
+                return null;
+            }
+            var parts = monthKey.split('-');
+            var year = parseInt(parts[0], 10);
+            var monthIndex = parseInt(parts[1], 10) - 1;
+            if (isNaN(year) || isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+                return null;
+            }
+            return new Date(year, monthIndex, 1);
+        }
+
+        function parseDayKey(dayKey) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey || '')) {
+                return null;
+            }
+            var parts = dayKey.split('-');
+            var y = parseInt(parts[0], 10);
+            var m = parseInt(parts[1], 10) - 1;
+            var d = parseInt(parts[2], 10);
+            if (isNaN(y) || isNaN(m) || isNaN(d)) {
+                return null;
+            }
+            return new Date(y, m, d);
+        }
+
+        function getIsoWeekInfo(dateObj) {
+            var tmp = new Date(Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate()));
+            var weekday = tmp.getUTCDay() || 7;
+            tmp.setUTCDate(tmp.getUTCDate() + 4 - weekday);
+            var yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+            var week = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
+            return {
+                year: tmp.getUTCFullYear(),
+                week: week
+            };
+        }
+
+        function createMonthLabel(dateObj) {
+            try {
+                return dateObj.toLocaleDateString('fr-BE', { month: 'long' });
+            } catch (error) {
+                return String(dateObj.getMonth() + 1);
+            }
+        }
+
+        function getDistinctYears(entries) {
+            var out = [];
+            var seen = {};
+            entries.forEach(function(entry) {
+                var key = String(entry.year);
+                if (Object.prototype.hasOwnProperty.call(seen, key)) {
+                    return;
+                }
+                seen[key] = true;
+                out.push(entry.year);
+            });
+            out.sort(function(a, b) {
+                return a - b;
+            });
+            return out;
+        }
+
+        function rebuildSelectOptions(selectEl, options, selectedValue) {
+            if (!selectEl) {
+                return;
+            }
+            selectEl.innerHTML = '';
+            options.forEach(function(opt) {
+                var optionEl = document.createElement('option');
+                optionEl.value = String(opt.value);
+                optionEl.textContent = String(opt.label);
+                if (String(opt.value) === String(selectedValue)) {
+                    optionEl.selected = true;
+                }
+                selectEl.appendChild(optionEl);
+            });
+        }
+
+        function buildPrintPeriodEntries() {
+            var monthSeen = {};
+            var monthList = [];
+            months.forEach(function(monthEl) {
+                var monthKey = (monthEl.getAttribute('data-calendar-month') || '').trim();
+                if (!monthKey || Object.prototype.hasOwnProperty.call(monthSeen, monthKey)) {
+                    return;
+                }
+                var monthDate = parseMonthKey(monthKey);
+                if (!monthDate) {
+                    return;
+                }
+                monthSeen[monthKey] = true;
+                monthList.push({
+                    key: monthKey,
+                    year: monthDate.getFullYear(),
+                    month: monthDate.getMonth() + 1,
+                    monthLabel: createMonthLabel(monthDate),
+                    sortKey: monthKey
+                });
+            });
+            monthList.sort(function(a, b) {
+                return a.sortKey.localeCompare(b.sortKey);
+            });
+            printMonthEntries = monthList;
+
+            var weekSeen = {};
+            var weekList = [];
+            dayNodes.forEach(function(dayNode) {
+                var dayKey = (dayNode.getAttribute('data-calendar-day') || '').trim();
+                var dayDate = parseDayKey(dayKey);
+                if (!dayDate) {
+                    return;
+                }
+                var weekStart = startOfWeekMonday(dayDate);
+                var weekStartKey = formatDayKey(weekStart);
+                if (Object.prototype.hasOwnProperty.call(weekSeen, weekStartKey)) {
+                    return;
+                }
+                weekSeen[weekStartKey] = true;
+                var iso = getIsoWeekInfo(weekStart);
+                weekList.push({
+                    key: weekStartKey,
+                    year: iso.year,
+                    week: iso.week,
+                    weekLabel: 'S' + String(iso.week).padStart(2, '0'),
+                    sortDate: weekStart.getTime()
+                });
+            });
+            weekList.sort(function(a, b) {
+                return a.sortDate - b.sortDate;
+            });
+            printWeekEntries = weekList;
+        }
+
+        function setDefaultPrintPeriodSelection() {
+            var activeMonthEl = months[activeIndex] || months[0] || null;
+            var activeMonthKey = activeMonthEl ? (activeMonthEl.getAttribute('data-calendar-month') || '') : '';
+            if (!activeMonthKey && printMonthEntries.length) {
+                activeMonthKey = printMonthEntries[0].key;
+            }
+
+            if (activeMonthKey) {
+                printSelectedMonthKey = activeMonthKey;
+                var monthDate = parseMonthKey(activeMonthKey);
+                if (monthDate) {
+                    var weekStart = startOfWeekMonday(monthDate);
+                    var weekStartKey = formatDayKey(weekStart);
+                    printSelectedWeekStartKey = weekStartKey;
+                }
+            }
+
+            if (!printSelectedWeekStartKey && printWeekEntries.length) {
+                printSelectedWeekStartKey = printWeekEntries[0].key;
+            }
+        }
+
+        function renderPrintPeriodSelectors() {
+            var mode = getPrintMode();
+
+            if (printMonthPickerWrap) {
+                printMonthPickerWrap.hidden = mode !== 'month';
+            }
+            if (printMonthYearPickerWrap) {
+                printMonthYearPickerWrap.hidden = mode !== 'month';
+            }
+            if (printWeekPickerWrap) {
+                printWeekPickerWrap.hidden = mode !== 'week';
+            }
+            if (printWeekYearPickerWrap) {
+                printWeekYearPickerWrap.hidden = mode !== 'week';
+            }
+
+            if (printMonthYearInput && printMonthInput) {
+                var monthYears = getDistinctYears(printMonthEntries);
+                var selectedMonthEntry = null;
+                if (printSelectedMonthKey) {
+                    selectedMonthEntry = printMonthEntries.find(function(entry) {
+                        return entry.key === printSelectedMonthKey;
+                    }) || null;
+                }
+                var selectedMonthYear = '';
+                if (printMonthYearInput.value) {
+                    selectedMonthYear = printMonthYearInput.value;
+                } else if (selectedMonthEntry) {
+                    selectedMonthYear = selectedMonthEntry.year;
+                } else {
+                    selectedMonthYear = monthYears.length ? monthYears[0] : '';
+                }
+
+                rebuildSelectOptions(printMonthYearInput, monthYears.map(function(year) {
+                    return { value: String(year), label: String(year) };
+                }), String(selectedMonthYear));
+
+                var monthEntriesForYear = printMonthEntries.filter(function(entry) {
+                    return String(entry.year) === String(selectedMonthYear);
+                });
+                rebuildSelectOptions(printMonthInput, monthEntriesForYear.map(function(entry) {
+                    return {
+                        value: entry.key,
+                        label: entry.monthLabel
+                    };
+                }), printSelectedMonthKey);
+
+                if (monthEntriesForYear.length) {
+                    var hasSelectedMonth = monthEntriesForYear.some(function(entry) {
+                        return entry.key === printSelectedMonthKey;
+                    });
+                    if (!hasSelectedMonth) {
+                        printSelectedMonthKey = monthEntriesForYear[0].key;
+                        printMonthInput.value = printSelectedMonthKey;
+                    }
+                }
+            }
+
+            if (printWeekYearInput && printWeekInput) {
+                var weekYears = getDistinctYears(printWeekEntries);
+                var selectedWeekEntry = null;
+                if (printSelectedWeekStartKey) {
+                    selectedWeekEntry = printWeekEntries.find(function(entry) {
+                        return entry.key === printSelectedWeekStartKey;
+                    }) || null;
+                }
+                var selectedWeekYear = '';
+                if (printWeekYearInput.value) {
+                    selectedWeekYear = printWeekYearInput.value;
+                } else if (selectedWeekEntry) {
+                    selectedWeekYear = selectedWeekEntry.year;
+                } else {
+                    selectedWeekYear = weekYears.length ? weekYears[0] : '';
+                }
+
+                rebuildSelectOptions(printWeekYearInput, weekYears.map(function(year) {
+                    return { value: String(year), label: String(year) };
+                }), String(selectedWeekYear));
+
+                var weekEntriesForYear = printWeekEntries.filter(function(entry) {
+                    return String(entry.year) === String(selectedWeekYear);
+                });
+                rebuildSelectOptions(printWeekInput, weekEntriesForYear.map(function(entry) {
+                    return {
+                        value: entry.key,
+                        label: entry.weekLabel
+                    };
+                }), printSelectedWeekStartKey);
+
+                if (weekEntriesForYear.length) {
+                    var hasSelectedWeek = weekEntriesForYear.some(function(entry) {
+                        return entry.key === printSelectedWeekStartKey;
+                    });
+                    if (!hasSelectedWeek) {
+                        printSelectedWeekStartKey = weekEntriesForYear[0].key;
+                        printWeekInput.value = printSelectedWeekStartKey;
+                    }
+                }
+            }
+        }
+
+        function getSelectedMonthStartIndex() {
+            if (printSelectedMonthKey && Object.prototype.hasOwnProperty.call(monthIndexMap, printSelectedMonthKey)) {
+                return monthIndexMap[printSelectedMonthKey];
+            }
+            return activeIndex;
+        }
+
+        function getSelectedWeekAnchorDate() {
+            if (printSelectedWeekStartKey) {
+                var selected = parseDayKey(printSelectedWeekStartKey);
+                if (selected) {
+                    return startOfWeekMonday(selected);
+                }
+            }
+
+            var monthEl = months[activeIndex] || months[0];
+            var monthKey = monthEl ? (monthEl.getAttribute('data-calendar-month') || '') : '';
+            var monthDate = parseMonthKey(monthKey);
+            if (!monthDate) {
+                return null;
+            }
+            return startOfWeekMonday(monthDate);
+        }
+
+        function getPrintSpan() {
+            var defaultSpan = (printConfig && typeof printConfig.defaultSpan === 'number') ? printConfig.defaultSpan : 1;
+            var span = printSpanInput ? parseInt(printSpanInput.value, 10) : defaultSpan;
+            if (isNaN(span)) {
+                span = defaultSpan;
+            }
+            if (span < 1) {
+                span = 1;
+            }
+            if (span > 12) {
+                span = 12;
+            }
+            if (printSpanInput) {
+                printSpanInput.value = String(span);
+            }
+            return span;
+        }
+
+        function getPrintPaddingValue(input, min, max, fallback) {
+            var value = input ? parseInt(input.value, 10) : fallback;
+            if (isNaN(value)) {
+                value = fallback;
+            }
+            if (value < min) {
+                value = min;
+            }
+            if (value > max) {
+                value = max;
+            }
+            if (input) {
+                input.value = String(value);
+            }
+            return value;
+        }
+
+        function isDetailsEnabled() {
+            return !!(printDetailsInput && printDetailsInput.checked);
+        }
+
+        function isCoverEnabled() {
+            return !!(printCoverInput && printCoverInput.checked);
+        }
+
+        function isTimeRangeEnabled() {
+            if (printTimeRangeInput) {
+                return !!printTimeRangeInput.checked;
+            }
+            return !printConfig || typeof printConfig.defaultTimeRange === 'undefined' ? true : !!printConfig.defaultTimeRange;
+        }
+
+        function isPageBreakEnabled() {
+            return !!(printPageBreakInput && printPageBreakInput.checked);
+        }
+
+        function isEventEmojiEnabled() {
+            if (printEventEmojiInput) {
+                return !!printEventEmojiInput.checked;
+            }
+            if (!printConfig) {
+                return true;
+            }
+            if (typeof printConfig.defaultEventEmoji !== 'undefined') {
+                return !!printConfig.defaultEventEmoji;
+            }
+            return typeof printConfig.defaultEventStyle === 'undefined' ? true : !!printConfig.defaultEventStyle;
+        }
+
+        function isEventColorEnabled() {
+            if (printEventColorInput) {
+                return !!printEventColorInput.checked;
+            }
+            if (!printConfig) {
+                return true;
+            }
+            if (typeof printConfig.defaultEventColor !== 'undefined') {
+                return !!printConfig.defaultEventColor;
+            }
+            return typeof printConfig.defaultEventStyle === 'undefined' ? true : !!printConfig.defaultEventStyle;
+        }
+
+        function formatTypeLabel(typeKey) {
+            if (!typeKey) {
+                return 'Type';
+            }
+            return String(typeKey)
+                .replace(/[_-]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .replace(/(^|\s)\S/g, function(c) { return c.toUpperCase(); });
+        }
+
+        function getAvailablePrintTypes() {
+            var types = [];
+            var seen = {};
+
+            if (filterInputs && filterInputs.length) {
+                filterInputs.forEach(function(input) {
+                    var key = (input.value || '').trim();
+                    if (!key || Object.prototype.hasOwnProperty.call(seen, key)) {
+                        return;
+                    }
+                    seen[key] = true;
+                    var labelNode = input.parentElement ? input.parentElement.querySelector('span') : null;
+                    types.push({
+                        key: key,
+                        label: labelNode ? (labelNode.textContent || '').trim() : formatTypeLabel(key),
+                        checked: !!input.checked
+                    });
+                });
+                if (types.length) {
+                    return types;
+                }
+            }
+
+            typeItems.forEach(function(item) {
+                var key = (item.getAttribute('data-calendar-type') || '').trim();
+                var isKnown = item.getAttribute('data-calendar-type-known') === '1';
+                if (!isKnown || !key || Object.prototype.hasOwnProperty.call(seen, key)) {
+                    return;
+                }
+                seen[key] = true;
+                types.push({ key: key, label: formatTypeLabel(key), checked: true });
+            });
+
+            return types;
+        }
+
+        function renderPrintTypeFilters() {
+            if (!printTypeFiltersWrap) {
+                return;
+            }
+
+            var types = getAvailablePrintTypes();
+            var labels = (printConfig && printConfig.labels) ? printConfig.labels : {};
+            if (!types.length) {
+                printTypeFiltersWrap.hidden = true;
+                return;
+            }
+
+            printTypeFiltersWrap.hidden = false;
+            printTypeFiltersWrap.innerHTML = '<legend>' + escapeHtml(labels.typesLegend || 'Types d\'événement') + '</legend>';
+            printTypeFilterInputs = [];
+
+            types.forEach(function(typeDef) {
+                var labelEl = document.createElement('label');
+                labelEl.className = 'mj-cal-print__option';
+
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = !!typeDef.checked;
+                checkbox.setAttribute('data-print-type-filter', typeDef.key);
+
+                var textSpan = document.createElement('span');
+                textSpan.textContent = typeDef.label || formatTypeLabel(typeDef.key);
+
+                labelEl.appendChild(checkbox);
+                labelEl.appendChild(textSpan);
+                printTypeFiltersWrap.appendChild(labelEl);
+                printTypeFilterInputs.push(checkbox);
+
+                checkbox.addEventListener('change', refreshPrintPreview);
+            });
+        }
+
+        function getSelectedPrintTypesMap() {
+            if (!printTypeFilterInputs || !printTypeFilterInputs.length) {
+                return null;
+            }
+            var selected = {};
+            var hasSelected = false;
+            printTypeFilterInputs.forEach(function(input) {
+                if (!input || !input.checked) {
+                    return;
+                }
+                var key = (input.getAttribute('data-print-type-filter') || '').trim();
+                if (!key) {
+                    return;
+                }
+                selected[key] = true;
+                hasSelected = true;
+            });
+
+            if (!hasSelected) {
+                return {};
+            }
+
+            return selected;
+        }
+
+        function getDayNodeByKey(dayKey) {
+            if (!dayKey) {
+                return null;
+            }
+            return root.querySelector('.mj-member-events-calendar__month [data-calendar-day="' + dayKey + '"]');
+        }
+
+        function normalizeHexColor(value) {
+            if (!value) {
+                return '';
+            }
+            var str = String(value).trim();
+            if (/^#[0-9a-fA-F]{3}$/.test(str) || /^#[0-9a-fA-F]{6}$/.test(str)) {
+                return str;
+            }
+            return '';
+        }
+
+        function hexToRgba(value, alpha) {
+            var hex = normalizeHexColor(value);
+            if (!hex) {
+                return '';
+            }
+
+            var normalized = hex;
+            if (normalized.length === 4) {
+                normalized = '#' + normalized.charAt(1) + normalized.charAt(1) + normalized.charAt(2) + normalized.charAt(2) + normalized.charAt(3) + normalized.charAt(3);
+            }
+
+            var r = parseInt(normalized.slice(1, 3), 16);
+            var g = parseInt(normalized.slice(3, 5), 16);
+            var b = parseInt(normalized.slice(5, 7), 16);
+            if (isNaN(r) || isNaN(g) || isNaN(b)) {
+                return '';
+            }
+
+            return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+        }
+
+        function collectEventsFromDay(dayNode, withDetails, withCover, selectedTypesMap) {
+            if (!dayNode) {
+                return [];
+            }
+
+            var list = [];
+            var items = toArray(dayNode.querySelectorAll('.mj-member-events-calendar__event[data-calendar-type-item]'));
+            items.forEach(function(item) {
+                if (item.classList.contains('is-filtered-out')) {
+                    return;
+                }
+
+                if (selectedTypesMap) {
+                    var itemType = (item.getAttribute('data-calendar-type') || '').trim();
+                    if (!itemType || !Object.prototype.hasOwnProperty.call(selectedTypesMap, itemType)) {
+                        return;
+                    }
+                }
+
+                var titleNode = item.querySelector('.mj-member-events-calendar__event-title-text');
+                var metaNode = item.querySelector('.mj-member-events-calendar__event-meta');
+                var typeNode = item.querySelector('.mj-member-events-calendar__event-type');
+                var detailsNode = item.querySelector('.mj-member-events-calendar__event-preview-description');
+                var coverNode = item.querySelector('.mj-member-events-calendar__event-preview-cover img, .mj-member-events-calendar__event-thumb img');
+                var emojiNode = item.querySelector('[data-calendar-emoji]');
+
+                var title = titleNode ? (titleNode.textContent || '').trim() : '';
+                if (!title) {
+                    return;
+                }
+
+                var entry = {
+                    title: title,
+                    meta: metaNode ? (metaNode.textContent || '').trim() : '',
+                    type: typeNode ? (typeNode.textContent || '').trim() : '',
+                    details: withDetails && detailsNode ? (detailsNode.textContent || '').trim() : '',
+                    cover: withCover && coverNode ? (coverNode.getAttribute('src') || '').trim() : '',
+                    emoji: emojiNode ? (emojiNode.getAttribute('data-calendar-emoji') || '').trim() : '',
+                    accentColor: normalizeHexColor(item.getAttribute('data-calendar-accent-color') || '')
+                };
+                list.push(entry);
+            });
+
+            return list;
+        }
+
+        function formatDateLabel(dateObj, withWeekday) {
+            var options = withWeekday
+                ? { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }
+                : { day: '2-digit', month: 'long', year: 'numeric' };
+            try {
+                return dateObj.toLocaleDateString('fr-BE', options);
+            } catch (error) {
+                return dateObj.toLocaleDateString(undefined, options);
+            }
+        }
+
+        function collectWeekPeriods(span, withDetails, withCover, selectedTypesMap, weekAnchorDate) {
+            var periods = [];
+            if (!months[activeIndex] && !weekAnchorDate) {
+                return periods;
+            }
+
+            var anchor = weekAnchorDate;
+            if (!anchor) {
+                var monthEl = months[activeIndex];
+                var monthKey = monthEl ? (monthEl.getAttribute('data-calendar-month') || '') : '';
+                if (!/^\d{4}-\d{2}$/.test(monthKey)) {
+                    return periods;
+                }
+                var firstOfMonth = new Date(monthKey + '-01T00:00:00');
+                anchor = startOfWeekMonday(firstOfMonth);
+            }
+
+            if (!anchor) {
+                return periods;
+            }
+
+            for (var i = 0; i < span; i += 1) {
+                var weekStart = addDays(anchor, i * 7);
+                var weekEnd = addDays(weekStart, 6);
+                var cells = [];
+
+                for (var d = 0; d < 7; d += 1) {
+                    var dayDate = addDays(weekStart, d);
+                    var dayKey = formatDayKey(dayDate);
+                    var dayNode = getDayNodeByKey(dayKey);
+                    var events = collectEventsFromDay(dayNode, withDetails, withCover, selectedTypesMap);
+                    cells.push({
+                        isPadding: false,
+                        dayNumber: String(dayDate.getDate()),
+                        label: formatDateLabel(dayDate, true),
+                        events: events
+                    });
+                }
+
+                periods.push({
+                    title: 'Semaine du ' + formatDateLabel(weekStart, false) + ' au ' + formatDateLabel(weekEnd, false),
+                    weeks: [{ cells: cells }]
+                });
+            }
+
+            return periods;
+        }
+
+        function collectMonthPeriods(span, withDetails, withCover, selectedTypesMap, monthStartIndex) {
+            var periods = [];
+            var startIndex = typeof monthStartIndex === 'number' ? monthStartIndex : activeIndex;
+            for (var i = 0; i < span; i += 1) {
+                var monthEl = months[startIndex + i];
+                if (!monthEl) {
+                    break;
+                }
+
+                var period = {
+                    title: monthEl.getAttribute('data-calendar-label') || ('Mois ' + (i + 1)),
+                    weeks: []
+                };
+
+                var weekNodes = toArray(monthEl.querySelectorAll('.mj-member-events-calendar__week'));
+                weekNodes.forEach(function(weekNode) {
+                    var weekData = { cells: [] };
+                    var dayCells = toArray(weekNode.querySelectorAll('.mj-member-events-calendar__day-cell'));
+                    dayCells.forEach(function(dayCell) {
+                        var dayNode = dayCell.querySelector('.mj-member-events-calendar__day[data-calendar-day]');
+                        if (!dayNode) {
+                            weekData.cells.push({
+                                isPadding: true,
+                                dayNumber: '',
+                                label: '',
+                                events: []
+                            });
+                            return;
+                        }
+
+                        var dayKey = dayNode.getAttribute('data-calendar-day') || '';
+                        var dayNumberNode = dayNode.querySelector('.mj-member-events-calendar__day-number');
+                        var parts = dayKey.split('-');
+                        var dayDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                        var events = collectEventsFromDay(dayNode, withDetails, withCover, selectedTypesMap);
+                        weekData.cells.push({
+                            isPadding: false,
+                            dayNumber: dayNumberNode ? (dayNumberNode.textContent || '').trim() : String(dayDate.getDate()),
+                            label: formatDateLabel(dayDate, true),
+                            events: events
+                        });
+                    });
+
+                    period.weeks.push(weekData);
+                });
+
+                periods.push(period);
+            }
+
+            return periods;
+        }
+
+        function hasEventsInPeriod(period) {
+            if (!period || !period.weeks || !period.weeks.length) {
+                return false;
+            }
+
+            for (var wi = 0; wi < period.weeks.length; wi += 1) {
+                var week = period.weeks[wi];
+                if (!week || !week.cells) {
+                    continue;
+                }
+                for (var ci = 0; ci < week.cells.length; ci += 1) {
+                    var cell = week.cells[ci];
+                    if (cell && cell.events && cell.events.length) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        function buildPrintDocumentHtml(periods, options) {
+            var blocks = [];
+            var labels = (printConfig && printConfig.labels) ? printConfig.labels : {};
+            var weekdayLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+            if (!periods.length) {
+                blocks.push('<p class="mj-print-empty">' + escapeHtml(labels.empty || 'Aucun événement à imprimer pour cette sélection.') + '</p>');
+            } else {
+                periods.forEach(function(period, idx) {
+                    var periodHtml = [];
+                    periodHtml.push('<section class="mj-print-period' + (options.pageBreak && idx < periods.length - 1 ? ' has-break' : '') + '">');
+                    periodHtml.push('<h2>' + escapeHtml(period.title) + '</h2>');
+
+                    if (!hasEventsInPeriod(period)) {
+                        periodHtml.push('<p class="mj-print-empty">' + escapeHtml(labels.empty || 'Aucun événement à imprimer pour cette sélection.') + '</p>');
+                    }
+
+                    periodHtml.push('<div class="mj-print-cal">');
+                    periodHtml.push('<div class="mj-print-cal__weekdays">');
+                    weekdayLabels.forEach(function(wd) {
+                        periodHtml.push('<span>' + escapeHtml(wd) + '</span>');
+                    });
+                    periodHtml.push('</div>');
+
+                    period.weeks.forEach(function(week) {
+                        periodHtml.push('<div class="mj-print-cal__week">');
+                        (week.cells || []).forEach(function(cell) {
+                            if (!cell || cell.isPadding) {
+                                periodHtml.push('<div class="mj-print-cal__day is-padding"></div>');
+                                return;
+                            }
+
+                            periodHtml.push('<div class="mj-print-cal__day">');
+                            periodHtml.push('<div class="mj-print-cal__day-head" title="' + escapeHtml(cell.label || '') + '">' + escapeHtml(cell.dayNumber || '') + '</div>');
+                            periodHtml.push('<div class="mj-print-cal__events">');
+                            (cell.events || []).forEach(function(eventItem) {
+                                var eventStyleAttr = '';
+                                if (options.eventColor && eventItem.accentColor) {
+                                    var bgColor = hexToRgba(eventItem.accentColor, 0.16);
+                                    var borderColor = hexToRgba(eventItem.accentColor, 0.45);
+                                    if (bgColor && borderColor) {
+                                        eventStyleAttr = ' style="background:' + escapeHtml(bgColor) + ';border-color:' + escapeHtml(borderColor) + ';"';
+                                    }
+                                }
+                                periodHtml.push('<article class="mj-print-event"' + eventStyleAttr + '>');
+                                if (options.cover && eventItem.cover) {
+                                    periodHtml.push('<img class="mj-print-event-cover" src="' + escapeHtml(eventItem.cover) + '" alt="' + escapeHtml(eventItem.title || '') + '" />');
+                                }
+                                periodHtml.push('<div class="mj-print-event-title">');
+                                if (options.eventEmoji && eventItem.emoji) {
+                                    periodHtml.push('<span class="mj-print-event-emoji">' + escapeHtml(eventItem.emoji) + '</span>');
+                                }
+                                periodHtml.push('<span class="mj-print-event-title-text">' + escapeHtml(eventItem.title) + '</span>');
+                                periodHtml.push('</div>');
+                                if (options.timeRange && eventItem.meta) {
+                                    periodHtml.push('<div class="mj-print-event-meta">' + escapeHtml(eventItem.meta) + '</div>');
+                                }
+                                if (eventItem.type) {
+                                    var typeLabelStyle = '';
+                                    if (eventItem.accentColor) {
+                                        var typeBg = hexToRgba(eventItem.accentColor, 0.18);
+                                        var typeBorder = hexToRgba(eventItem.accentColor, 0.42);
+                                        if (typeBg && typeBorder) {
+                                            typeLabelStyle = ' style="background:' + escapeHtml(typeBg) + ';border-color:' + escapeHtml(typeBorder) + ';color:' + escapeHtml(eventItem.accentColor) + ';"';
+                                        }
+                                    }
+                                    periodHtml.push('<div class="mj-print-event-type-label"' + typeLabelStyle + '>' + escapeHtml(eventItem.type) + '</div>');
+                                }
+                                if (options.details && eventItem.details) {
+                                    periodHtml.push('<div class="mj-print-event-details">' + escapeHtml(eventItem.details) + '</div>');
+                                }
+                                periodHtml.push('</article>');
+                            });
+                            periodHtml.push('</div>');
+                            periodHtml.push('</div>');
+                        });
+                        periodHtml.push('</div>');
+                    });
+
+                    periodHtml.push('</div>');
+
+                    periodHtml.push('</section>');
+                    blocks.push(periodHtml.join(''));
+                });
+            }
+
+            var title = (labels && labels.title) ? labels.title : 'Calendrier - impression';
+            var pagePaddingCss = typeof options.pagePadding === 'number' ? options.pagePadding : 10;
+            var dayPaddingCss = typeof options.dayPadding === 'number' ? options.dayPadding : 6;
+            var eventPaddingCss = typeof options.eventPadding === 'number' ? options.eventPadding : 6;
+            return [
+                '<!doctype html>',
+                '<html lang="fr">',
+                '<head>',
+                '<meta charset="utf-8" />',
+                '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+                '<title>' + escapeHtml(title) + '</title>',
+                '<style>',
+                'body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:' + pagePaddingCss + 'px;color:#111;}',
+                'h2{font-size:18px;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid #ddd;}',
+                '.mj-print-cal{display:grid;gap:8px;}',
+                '.mj-print-cal__weekdays,.mj-print-cal__week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}',
+                '.mj-print-cal__weekdays span{font-size:11px;font-weight:700;text-transform:uppercase;color:#666;padding:2px 4px;}',
+                '.mj-print-cal__day{border:1px solid #e4e4e4;border-radius:8px;min-height:80px;padding:' + dayPaddingCss + 'px;display:flex;flex-direction:column;gap:6px;}',
+                '.mj-print-cal__day.is-padding{background:#fafafa;border-style:dashed;}',
+                '.mj-print-cal__day-head{font-size:11px;font-weight:700;color:#444;}',
+                '.mj-print-cal__events{display:grid;gap:6px;}',
+                '.mj-print-event{border:1px solid #efefef;border-radius:6px;padding:' + eventPaddingCss + 'px;background:#fff;display:grid;gap:4px;}',
+                '.mj-print-event-cover{width:100%;height:56px;object-fit:cover;border-radius:4px;}',
+                '.mj-print-event-title{font-size:12px;font-weight:700;line-height:1.2;display:flex;align-items:center;gap:6px;}',
+                '.mj-print-event-emoji{font-size:13px;line-height:1;}',
+                '.mj-print-event-title-text{display:inline;}',
+                '.mj-print-event-meta,.mj-print-event-details{font-size:10px;color:#444;line-height:1.3;}',
+                '.mj-print-event-type-label{display:inline-flex;align-items:center;align-self:flex-start;border:1px solid #d7d7d7;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;line-height:1.2;background:#f6f6f6;color:#444;}',
+                '.mj-print-empty{font-size:13px;color:#666;}',
+                '.mj-print-period + .mj-print-period{margin-top:14px;}',
+                '@media print{body{padding:' + pagePaddingCss + 'px;} .mj-print-period.has-break{page-break-after:always;break-after:page;}}',
+                '</style>',
+                '</head>',
+                '<body>',
+                blocks.join(''),
+                '</body>',
+                '</html>'
+            ].join('');
+        }
+
+        function updatePrintPageBreakLabel() {
+            if (!printPageBreakLabel) {
+                return;
+            }
+            var labels = (printConfig && printConfig.labels) ? printConfig.labels : {};
+            var mode = getPrintMode();
+            printPageBreakLabel.textContent = mode === 'month'
+                ? (labels.pagePerMonth || 'Une page par mois')
+                : (labels.pagePerWeek || 'Une page par semaine');
+        }
+
+        function refreshPrintPreview() {
+            if (!printConfig || !printConfig.enabled || !printPreviewFrame) {
+                return;
+            }
+
+            var mode = getPrintMode();
+            var span = getPrintSpan();
+            var details = isDetailsEnabled();
+            var cover = isCoverEnabled();
+            var timeRange = isTimeRangeEnabled();
+            var eventEmoji = isEventEmojiEnabled();
+            var eventColor = isEventColorEnabled();
+            var pagePadding = getPrintPaddingValue(printPadPageInput, 0, 24, 10);
+            var dayPadding = getPrintPaddingValue(printPadDayInput, 0, 16, 6);
+            var eventPadding = getPrintPaddingValue(printPadEventInput, 0, 16, 6);
+            var pageBreak = isPageBreakEnabled();
+            var selectedTypesMap = getSelectedPrintTypesMap();
+            var selectedMonthStartIndex = getSelectedMonthStartIndex();
+            var selectedWeekAnchorDate = getSelectedWeekAnchorDate();
+            var periods = mode === 'month'
+                ? collectMonthPeriods(span, details, cover, selectedTypesMap, selectedMonthStartIndex)
+                : collectWeekPeriods(span, details, cover, selectedTypesMap, selectedWeekAnchorDate);
+
+            printPreviewFrame.srcdoc = buildPrintDocumentHtml(periods, {
+                mode: mode,
+                span: span,
+                details: details,
+                cover: cover,
+                timeRange: timeRange,
+                eventEmoji: eventEmoji,
+                eventColor: eventColor,
+                pagePadding: pagePadding,
+                dayPadding: dayPadding,
+                eventPadding: eventPadding,
+                pageBreak: pageBreak
+            });
+            updatePrintPageBreakLabel();
+        }
+
+        function openPrintModal() {
+            if (!printModal) {
+                return;
+            }
+            buildPrintPeriodEntries();
+            setDefaultPrintPeriodSelection();
+            renderPrintPeriodSelectors();
+            refreshPrintPreview();
+            printModal.hidden = false;
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closePrintModal() {
+            if (!printModal) {
+                return;
+            }
+            printModal.hidden = true;
+            document.body.style.overflow = '';
         }
 
         function sync() {
@@ -643,6 +1611,7 @@
                 todayBtn.disabled = todayIndex === -1 || activeIndex === todayIndex;
             }
             applyFilters();
+            refreshPrintPreview();
         }
 
         if (prev) {
@@ -679,6 +1648,131 @@
                 });
             });
         }
+
+        if (openPrintBtn && printConfig && printConfig.enabled) {
+            openPrintBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                openPrintModal();
+            });
+        }
+
+        if (printCloseBtns.length) {
+            printCloseBtns.forEach(function(closeBtn) {
+                closeBtn.addEventListener('click', function() {
+                    closePrintModal();
+                });
+            });
+        }
+
+        if (printNowBtn && printConfig && printConfig.enabled) {
+            printNowBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                refreshPrintPreview();
+
+                if (!printPreviewFrame || !printPreviewFrame.contentWindow) {
+                    return;
+                }
+
+                try {
+                    printPreviewFrame.contentWindow.focus();
+                    printPreviewFrame.contentWindow.print();
+                } catch (error) {
+                    // Browser-specific restriction fallback.
+                    window.print();
+                }
+            });
+        }
+
+        if (printModeInput) {
+            printModeInput.addEventListener('change', function() {
+                updatePrintPageBreakLabel();
+                renderPrintPeriodSelectors();
+                refreshPrintPreview();
+            });
+        }
+
+        if (printMonthYearInput) {
+            printMonthYearInput.addEventListener('change', function() {
+                renderPrintPeriodSelectors();
+                refreshPrintPreview();
+            });
+        }
+
+        if (printMonthInput) {
+            printMonthInput.addEventListener('change', function() {
+                printSelectedMonthKey = (printMonthInput.value || '').trim();
+                refreshPrintPreview();
+            });
+        }
+
+        if (printWeekYearInput) {
+            printWeekYearInput.addEventListener('change', function() {
+                renderPrintPeriodSelectors();
+                refreshPrintPreview();
+            });
+        }
+
+        if (printWeekInput) {
+            printWeekInput.addEventListener('change', function() {
+                printSelectedWeekStartKey = (printWeekInput.value || '').trim();
+                refreshPrintPreview();
+            });
+        }
+
+        if (printSpanInput) {
+            printSpanInput.addEventListener('input', refreshPrintPreview);
+            printSpanInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        if (printPadPageInput) {
+            printPadPageInput.addEventListener('input', refreshPrintPreview);
+            printPadPageInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        if (printPadDayInput) {
+            printPadDayInput.addEventListener('input', refreshPrintPreview);
+            printPadDayInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        if (printPadEventInput) {
+            printPadEventInput.addEventListener('input', refreshPrintPreview);
+            printPadEventInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        if (printDetailsInput) {
+            printDetailsInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        if (printCoverInput) {
+            printCoverInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        if (printTimeRangeInput) {
+            printTimeRangeInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        if (printEventEmojiInput) {
+            printEventEmojiInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        if (printEventColorInput) {
+            printEventColorInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        if (printPageBreakInput) {
+            printPageBreakInput.addEventListener('change', refreshPrintPreview);
+        }
+
+        renderPrintTypeFilters();
+        buildPrintPeriodEntries();
+        setDefaultPrintPeriodSelection();
+        renderPrintPeriodSelectors();
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && printModal && !printModal.hidden) {
+                closePrintModal();
+            }
+        });
 
         sync();
 

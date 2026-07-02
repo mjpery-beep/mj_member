@@ -24,12 +24,6 @@ class MjEvents_List_Table extends WP_List_Table {
         'passe'     => 'Passé',
     );
 
-    private const TYPES = array(
-        'stage'  => 'Stage',
-        'soiree' => 'Soirée',
-        'sortie' => 'Sortie',
-    );
-
     /** @var array<string, mixed> */
     private $requestArgs = array();
     /** @var array<string, string> */
@@ -88,6 +82,13 @@ class MjEvents_List_Table extends WP_List_Table {
         }
 
         return $default;
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private static function getTypeLabels(): array {
+        return MjEvents::get_type_labels();
     }
 
     public function get_pagenum() {
@@ -166,7 +167,7 @@ class MjEvents_List_Table extends WP_List_Table {
             $status_filter = '';
         }
 
-        if (!array_key_exists($type_filter, self::TYPES)) {
+        if (!array_key_exists($type_filter, self::getTypeLabels())) {
             $type_filter = '';
         }
 
@@ -364,7 +365,8 @@ class MjEvents_List_Table extends WP_List_Table {
 
     public function column_type($item) {
         $type  = isset($item['type']) ? $item['type'] : '';
-        $label = self::TYPES[$type] ?? ucfirst($type);
+        $type_labels = self::getTypeLabels();
+        $label = $type_labels[$type] ?? ucfirst($type);
         return esc_html($label);
     }
 
@@ -598,7 +600,7 @@ class MjEvents_List_Table extends WP_List_Table {
         echo '<label class="screen-reader-text" for="mj-filter-type">Filtrer par type</label>';
         echo '<select name="filter_type" id="mj-filter-type" style="margin-left:6px;">';
         echo '<option value="">Tous les types</option>';
-        foreach (self::TYPES as $key => $label) {
+        foreach (self::getTypeLabels() as $key => $label) {
             printf('<option value="%s" %s>%s</option>', esc_attr($key), selected($type_value, $key, false), esc_html($label));
         }
         echo '</select>';

@@ -5,6 +5,7 @@ namespace Mj\Member\Admin;
 use Mj\Member\Core\Config;
 use Mj\Member\Admin\Page\MembersPage;
 use Mj\Member\Admin\Page\EventsPage;
+use Mj\Member\Admin\Page\EventTypesPage;
 use Mj\Member\Admin\Page\LocationsPage;
 use Mj\Member\Admin\Page\DashboardPage;
 use Mj\Member\Admin\Page\EventPhotosPage;
@@ -115,6 +116,15 @@ final class AdminMenu
             $capability,
             EventsPage::slug(),
             array(EventsPage::class, 'render')
+        );
+
+        add_submenu_page(
+            'mj_events',
+            __('Types d\'événements', 'mj-member'),
+            __('Types d\'événements', 'mj-member'),
+            $capability,
+            EventTypesPage::slug(),
+            array(EventTypesPage::class, 'render')
         );
 
         remove_submenu_page('mj_events', 'mj_events');

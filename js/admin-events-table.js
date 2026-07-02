@@ -22,6 +22,14 @@ jQuery(document).ready(function($) {
         'sortie': 'Sortie',
         'atelier': 'Atelier'
     };
+
+    const typeColors = typeof config.typeColors === 'object' && config.typeColors !== null ? config.typeColors : {
+        'stage': '#0026FF',
+        'soiree': '#C300FF',
+        'sortie': '#FF5100',
+        'atelier': '#0C8301',
+        'interne': '#5050A4'
+    };
     
     const labels = typeof config.labels === 'object' && config.labels !== null ? config.labels : {};
     
@@ -63,13 +71,7 @@ jQuery(document).ready(function($) {
     function formatTypeBadge(type) {
         const key = normalizeValue(type);
         const label = typeLabels[key] || key;
-        
-        const typeColors = {
-            'stage': '#0026FF',
-            'soiree': '#C300FF',
-            'sortie': '#FF5100',
-            'atelier': '#0C8301'
-        };
+
         const background = typeColors[key] || '#6c757d';
         
         return '<span class="badge" style="background-color:' + background + ';color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;display:inline-block;">' + escapeHtml(label) + '</span>';

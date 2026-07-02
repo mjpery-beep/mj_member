@@ -1988,3 +1988,233 @@ button.mj-member-events-calendar__event-delete.is-loading {
 .mj-member-events-calendar__mobile-event {
     position: relative;
 }
+
+/* ==========================================================================
+   Print modal + preview
+   ========================================================================== */
+
+button.mj-member-events-calendar__print-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+button.mj-member-events-calendar__print-button:hover,
+button.mj-member-events-calendar__print-button:focus-visible {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
+}
+
+.mj-cal-print {
+    position: fixed;
+    inset: 0;
+    z-index: 100020;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.mj-cal-print[hidden] {
+    display: none !important;
+}
+
+.mj-cal-print__backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(15, 23, 42, 0.6);
+    cursor: pointer;
+}
+
+.mj-cal-print__panel {
+    position: relative;
+    width: min(1200px, 100%);
+    max-height: calc(100vh - 40px);
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.mj-cal-print__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.mj-cal-print__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.mj-cal-print__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #475569;
+    cursor: pointer;
+}
+
+.mj-cal-print__close:hover,
+.mj-cal-print__close:focus-visible {
+    background: #e2e8f0;
+}
+
+.mj-cal-print__body {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: 420px;
+    height: 65vh;
+    max-height: calc(100vh - 190px);
+}
+
+.mj-cal-print__options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    border-right: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.mj-cal-print__option {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: #334155;
+    font-weight: 600;
+}
+
+.mj-cal-print__option > input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #0f172a;
+}
+
+.mj-cal-print__option > select,
+.mj-cal-print__option > input[type="number"] {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 0.84rem;
+    color: #0f172a;
+    background: #ffffff;
+}
+
+.mj-cal-print__option:has(> input[type="checkbox"]) {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.mj-cal-print__preview-wrap {
+    padding: 10px;
+    background: #e2e8f0;
+}
+
+.mj-cal-print__preview {
+    width: 100%;
+    height: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.mj-cal-print__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.mj-cal-print__ghost,
+.mj-cal-print__primary {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    min-height: 34px;
+    padding: 0 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.mj-cal-print__ghost {
+    background: #ffffff;
+    color: #334155;
+}
+
+.mj-cal-print__primary {
+    background: #0f172a;
+    color: #ffffff;
+    border-color: #0f172a;
+}
+
+.mj-cal-print__primary:hover,
+.mj-cal-print__primary:focus-visible {
+    background: #1e293b;
+    border-color: #1e293b;
+}
+
+@media (max-width: 900px) {
+    .mj-cal-print {
+        padding: 10px;
+    }
+
+    .mj-cal-print__panel {
+        width: 100%;
+        max-height: calc(100vh - 20px);
+        border-radius: 14px;
+    }
+
+    .mj-cal-print__body {
+        grid-template-columns: 1fr;
+        height: auto;
+        max-height: none;
+    }
+
+    .mj-cal-print__options {
+        border-right: 0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .mj-cal-print__preview-wrap {
+        height: 50vh;
+    }
+}
+
+@media print {
+    .mj-member-events-calendar__toolbar,
+    .mj-cal-mobile,
+    .mj-cal-mobile__modal,
+    .mj-cal-print {
+        display: none !important;
+    }
+}

@@ -135,8 +135,9 @@ final class HeaderWidgetController implements AjaxHandlerInterface
             }
         }
 
-        // Récupère les apps Nextcloud — fonctionne sans auth (endpoint public).
-        $appsResult = $this->nextcloudFetchNavigation($baseUrl, $authBase64);
+        // Récupère les apps Nextcloud — endpoint public, ne pas envoyer l'auth
+        // (Nextcloud retourne 401 sur /navigation quand un appToken est fourni).
+        $appsResult = $this->nextcloudFetchNavigation($baseUrl);
 
         if (!$appsResult['ok']) {
             error_log('[mj_header_nextcloud] Impossible de récupérer la navigation depuis ' . $baseUrl);
@@ -146,9 +147,17 @@ final class HeaderWidgetController implements AjaxHandlerInterface
             );
         }
 
+        // Récupère les favoris si l'utilisateur est authentifié sur Nextcloud.
+        $favorites = array();
+        if ($linked && $authBase64 !== '') {
+            $favResult = $this->nextcloudFetchFavorites($baseUrl, $authBase64);
+            $favorites = $favResult['favorites'];
+        }
+
         wp_send_json_success(array(
-            'linked' => $linked || count($appsResult['apps']) > 0,
-            'apps'   => $appsResult['apps'],
+            'linked'    => $linked || count($appsResult['apps']) > 0,
+            'apps'      => $appsResult['apps'],
+            'favorites' => $favorites,
         ));
     }
 
@@ -327,6 +336,43 @@ final class HeaderWidgetController implements AjaxHandlerInterface
             'ok'   => true,
             'auth' => base64_encode($userId . ':' . $appToken),
         );
+    }
+
+    /**
+     * @return array{favorites:array<int,array<string,mixed>>}
+     */
+    private function nextcloudFetchFavorites(string $baseUrl, string $auth): array
+    {
+        $response = wp_remote_get($baseUrl . '/apps/mj_session_check/favorites', array(
+            'timeout' => 12,
+            'headers' => array(
+                'Authorization'  => 'Basic ' . $auth,
+                'OCS-APIREQUEST' => 'true',
+            ),
+        ));
+
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            return array('favorites' => array());
+        }
+
+        $data = json_decode((string) wp_remote_retrieve_body($response), true);
+        if (!is_array($data) || empty($data['success']) || !isset($data['favorites']) || !is_array($data['favorites'])) {
+            return array('favorites' => array());
+        }
+
+        $favorites = array();
+        foreach ($data['favorites'] as $fav) {
+            if (!is_array($fav)) {
+                continue;
+            }
+            $favorites[] = array(
+                'name' => isset($fav['name']) ? sanitize_text_field((string) $fav['name']) : '',
+                'href' => isset($fav['href']) ? esc_url_raw((string) $fav['href']) : '',
+                'icon' => isset($fav['icon']) ? esc_url_raw((string) $fav['icon']) : '',
+            );
+        }
+
+        return array('favorites' => $favorites);
     }
 
     /**

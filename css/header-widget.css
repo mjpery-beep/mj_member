@@ -961,6 +961,38 @@ a .mj-header-nc-app__icon img {
     line-height: 1.2;
 }
 
+.mj-header-nc-separator {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 4px 4px;
+    margin-top: 4px;
+}
+
+.mj-header-nc-separator::before,
+.mj-header-nc-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e2e8f0;
+}
+
+.mj-header-nc-separator span {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.mj-header-nc-app--favorite a .mj-header-nc-app__icon,
+a.mj-header-nc-app--favorite .mj-header-nc-app__icon {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+}
+
 /* ============================================================================
    Compte / Liens
    ========================================================================== */
@@ -2044,4 +2076,3 @@ a.mj-header-acc-card__icon {
     height: 24px !important;
     font-size: 0.72rem !important;
 }
-

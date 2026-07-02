@@ -198,6 +198,139 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'show_print_button',
+            array(
+                'label' => __('Afficher le bouton "Imprimer"', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+            )
+        );
+
+        $this->add_control(
+            'print_default_details',
+            array(
+                'label' => __('Impression: afficher les détails par défaut', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'print_default_cover',
+            array(
+                'label' => __('Impression: afficher les covers par défaut', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'print_default_time_range',
+            array(
+                'label' => __('Impression: afficher la plage horaire par défaut', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'print_default_event_emoji',
+            array(
+                'label' => __('Impression: afficher les emojis par défaut', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'print_default_event_color',
+            array(
+                'label' => __('Impression: afficher la couleur des événements par défaut', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'print_default_mode',
+            array(
+                'label' => __('Impression: période par défaut', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'month',
+                'options' => array(
+                    'week' => __('Semaine', 'mj-member'),
+                    'month' => __('Mois', 'mj-member'),
+                ),
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'print_default_span',
+            array(
+                'label' => __('Impression: nombre d\'unités par défaut', 'mj-member'),
+                'type' => Controls_Manager::NUMBER,
+                'min' => 1,
+                'max' => 12,
+                'step' => 1,
+                'default' => 1,
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'print_default_page_break',
+            array(
+                'label' => __('Impression: une page par unité par défaut', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
             'current_week_only',
             array(
                 'label' => __('Afficher uniquement la semaine courante', 'mj-member'),
@@ -509,6 +642,29 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $hide_closure_occurrences = !isset($settings['hide_closure_occurrences']) || $settings['hide_closure_occurrences'] === 'yes';
         $show_toolbar_left = !isset($settings['show_toolbar_left']) || $settings['show_toolbar_left'] === 'yes';
         $show_toolbar_actions = !isset($settings['show_toolbar_actions']) || $settings['show_toolbar_actions'] === 'yes';
+        $show_print_button = !isset($settings['show_print_button']) || $settings['show_print_button'] === 'yes';
+
+        $print_default_mode = isset($settings['print_default_mode']) && in_array($settings['print_default_mode'], array('week', 'month'), true)
+            ? (string) $settings['print_default_mode']
+            : 'month';
+        $print_default_details = !isset($settings['print_default_details']) || $settings['print_default_details'] === 'yes';
+        $print_default_cover = isset($settings['print_default_cover']) && $settings['print_default_cover'] === 'yes';
+        $print_default_time_range = !isset($settings['print_default_time_range']) || $settings['print_default_time_range'] === 'yes';
+        $legacy_print_default_event_style = !isset($settings['print_default_event_style']) || $settings['print_default_event_style'] === 'yes';
+        $print_default_event_emoji = isset($settings['print_default_event_emoji'])
+            ? $settings['print_default_event_emoji'] === 'yes'
+            : $legacy_print_default_event_style;
+        $print_default_event_color = isset($settings['print_default_event_color'])
+            ? $settings['print_default_event_color'] === 'yes'
+            : $legacy_print_default_event_style;
+        $print_default_page_break = !isset($settings['print_default_page_break']) || $settings['print_default_page_break'] === 'yes';
+        $print_default_span = isset($settings['print_default_span']) ? (int) $settings['print_default_span'] : 1;
+        if ($print_default_span < 1) {
+            $print_default_span = 1;
+        }
+        if ($print_default_span > 12) {
+            $print_default_span = 12;
+        }
 
         $cover_width_settings = self::normalize_cover_width_settings($settings);
 
@@ -1845,7 +2001,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         echo '<div ' . implode(' ', $calendar_attributes) . '>';
 
-        if ($show_toolbar_left || $show_toolbar_actions) {
+        if ($show_toolbar_left || $show_toolbar_actions || $show_print_button) {
             echo '<div class="mj-member-events-calendar__toolbar">';
             if ($show_toolbar_left) {
                 echo '<div class="mj-member-events-calendar__toolbar-left">';
@@ -1857,9 +2013,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 echo '<button type="button" class="mj-member-events-calendar__today-button" data-calendar-action="today">' . esc_html__('Aujourd\'hui', 'mj-member') . '</button>';
                 echo '</div>';
             }
-            if ($show_toolbar_actions) {
+            if ($show_toolbar_actions || $show_print_button) {
                 echo '<div class="mj-member-events-calendar__toolbar-actions">';
-                if (!empty($sorted_filters)) {
+                if ($show_toolbar_actions && !empty($sorted_filters)) {
                     echo '<div class="mj-member-events-calendar__filters" role="group" aria-label="' . esc_attr__('Filtrer par type d’événement', 'mj-member') . '">';
                     foreach ($sorted_filters as $filter_key => $filter_meta) {
                         $filter_label = isset($filter_meta['label']) && $filter_meta['label'] !== '' ? (string) $filter_meta['label'] : ucfirst((string) $filter_key);
@@ -1869,6 +2025,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         echo '</label>';
                     }
                     echo '</div>';
+                }
+                if ($show_print_button) {
+                    echo '<button type="button" class="mj-member-events-calendar__print-button" data-calendar-action="open-print">' . esc_html__('Imprimer', 'mj-member') . '</button>';
                 }
                 echo '</div>';
             }
@@ -2165,9 +2324,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             if ($event_type_key === '') {
                                 $event_type_key = 'misc';
                             }
+                            $event_accent_for_print = isset($event_entry['accent_color']) ? self::normalize_hex_color_value($event_entry['accent_color']) : '';
                             $event_is_closure = !empty($event_entry['is_closure']);
                             $is_known_type = isset($available_type_filters[$event_type_key]) || $event_type_key === 'closure';
                             $type_attributes = ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($event_type_key) . '" data-calendar-type-known="' . ($is_known_type ? '1' : '0') . '"';
+                            if ($event_accent_for_print !== '') {
+                                $type_attributes .= ' data-calendar-accent-color="' . esc_attr($event_accent_for_print) . '"';
+                            }
                             echo '<li class="' . esc_attr(implode(' ', $event_classes)) . '"' . $style_attribute . $type_attributes . '>';
                             $trigger_attributes = ' class="mj-member-events-calendar__event-trigger"';
                             if ($event_is_closure) {
@@ -2185,6 +2348,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 } elseif ($event_emoji !== '') {
                                     $event_emoji = substr($event_emoji, 0, 8);
                                 }
+                                echo '<span class="mj-member-events-calendar__event-print-meta" data-calendar-emoji="' . esc_attr($event_emoji) . '" hidden></span>';
                             }
 
                             echo '<span class="mj-member-events-calendar__event-copy">';
@@ -2757,6 +2921,97 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<p class="mj-member-events-calendar__empty">' . esc_html($empty_message) . '</p>';
         }
 
+        if ($show_print_button) {
+            echo '<div class="mj-cal-print" data-calendar-print-modal hidden>';
+            echo '<div class="mj-cal-print__backdrop" data-calendar-print-close></div>';
+            echo '<div class="mj-cal-print__panel" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr($instance_id) . '-print-title">';
+            echo '<div class="mj-cal-print__header">';
+            echo '<h4 class="mj-cal-print__title" id="' . esc_attr($instance_id) . '-print-title">' . esc_html__('Impression du calendrier', 'mj-member') . '</h4>';
+            echo '<button type="button" class="mj-cal-print__close" data-calendar-print-close aria-label="' . esc_attr__('Fermer', 'mj-member') . '">';
+            echo '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            echo '</button>';
+            echo '</div>';
+            echo '<div class="mj-cal-print__body">';
+            echo '<div class="mj-cal-print__options">';
+            echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="details"' . ($print_default_details ? ' checked' : '') . ' />';
+            echo '<span>' . esc_html__('Afficher les détails', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="cover"' . ($print_default_cover ? ' checked' : '') . ' />';
+            echo '<span>' . esc_html__('Afficher les covers', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="time-range"' . ($print_default_time_range ? ' checked' : '') . ' />';
+            echo '<span>' . esc_html__('Afficher la plage horaire', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="event-emoji"' . ($print_default_event_emoji ? ' checked' : '') . ' />';
+            echo '<span>' . esc_html__('Afficher les emojis', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="event-color"' . ($print_default_event_color ? ' checked' : '') . ' />';
+            echo '<span>' . esc_html__('Afficher la couleur des événements', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Padding page', 'mj-member') . '</span>';
+            echo '<input type="range" min="0" max="24" step="1" value="10" data-print-option="pad-page" />';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Padding cellule jour', 'mj-member') . '</span>';
+            echo '<input type="range" min="0" max="16" step="1" value="6" data-print-option="pad-day" />';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Padding événement', 'mj-member') . '</span>';
+            echo '<input type="range" min="0" max="16" step="1" value="6" data-print-option="pad-event" />';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Période', 'mj-member') . '</span>';
+            echo '<select data-print-option="mode">';
+            echo '<option value="week"' . selected($print_default_mode, 'week', false) . '>' . esc_html__('Semaine', 'mj-member') . '</option>';
+            echo '<option value="month"' . selected($print_default_mode, 'month', false) . '>' . esc_html__('Mois', 'mj-member') . '</option>';
+            echo '</select>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option" data-print-month-picker hidden>';
+            echo '<span>' . esc_html__('Mois', 'mj-member') . '</span>';
+            echo '<select data-print-option="month"></select>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option" data-print-month-year-picker hidden>';
+            echo '<span>' . esc_html__('Année (mois)', 'mj-member') . '</span>';
+            echo '<select data-print-option="month-year"></select>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option" data-print-week-picker hidden>';
+            echo '<span>' . esc_html__('Semaine', 'mj-member') . '</span>';
+            echo '<select data-print-option="week"></select>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option" data-print-week-year-picker hidden>';
+            echo '<span>' . esc_html__('Année (semaine)', 'mj-member') . '</span>';
+            echo '<select data-print-option="week-year"></select>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Nombre à afficher', 'mj-member') . '</span>';
+            echo '<input type="number" min="1" max="12" step="1" value="' . esc_attr((string) $print_default_span) . '" data-print-option="span" />';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="page-break"' . ($print_default_page_break ? ' checked' : '') . ' />';
+            echo '<span data-print-option-page-break-label>' . esc_html__('Une page par semaine', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<fieldset class="mj-cal-print__option mj-cal-print__option--types" data-print-type-filters>'; 
+            echo '<legend>' . esc_html__('Types d\'événement', 'mj-member') . '</legend>';
+            echo '</fieldset>';
+            echo '</div>';
+            echo '<div class="mj-cal-print__preview-wrap">';
+            echo '<iframe class="mj-cal-print__preview" data-calendar-print-preview title="' . esc_attr__('Aperçu impression calendrier', 'mj-member') . '"></iframe>';
+            echo '</div>';
+            echo '</div>';
+            echo '<div class="mj-cal-print__footer">';
+            echo '<button type="button" class="mj-cal-print__ghost" data-calendar-print-close>' . esc_html__('Fermer', 'mj-member') . '</button>';
+            echo '<button type="button" class="mj-cal-print__primary" data-calendar-action="print-now">' . esc_html__('Imprimer', 'mj-member') . '</button>';
+            echo '</div>';
+            echo '</div>';
+            echo '</div>';
+        }
+
         if ($can_edit_events) {
             \Mj\Member\Classes\View\CreateEventModalRenderer::render($instance_id);
         }
@@ -2768,6 +3023,32 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $instance_config = array(
             'preferredIndex' => $preferred_index,
             'todayMonth' => $today_month_key,
+            'print' => array(
+                'enabled' => $show_print_button,
+                'defaultMode' => $print_default_mode,
+                'defaultDetails' => $print_default_details,
+                'defaultCover' => $print_default_cover,
+                'defaultTimeRange' => $print_default_time_range,
+                'defaultEventEmoji' => $print_default_event_emoji,
+                'defaultEventColor' => $print_default_event_color,
+                'defaultSpan' => $print_default_span,
+                'defaultPageBreak' => $print_default_page_break,
+                'labels' => array(
+                    'title' => __('Calendrier - impression', 'mj-member'),
+                    'subtitle' => __('Aperçu généré en temps réel', 'mj-member'),
+                    'periodWeek' => __('Semaine', 'mj-member'),
+                    'periodMonth' => __('Mois', 'mj-member'),
+                    'pagePerWeek' => __('Une page par semaine', 'mj-member'),
+                    'pagePerMonth' => __('Une page par mois', 'mj-member'),
+                    'detailsOn' => __('Détails affichés', 'mj-member'),
+                    'detailsOff' => __('Détails masqués', 'mj-member'),
+                    'coverOn' => __('Covers affichées', 'mj-member'),
+                    'coverOff' => __('Covers masquées', 'mj-member'),
+                    'empty' => __('Aucun événement à imprimer pour cette sélection.', 'mj-member'),
+                    'summaryWeek' => __('%1$d semaine(s) depuis %2$s', 'mj-member'),
+                    'summaryMonth' => __('%1$d mois depuis %2$s', 'mj-member'),
+                ),
+            ),
         );
 
         if ($can_edit_events) {
@@ -2792,6 +3073,16 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             'hide_closure_occurrences' => 'yes',
             'show_toolbar_left' => 'yes',
             'show_toolbar_actions' => 'yes',
+            'show_print_button' => 'yes',
+            'print_default_details' => 'yes',
+            'print_default_cover' => '',
+            'print_default_time_range' => 'yes',
+            'print_default_event_style' => 'yes',
+            'print_default_event_emoji' => 'yes',
+            'print_default_event_color' => 'yes',
+            'print_default_mode' => 'month',
+            'print_default_span' => 1,
+            'print_default_page_break' => 'yes',
             'current_week_only' => '',
             'week_display_mode' => 'current',
             'week_custom_reference' => '',

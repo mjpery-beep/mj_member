@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Core;
 
+use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjMembers;
 
 if (!defined('ABSPATH')) {
@@ -95,12 +96,8 @@ final class AssetsManager
                 'brouillon' => __('Brouillon', 'mj-member'),
                 'passe' => __('Passé', 'mj-member'),
             ),
-            'typeLabels' => array(
-                'stage' => __('Stage', 'mj-member'),
-                'soiree' => __('Soirée', 'mj-member'),
-                'sortie' => __('Sortie', 'mj-member'),
-                'atelier' => __('Atelier', 'mj-member'),
-            ),
+            'typeLabels' => MjEvents::get_type_labels(),
+            'typeColors' => MjEvents::get_type_colors(),
             'labels' => array(
                 'updateSuccess' => __('Mis à jour avec succès', 'mj-member'),
                 'updateError' => __('Erreur lors de la mise à jour', 'mj-member'),

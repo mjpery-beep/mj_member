@@ -137,13 +137,7 @@ final class EventsController implements AjaxHandlerInterface
             break;
         case 'type':
             $field_value = sanitize_text_field($field_value);
-            $allowed_types = array(
-                MjEvents::TYPE_STAGE,
-                MjEvents::TYPE_SOIREE,
-                MjEvents::TYPE_SORTIE,
-                MjEvents::TYPE_ATELIER,
-                MjEvents::TYPE_INTERNE,
-            );
+            $allowed_types = array_keys(MjEvents::get_type_labels());
             if (!in_array($field_value, $allowed_types, true)) {
                 wp_send_json_error(array('message' => __('Type invalide', 'mj-member')));
             }
