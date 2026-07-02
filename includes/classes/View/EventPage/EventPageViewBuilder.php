@@ -205,6 +205,7 @@ final class EventPageViewBuilder
 
         $weeklySchedule = $this->resolveWeeklySchedule($schedule);
         $schedulePreview = isset($schedule['schedule_preview']) ? (string) $schedule['schedule_preview'] : '';
+        $schedulePreviewRows = $this->buildSchedulePreviewRows($schedulePreview);
         $inlineScheduleHtml = $schedulePreview !== '' ? '' : self::renderInlineScheduleHtml($schedule);
 
         return array(
@@ -217,6 +218,7 @@ final class EventPageViewBuilder
             'cover_thumb' => isset($event['cover_thumb']) ? (string) $event['cover_thumb'] : '',
             'schedule_summary' => isset($schedule['schedule_summary']) ? (string) $schedule['schedule_summary'] : '',
             'schedule_preview' => $schedulePreview,
+            'schedule_preview_rows' => $schedulePreviewRows,
             'display_label' => isset($schedule['display_label']) ? (string) $schedule['display_label'] : '',
             'weekly_schedule' => $weeklySchedule,
             'inline_schedule_html' => $inlineScheduleHtml,
@@ -225,6 +227,169 @@ final class EventPageViewBuilder
             'next_occurrence_label' => $nextOccurrenceLabel,
             'price_label' => isset($registration['price_display']) ? (string) $registration['price_display'] : '',
         );
+    }
+
+    /**
+     * @return array<int,array{text:string,animateur:array{name:string,avatar_url:string,initials:string}|null}>
+     */
+    private function buildSchedulePreviewRows(string $schedulePreview): array
+    {
+        if (trim($schedulePreview) === '') {
+            return array();
+        }
+
+        $lookup = $this->buildAnimateurLookup();
+
+        $lines = preg_split('/\\R/u', $schedulePreview);
+        if (!is_array($lines)) {
+            $lines = array($schedulePreview);
+        }
+
+        $rows = array();
+        foreach ($lines as $line) {
+            $lineParts = explode('|', (string) $line);
+            $cleanedParts = array();
+            $assignedNames = array();
+
+            foreach ($lineParts as $part) {
+                $token = trim((string) $part);
+                if ($token === '') {
+                    continue;
+                }
+
+                if (preg_match('/^Animateur(?:s)?\\s*:\\s*(.+)$/iu', $token, $matches) === 1) {
+                    $rawNames = isset($matches[1]) ? (string) $matches[1] : '';
+                    $parts = preg_split('/\\s*,\\s*/u', $rawNames);
+                    if (is_array($parts)) {
+                        foreach ($parts as $name) {
+                            $name = trim((string) $name);
+                            if ($name !== '') {
+                                $assignedNames[] = $name;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                $cleanedParts[] = $token;
+            }
+
+            $lineText = implode(' | ', $cleanedParts);
+            if ($lineText === '' && empty($assignedNames)) {
+                continue;
+            }
+
+            $tooltip = implode(', ', $assignedNames);
+            $animateur = $this->resolveAnimateurFromNames($assignedNames, $tooltip, $lookup);
+
+            $rows[] = array(
+                'text' => $lineText,
+                'animateur' => $animateur,
+            );
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return array<string,array{name:string,avatar_url:string,initials:string}>
+     */
+    private function buildAnimateurLookup(): array
+    {
+        $lookup = array();
+
+        $animateurs = isset($this->model['animateurs']) && is_array($this->model['animateurs'])
+            ? $this->model['animateurs']
+            : array();
+        $items = isset($animateurs['items']) && is_array($animateurs['items'])
+            ? $animateurs['items']
+            : array();
+
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $name = isset($item['name']) ? trim((string) $item['name']) : '';
+            if ($name === '') {
+                continue;
+            }
+
+            $lookup[$this->normalizeAnimateurName($name)] = array(
+                'name' => $name,
+                'avatar_url' => isset($item['avatar_url']) ? (string) $item['avatar_url'] : '',
+                'initials' => isset($item['initials']) ? trim((string) $item['initials']) : $this->buildInitialsFromName($name),
+            );
+        }
+
+        return $lookup;
+    }
+
+    /**
+     * @param array<int,string> $assignedNames
+     * @param array<string,array{name:string,avatar_url:string,initials:string}> $lookup
+     * @return array{name:string,avatar_url:string,initials:string}|null
+     */
+    private function resolveAnimateurFromNames(array $assignedNames, string $tooltip, array $lookup): ?array
+    {
+        if (empty($assignedNames)) {
+            return null;
+        }
+
+        foreach ($assignedNames as $name) {
+            $key = $this->normalizeAnimateurName($name);
+            if ($key !== '' && isset($lookup[$key])) {
+                $animateur = $lookup[$key];
+                $animateur['name'] = $tooltip !== '' ? $tooltip : $animateur['name'];
+
+                return $animateur;
+            }
+        }
+
+        $firstName = trim((string) $assignedNames[0]);
+
+        return array(
+            'name' => $tooltip !== '' ? $tooltip : $firstName,
+            'avatar_url' => '',
+            'initials' => $this->buildInitialsFromName($firstName),
+        );
+    }
+
+    private function normalizeAnimateurName(string $name): string
+    {
+        $normalized = preg_replace('/\\s+/u', ' ', trim((string) remove_accents($name)));
+        if (!is_string($normalized)) {
+            return '';
+        }
+
+        return mb_strtolower($normalized);
+    }
+
+    private function buildInitialsFromName(string $name): string
+    {
+        $parts = preg_split('/\\s+/u', trim($name));
+        if (!is_array($parts) || empty($parts)) {
+            return '?';
+        }
+
+        $letters = array();
+        foreach ($parts as $part) {
+            $part = trim((string) $part);
+            if ($part === '') {
+                continue;
+            }
+
+            $letters[] = mb_substr($part, 0, 1);
+            if (count($letters) >= 2) {
+                break;
+            }
+        }
+
+        if (empty($letters)) {
+            return '?';
+        }
+
+        return mb_strtoupper(implode('', $letters));
     }
 
     /**
@@ -324,7 +489,6 @@ final class EventPageViewBuilder
 
             // Use date key (YYYY-MM-DD) instead of weekday to group all occurrences of the same day
             $dateKey = wp_date('Y-m-d', $timestamp, $timezone);
-
             // Initialize date group if not exists
             if (!isset($daysByDate[$dateKey])) {
                 $daysByDate[$dateKey] = array(

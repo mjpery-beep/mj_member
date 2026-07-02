@@ -4515,6 +4515,47 @@
                     generationBatchValue = occ.batch_id;
                 }
 
+                var responsibleMemberIds = [];
+                if (occ && Array.isArray(occ.responsibleMemberIds)) {
+                    responsibleMemberIds = occ.responsibleMemberIds;
+                } else if (occ && Array.isArray(occ.responsible_member_ids)) {
+                    responsibleMemberIds = occ.responsible_member_ids;
+                }
+                responsibleMemberIds = responsibleMemberIds
+                    .map(function (value) { return parseInt(value, 10); })
+                    .filter(function (value, index, list) {
+                        return !Number.isNaN(value) && value > 0 && list.indexOf(value) === index;
+                    });
+
+                var responsibleMemberNames = [];
+                if (occ && Array.isArray(occ.responsibleMemberNames)) {
+                    responsibleMemberNames = occ.responsibleMemberNames;
+                } else if (occ && Array.isArray(occ.responsible_member_names)) {
+                    responsibleMemberNames = occ.responsible_member_names;
+                }
+                responsibleMemberNames = responsibleMemberNames
+                    .map(function (value) { return typeof value === 'string' ? value.trim() : ''; })
+                    .filter(function (value, index, list) {
+                        return value !== '' && list.indexOf(value) === index;
+                    });
+
+                var locationId = 0;
+                if (occ && occ.locationId !== undefined && occ.locationId !== null) {
+                    locationId = parseInt(occ.locationId, 10);
+                } else if (occ && occ.location_id !== undefined && occ.location_id !== null) {
+                    locationId = parseInt(occ.location_id, 10);
+                }
+                if (Number.isNaN(locationId) || locationId < 0) {
+                    locationId = 0;
+                }
+
+                var locationLabel = '';
+                if (occ && typeof occ.locationLabel === 'string') {
+                    locationLabel = occ.locationLabel.trim();
+                } else if (occ && typeof occ.location_label === 'string') {
+                    locationLabel = occ.location_label.trim();
+                }
+
                 return {
                     id: occ && occ.id ? occ.id : null,
                     date: occ && typeof occ.date === 'string' ? occ.date : '',
@@ -4531,6 +4572,10 @@
                     visibility: occ && typeof occ.visibility === 'string' ? occ.visibility : 'tous',
                     noteSchedule: occ && typeof occ.noteSchedule === 'string' ? occ.noteSchedule : '',
                     noteCalendar: occ && typeof occ.noteCalendar === 'string' ? occ.noteCalendar : '',
+                    locationId: locationId,
+                    locationLabel: locationLabel,
+                    responsibleMemberIds: responsibleMemberIds,
+                    responsibleMemberNames: responsibleMemberNames,
                 };
             }) : [];
 
@@ -6241,6 +6286,20 @@
                                             setEventDetails(function (prev) {
                                                 return prev ? Object.assign({}, prev, { occurrenceGenerationBatches: batches }) : prev;
                                             });
+                                        },
+                                        onNotify: function (notice) {
+                                            if (!notice || typeof notice !== 'object') {
+                                                return;
+                                            }
+                                            var message = typeof notice.message === 'string' ? notice.message : '';
+                                            if (!message) {
+                                                return;
+                                            }
+                                            if (notice.type === 'error') {
+                                                showError(message);
+                                                return;
+                                            }
+                                            showSuccess(message);
                                         },
                                     })
                                     : h('div', { class: 'mj-regmgr__tab-placeholder' },

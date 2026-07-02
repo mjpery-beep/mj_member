@@ -179,6 +179,8 @@ button.mj-member-events-calendar__today-button:disabled {
 }
 
 .mj-member-events-calendar__filter {
+    --mj-calendar-filter-color: var(--mj-events-calendar-accent);
+
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -194,13 +196,26 @@ button.mj-member-events-calendar__today-button:disabled {
     user-select: none;
 }
 
+.mj-member-events-calendar__filter::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--mj-calendar-filter-color, var(--mj-events-calendar-accent));
+    flex: 0 0 auto;
+}
+
 .mj-member-events-calendar__filter:hover {
     background: #e2e8f0;
 }
 
 .mj-member-events-calendar__filter:has(input:checked) {
-    background: var(--mj-events-calendar-accent);
+    background: var(--mj-calendar-filter-color, var(--mj-events-calendar-accent));
     color: #ffffff;
+}
+
+.mj-member-events-calendar__filter:has(input:checked)::before {
+    background: #ffffff;
 }
 
 .mj-member-events-calendar__filter:has(input:checked):hover {
@@ -2090,6 +2105,7 @@ button.mj-member-events-calendar__print-button:focus-visible {
     min-height: 420px;
     height: 65vh;
     max-height: calc(100vh - 190px);
+    min-height: 0;
 }
 
 .mj-cal-print__options {
@@ -2099,6 +2115,8 @@ button.mj-member-events-calendar__print-button:focus-visible {
     padding: 16px;
     border-right: 1px solid #e2e8f0;
     background: #f8fafc;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .mj-cal-print__option {

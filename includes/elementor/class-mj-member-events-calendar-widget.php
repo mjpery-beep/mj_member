@@ -15,6 +15,7 @@ use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\Crud\MjLeaveRequests;
 use Mj\Member\Classes\Crud\MjLeaveTypes;
+use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjTodos;
 use Mj\Member\Classes\Crud\MjTodoProjects;
 use Mj\Member\Classes\MjEventSchedule;
@@ -1078,6 +1079,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         $type_labels_map = method_exists('MjEvents', 'get_type_labels') ? MjEvents::get_type_labels() : array();
         $available_type_filters = array();
+        $leave_request_filter_color = '';
+        $todo_filter_color = '';
+        $closure_filter_color = '';
 
         $next_event_pointer = null;
 
@@ -1185,14 +1189,17 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 $type_label = __('Autre', 'mj-member');
             }
 
+            $palette = self::build_event_palette(isset($event['accent_color']) ? $event['accent_color'] : '', $event_type_key, $type_colors_map);
+
             if (!isset($available_type_filters[$event_type_key])) {
                 $fallback_filter_label = $type_label !== '' ? $type_label : ucfirst(str_replace(array('_', '-'), ' ', $event_type_key));
                 $available_type_filters[$event_type_key] = array(
                     'label' => $fallback_filter_label,
+                    'color' => isset($palette['base']) ? $palette['base'] : '',
                 );
+            } elseif ((empty($available_type_filters[$event_type_key]['color'])) && isset($palette['base'])) {
+                $available_type_filters[$event_type_key]['color'] = $palette['base'];
             }
-
-            $palette = self::build_event_palette(isset($event['accent_color']) ? $event['accent_color'] : '', $event_type_key, $type_colors_map);
 
             $emoji_value = '';
             if (!empty($event['emoji']) && !is_array($event['emoji'])) {
@@ -1438,6 +1445,33 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     )));
                 }
 
+                $responsible_ids = array();
+                if (!empty($occurrence['responsible_member_ids']) && is_array($occurrence['responsible_member_ids'])) {
+                    $responsible_ids = $occurrence['responsible_member_ids'];
+                } elseif (!empty($occurrence['assigned_member_ids']) && is_array($occurrence['assigned_member_ids'])) {
+                    $responsible_ids = $occurrence['assigned_member_ids'];
+                } elseif (!empty($occurrence['assigned_member_id']) && !is_array($occurrence['assigned_member_id'])) {
+                    $responsible_ids = array($occurrence['assigned_member_id']);
+                } elseif (!empty($occurrence_meta['responsible_member_ids']) && is_array($occurrence_meta['responsible_member_ids'])) {
+                    $responsible_ids = $occurrence_meta['responsible_member_ids'];
+                } elseif (!empty($occurrence_meta['assigned_member_ids']) && is_array($occurrence_meta['assigned_member_ids'])) {
+                    $responsible_ids = $occurrence_meta['assigned_member_ids'];
+                } elseif (!empty($occurrence_meta['assigned_member_id']) && !is_array($occurrence_meta['assigned_member_id'])) {
+                    $responsible_ids = array($occurrence_meta['assigned_member_id']);
+                }
+
+                $responsible_ids = array_values(array_unique(array_filter(array_map(
+                    static function ($member_id) {
+                        $value = (int) $member_id;
+                        return $value > 0 ? $value : 0;
+                    },
+                    $responsible_ids
+                ))));
+
+                if (!empty($responsible_ids)) {
+                    $normalized_entry['responsible_member_ids'] = $responsible_ids;
+                }
+
                 if (!empty($occurrence['is_cancelled'])) {
                     $normalized_entry['is_cancelled'] = true;
                 }
@@ -1591,6 +1625,22 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     )));
                 }
 
+                $occurrence_responsible_ids = array();
+                if (!empty($occurrence['responsible_member_ids']) && is_array($occurrence['responsible_member_ids'])) {
+                    $occurrence_responsible_ids = $occurrence['responsible_member_ids'];
+                } elseif (!empty($occurrence['assigned_member_ids']) && is_array($occurrence['assigned_member_ids'])) {
+                    $occurrence_responsible_ids = $occurrence['assigned_member_ids'];
+                } elseif (!empty($occurrence['assigned_member_id'])) {
+                    $occurrence_responsible_ids = array($occurrence['assigned_member_id']);
+                }
+                $occurrence_responsible_ids = array_values(array_unique(array_filter(array_map(
+                    static function ($member_id) {
+                        $value = (int) $member_id;
+                        return $value > 0 ? $value : 0;
+                    },
+                    $occurrence_responsible_ids
+                ))));
+
                 $occurrence_is_cancelled = !empty($occurrence['is_cancelled']);
                 $occurrence_cancellation_reason = '';
                 if ($occurrence_is_cancelled) {
@@ -1618,6 +1668,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'location_label' => $occurrence_location_label,
                     'location_links' => $location_links,
                     'occurrence_responsible_names' => $occurrence_responsible_names,
+                    'occurrence_responsible_ids' => $occurrence_responsible_ids,
                     'description_excerpt' => $description_preview,
                     'age_min' => $age_min,
                     'age_max' => $age_max,
@@ -1733,6 +1784,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     $member_name = isset($leave_req['member_name']) ? (string) $leave_req['member_name'] : __('Animateur', 'mj-member');
                     $type_name = isset($leave_req['type_name']) ? (string) $leave_req['type_name'] : __('Congé', 'mj-member');
                     $type_color = isset($leave_req['type_color']) ? (string) $leave_req['type_color'] : '#6B7280';
+                    $normalized_leave_color = self::normalize_hex_color_value($type_color);
+                    if ($normalized_leave_color !== '') {
+                        $type_color = $normalized_leave_color;
+                    }
+                    if ($leave_request_filter_color === '' && $type_color !== '') {
+                        $leave_request_filter_color = $type_color;
+                    }
                     $type_slug = isset($leave_req['type_slug']) ? sanitize_key((string) $leave_req['type_slug']) : 'leave_request';
                     
                     $reason = isset($leave_req['reason']) ? (string) $leave_req['reason'] : '';
@@ -1822,6 +1880,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 $closure_time_label = $description !== '' ? $description : '';
                 $closure_event_id = 'closure:' . $closure_date;
                 $closure_palette = self::build_closure_palette();
+                if ($closure_filter_color === '' && isset($closure_palette['base']) && is_string($closure_palette['base'])) {
+                    $closure_filter_color = $closure_palette['base'];
+                }
                 $closure_timestamp = strtotime($closure_date . ' 00:00:00');
                 if ($closure_timestamp === false) {
                     $closure_timestamp = current_time('timestamp');
@@ -1865,6 +1926,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if (!isset($available_type_filters['closure'])) {
                 $available_type_filters['closure'] = array(
                     'label' => __('Fermeture', 'mj-member'),
+                    'color' => $closure_filter_color !== '' ? $closure_filter_color : '#EF4444',
                 );
             }
         }
@@ -1874,6 +1936,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if (!isset($available_type_filters['leave_request'])) {
                 $available_type_filters['leave_request'] = array(
                     'label' => __('Congés', 'mj-member'),
+                    'color' => $leave_request_filter_color !== '' ? $leave_request_filter_color : '#22C55E',
                 );
             }
         }
@@ -1958,6 +2021,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $todo_project_name = (string) $proj_data['title'];
                         }
                     }
+                    $normalized_todo_color = self::normalize_hex_color_value($todo_color);
+                    if ($normalized_todo_color !== '') {
+                        $todo_color = $normalized_todo_color;
+                    }
+                    if ($todo_filter_color === '' && $todo_color !== '') {
+                        $todo_filter_color = $todo_color;
+                    }
 
                     // Build assignee label
                     $assignee_names = array();
@@ -2022,6 +2092,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if (!isset($available_type_filters['todo'])) {
                 $available_type_filters['todo'] = array(
                     'label' => __('Tâches', 'mj-member'),
+                    'color' => $todo_filter_color !== '' ? $todo_filter_color : '#8B5CF6',
                 );
             }
         }
@@ -2103,7 +2174,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     echo '<div class="mj-member-events-calendar__filters" role="group" aria-label="' . esc_attr__('Filtrer par type d’événement', 'mj-member') . '">';
                     foreach ($sorted_filters as $filter_key => $filter_meta) {
                         $filter_label = isset($filter_meta['label']) && $filter_meta['label'] !== '' ? (string) $filter_meta['label'] : ucfirst((string) $filter_key);
-                        echo '<label class="mj-member-events-calendar__filter">';
+                        $filter_color = isset($filter_meta['color']) ? self::normalize_hex_color_value($filter_meta['color']) : '';
+                        $filter_style = $filter_color !== '' ? ' style="--mj-calendar-filter-color:' . esc_attr($filter_color) . ';"' : '';
+                        echo '<label class="mj-member-events-calendar__filter"' . $filter_style . '>';
                         echo '<input type="checkbox" value="' . esc_attr($filter_key) . '" data-calendar-filter checked />';
                         echo '<span>' . esc_html($filter_label) . '</span>';
                         echo '</label>';
@@ -2501,6 +2574,103 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $preview_responsibles = (!$event_is_closure && !empty($event_entry['occurrence_responsible_names']) && is_array($event_entry['occurrence_responsible_names']))
                                 ? array_values(array_filter(array_map('sanitize_text_field', $event_entry['occurrence_responsible_names'])))
                                 : array();
+                            $preview_responsible_ids = (!$event_is_closure && !empty($event_entry['occurrence_responsible_ids']) && is_array($event_entry['occurrence_responsible_ids']))
+                                ? array_values(array_filter(array_map('intval', $event_entry['occurrence_responsible_ids'])))
+                                : array();
+
+                            // Use occurrence assignees first; fallback to event-level animateurs.
+                            if (!$event_is_closure && (!empty($preview_responsibles) || !empty($preview_responsible_ids))) {
+                                $animateur_by_id = array();
+                                $animateur_by_name = array();
+                                foreach ($preview_animateurs as $animateur_item) {
+                                    if (!is_array($animateur_item)) {
+                                        continue;
+                                    }
+                                    $animateur_id = isset($animateur_item['id']) ? (int) $animateur_item['id'] : 0;
+                                    if ($animateur_id > 0) {
+                                        $animateur_by_id[$animateur_id] = $animateur_item;
+                                    }
+                                    $animateur_name_key = isset($animateur_item['name']) ? sanitize_text_field((string) $animateur_item['name']) : '';
+                                    if ($animateur_name_key !== '') {
+                                        $animateur_by_name[function_exists('mb_strtolower') ? mb_strtolower($animateur_name_key) : strtolower($animateur_name_key)] = $animateur_item;
+                                    }
+                                }
+
+                                $preview_occurrence_animateurs = array();
+                                $added_name_keys = array();
+
+                                foreach ($preview_responsible_ids as $responsible_member_id) {
+                                    $responsible_member_id = (int) $responsible_member_id;
+                                    if ($responsible_member_id <= 0) {
+                                        continue;
+                                    }
+
+                                    $matched_animateur = null;
+                                    if (isset($animateur_by_id[$responsible_member_id]) && is_array($animateur_by_id[$responsible_member_id])) {
+                                        $matched_animateur = $animateur_by_id[$responsible_member_id];
+                                    } else {
+                                        $matched_animateur = self::build_member_preview_item_from_member_id($responsible_member_id);
+                                    }
+
+                                    if (!is_array($matched_animateur)) {
+                                        continue;
+                                    }
+
+                                    $resolved_name = isset($matched_animateur['name']) ? sanitize_text_field((string) $matched_animateur['name']) : '';
+                                    if ($resolved_name === '') {
+                                        continue;
+                                    }
+
+                                    $resolved_key = function_exists('mb_strtolower') ? mb_strtolower($resolved_name) : strtolower($resolved_name);
+                                    if (isset($added_name_keys[$resolved_key])) {
+                                        continue;
+                                    }
+
+                                    $preview_occurrence_animateurs[] = array(
+                                        'id' => $responsible_member_id,
+                                        'name' => $resolved_name,
+                                        'role_label' => isset($matched_animateur['role_label']) ? (string) $matched_animateur['role_label'] : '',
+                                        'avatar' => !empty($matched_animateur['avatar']) ? (string) $matched_animateur['avatar'] : '',
+                                        'initials' => isset($matched_animateur['initials']) && (string) $matched_animateur['initials'] !== ''
+                                            ? sanitize_text_field((string) $matched_animateur['initials'])
+                                            : sanitize_text_field(self::build_member_initials($resolved_name)),
+                                        'is_primary' => false,
+                                    );
+                                    $added_name_keys[$resolved_key] = true;
+                                }
+
+                                foreach ($preview_responsibles as $responsible_name) {
+                                    $responsible_name = sanitize_text_field((string) $responsible_name);
+                                    if ($responsible_name === '') {
+                                        continue;
+                                    }
+
+                                    $responsible_key = function_exists('mb_strtolower') ? mb_strtolower($responsible_name) : strtolower($responsible_name);
+                                    if (isset($added_name_keys[$responsible_key])) {
+                                        continue;
+                                    }
+
+                                    $matched_animateur = null;
+                                    if (isset($animateur_by_name[$responsible_key]) && is_array($animateur_by_name[$responsible_key])) {
+                                        $matched_animateur = $animateur_by_name[$responsible_key];
+                                    }
+
+                                    $preview_occurrence_animateurs[] = array(
+                                        'name' => $responsible_name,
+                                        'role_label' => '',
+                                        'avatar' => $matched_animateur && !empty($matched_animateur['avatar']) ? (string) $matched_animateur['avatar'] : '',
+                                        'initials' => sanitize_text_field(self::build_member_initials($responsible_name)),
+                                        'is_primary' => false,
+                                    );
+                                    $added_name_keys[$responsible_key] = true;
+                                }
+
+                                if (!empty($preview_occurrence_animateurs)) {
+                                    $preview_animateurs = $preview_occurrence_animateurs;
+                                }
+                                // Prevent duplicate information when occurrence-level assignees are shown as animateurs.
+                                $preview_responsibles = array();
+                            }
 
                             $preview_recurring_schedule_entries = array();
                             if (!$event_is_closure && isset($event_entry['recurring_schedule_preview']) && is_array($event_entry['recurring_schedule_preview'])) {
@@ -3110,12 +3280,24 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         echo '</div>';
 
         $preferred_index = ($preferred_index >= 0) ? $preferred_index : 0;
+        $print_user_prefs = array();
+        $print_prefs_enabled = is_user_logged_in();
+        if ($print_prefs_enabled) {
+            $raw_print_prefs = get_user_meta(get_current_user_id(), 'mj_member_calendar_print_prefs', true);
+            if (is_array($raw_print_prefs)) {
+                $print_user_prefs = $raw_print_prefs;
+            }
+        }
 
         $instance_config = array(
             'preferredIndex' => $preferred_index,
             'todayMonth' => $today_month_key,
             'print' => array(
                 'enabled' => $show_print_button,
+                'userPrefsEnabled' => $print_prefs_enabled,
+                'ajaxUrl' => $print_prefs_enabled ? admin_url('admin-ajax.php') : '',
+                'prefsNonce' => $print_prefs_enabled ? wp_create_nonce('mj_member_calendar_print_prefs') : '',
+                'userPrefs' => $print_user_prefs,
                 'defaultMode' => $print_default_mode,
                 'defaultDetails' => $print_default_details,
                 'defaultCover' => $print_default_cover,
@@ -3483,6 +3665,77 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $cache[$event_id] = $items;
 
         return $cache[$event_id];
+    }
+
+    /**
+     * Build preview member item (avatar + initials) from a member ID.
+     *
+     * @param int $member_id
+     * @return array<string,mixed>|null
+     */
+    private static function build_member_preview_item_from_member_id($member_id) {
+        $member_id = (int) $member_id;
+        if ($member_id <= 0 || !class_exists(MjMembers::class)) {
+            return null;
+        }
+
+        static $cache = array();
+        if (array_key_exists($member_id, $cache)) {
+            return $cache[$member_id];
+        }
+
+        $member = MjMembers::getById($member_id);
+        if (!$member) {
+            $cache[$member_id] = null;
+            return null;
+        }
+
+        $first_name = isset($member->first_name) ? sanitize_text_field((string) $member->first_name) : '';
+        $last_name = isset($member->last_name) ? sanitize_text_field((string) $member->last_name) : '';
+        $full_name = trim($first_name . ' ' . $last_name);
+        if ($full_name === '' && isset($member->nickname)) {
+            $full_name = sanitize_text_field((string) $member->nickname);
+        }
+        if ($full_name === '') {
+            $full_name = sprintf(__('Membre #%d', 'mj-member'), $member_id);
+        }
+
+        $role_key = isset($member->role) ? sanitize_key((string) $member->role) : '';
+        $role_label = '';
+        if ($role_key !== '' && class_exists(MjRoles::class)) {
+            $role_label = sanitize_text_field(MjRoles::getRoleLabel($role_key));
+        }
+
+        $avatar_url = '';
+        if (!empty($member->photo_id) && function_exists('wp_get_attachment_image_src')) {
+            $photo_id = (int) $member->photo_id;
+            if ($photo_id > 0) {
+                $photo = wp_get_attachment_image_src($photo_id, 'thumbnail');
+                if (is_array($photo) && !empty($photo[0])) {
+                    $avatar_url = esc_url_raw($photo[0]);
+                }
+            }
+        }
+
+        if ($avatar_url === '' && !empty($member->wp_user_id) && function_exists('get_avatar_url')) {
+            $avatar_url = esc_url_raw(get_avatar_url((int) $member->wp_user_id, array('size' => 96)));
+        }
+
+        if ($avatar_url === '' && !empty($member->email) && is_email($member->email) && function_exists('get_avatar_url')) {
+            $avatar_url = esc_url_raw(get_avatar_url($member->email, array('size' => 96)));
+        }
+
+        $cache[$member_id] = array(
+            'id' => $member_id,
+            'name' => sanitize_text_field($full_name),
+            'role' => $role_key,
+            'role_label' => $role_label,
+            'avatar' => $avatar_url,
+            'initials' => sanitize_text_field(self::build_member_initials($full_name)),
+            'is_primary' => false,
+        );
+
+        return $cache[$member_id];
     }
 
     /**

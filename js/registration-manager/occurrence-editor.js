@@ -41,6 +41,7 @@
         var onPersistOccurrences = typeof props.onPersistOccurrences === 'function' ? props.onPersistOccurrences : null;
         var apiPost = typeof props.apiPost === 'function' ? props.apiPost : null;
         var onBatchesUpdate = typeof props.onBatchesUpdate === 'function' ? props.onBatchesUpdate : null;
+        var onNotify = typeof props.onNotify === 'function' ? props.onNotify : null;
         var globalLocationOptions = props.globalLocationOptions || null;
         var globalMemberOptions = props.globalMemberOptions || null;
         var globalVolunteerOptions = props.globalVolunteerOptions || null;
@@ -2836,7 +2837,16 @@
                 persistOccurrences(updatedList, function () {
                     setLocalOccurrences(previousList);
                     setSelectedOccurrenceId(previousSelection);
-                }, '', true).catch(function () {
+                }, '', true).then(function () {
+                    modalReopenGuardUntilRef.current = Date.now() + 300;
+                    occurrenceEditorModal.close();
+                    if (onNotify) {
+                        onNotify({
+                            type: 'success',
+                            message: getString(strings, 'occurrenceUpdatedNotice', 'Occurrence modifiée avec succès.'),
+                        });
+                    }
+                }).catch(function () {
                     // Already handled by parent notifications
                 });
             } else {
@@ -2885,7 +2895,7 @@
                     // Already handled by parent notifications
                 });
             }
-        }, [editorState, localOccurrences, selectedOccurrenceId, persistOccurrences, locationNameById, memberNameById]);
+        }, [editorState, localOccurrences, selectedOccurrenceId, persistOccurrences, locationNameById, memberNameById, occurrenceEditorModal, onNotify, strings]);
 
         var handleDeleteOccurrence = useCallback(function (options) {
             if (!selectedOccurrenceId) {

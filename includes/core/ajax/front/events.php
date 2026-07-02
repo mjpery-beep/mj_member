@@ -20,7 +20,134 @@ final class EventsController implements AjaxHandlerInterface {
         add_action('wp_ajax_mj_member_get_event_reservations', [$this, 'getReservations']);
         add_action('wp_ajax_mj_member_register_event', [$this, 'registerEvent']);
         add_action('wp_ajax_mj_member_unregister_event', [$this, 'unregisterEvent']);
+        add_action('wp_ajax_mj_member_calendar_print_prefs_save', [$this, 'saveCalendarPrintPreferences']);
         add_action('wp_ajax_nopriv_mj_member_ajax_login', [$this, 'login']);
+    }
+
+    /**
+     * AJAX: Save calendar print display preferences for current user.
+     */
+    public function saveCalendarPrintPreferences(): void {
+        if (!wp_doing_ajax()) {
+            return;
+        }
+
+        check_ajax_referer('mj_member_calendar_print_prefs', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(
+                array('message' => __('Connecte-toi pour sauvegarder tes préférences.', 'mj-member')),
+                401
+            );
+        }
+
+        $prefs_json = isset($_POST['prefs']) ? wp_unslash((string) $_POST['prefs']) : '';
+        $decoded = json_decode($prefs_json, true);
+        if (!is_array($decoded)) {
+            wp_send_json_error(
+                array('message' => __('Préférences invalides.', 'mj-member')),
+                400
+            );
+        }
+
+        $prefs = self::sanitizePrintPreferences($decoded);
+        update_user_meta(get_current_user_id(), 'mj_member_calendar_print_prefs', $prefs);
+
+        wp_send_json_success(array('prefs' => $prefs));
+    }
+
+    /**
+     * Sanitize persisted print preferences payload.
+     *
+     * @param array<string,mixed> $prefs
+     * @return array<string,mixed>
+     */
+    private static function sanitizePrintPreferences(array $prefs): array {
+        $out = array();
+
+        $bool_fields = array(
+            'details',
+            'cover',
+            'timeRange',
+            'eventEmoji',
+            'eventColor',
+            'pageBreak',
+        );
+        foreach ($bool_fields as $field) {
+            if (array_key_exists($field, $prefs)) {
+                $out[$field] = (bool) $prefs[$field];
+            }
+        }
+
+        if (isset($prefs['mode'])) {
+            $mode = sanitize_key((string) $prefs['mode']);
+            if (in_array($mode, array('week', 'month'), true)) {
+                $out['mode'] = $mode;
+            }
+        }
+
+        if (isset($prefs['span'])) {
+            $span = (int) $prefs['span'];
+            if ($span < 1) {
+                $span = 1;
+            }
+            if ($span > 12) {
+                $span = 12;
+            }
+            $out['span'] = $span;
+        }
+
+        $range_fields = array(
+            'padPage' => array(0, 24),
+            'padDay' => array(0, 16),
+            'padEvent' => array(0, 16),
+        );
+        foreach ($range_fields as $field => $bounds) {
+            if (!isset($prefs[$field])) {
+                continue;
+            }
+            $value = (int) $prefs[$field];
+            if ($value < $bounds[0]) {
+                $value = $bounds[0];
+            }
+            if ($value > $bounds[1]) {
+                $value = $bounds[1];
+            }
+            $out[$field] = $value;
+        }
+
+        if (isset($prefs['monthKey'])) {
+            $month_key = trim((string) $prefs['monthKey']);
+            if (preg_match('/^\d{4}-\d{2}$/', $month_key)) {
+                $out['monthKey'] = $month_key;
+            }
+        }
+
+        if (isset($prefs['weekStartKey'])) {
+            $week_key = trim((string) $prefs['weekStartKey']);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $week_key)) {
+                $out['weekStartKey'] = $week_key;
+            }
+        }
+
+        if (isset($prefs['selectedTypes']) && is_array($prefs['selectedTypes'])) {
+            $selected_types = array();
+            foreach ($prefs['selectedTypes'] as $type_key) {
+                if (!is_scalar($type_key)) {
+                    continue;
+                }
+                $clean = sanitize_key((string) $type_key);
+                if ($clean !== '') {
+                    $selected_types[$clean] = true;
+                }
+                if (count($selected_types) >= 50) {
+                    break;
+                }
+            }
+            $out['selectedTypes'] = array_keys($selected_types);
+        }
+
+        return $out;
     }
 
     /**

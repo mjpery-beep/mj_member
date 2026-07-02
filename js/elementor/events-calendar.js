@@ -514,6 +514,11 @@
         var printMonthEntries = [];
         var printWeekEntries = [];
         var printConfig = (config && config.print) ? config.print : {};
+        var printPrefsEnabled = !!(printConfig && printConfig.userPrefsEnabled && printConfig.ajaxUrl && printConfig.prefsNonce);
+        var printPrefsFromServer = (printConfig && printConfig.userPrefs && typeof printConfig.userPrefs === 'object') ? printConfig.userPrefs : null;
+        var printPrefsSaveTimer = null;
+        var isApplyingPrintPrefs = false;
+        var hasAppliedPrintPrefs = false;
         var todayMonthKey = root.getAttribute('data-calendar-today') || '';
         if (config && config.todayMonth) {
             todayMonthKey = config.todayMonth;
@@ -1148,7 +1153,10 @@
                 printTypeFiltersWrap.appendChild(labelEl);
                 printTypeFilterInputs.push(checkbox);
 
-                checkbox.addEventListener('change', refreshPrintPreview);
+                checkbox.addEventListener('change', function() {
+                    refreshPrintPreview();
+                    queueSavePrintPrefs();
+                });
             });
         }
 
@@ -1175,6 +1183,137 @@
             }
 
             return selected;
+        }
+
+        function applyPrintPrefsToInputs(prefs) {
+            if (!prefs || typeof prefs !== 'object') {
+                return;
+            }
+
+            isApplyingPrintPrefs = true;
+
+            if (printModeInput && (prefs.mode === 'week' || prefs.mode === 'month')) {
+                printModeInput.value = prefs.mode;
+            }
+            if (printSpanInput && typeof prefs.span !== 'undefined') {
+                printSpanInput.value = String(prefs.span);
+            }
+            if (printDetailsInput && typeof prefs.details !== 'undefined') {
+                printDetailsInput.checked = !!prefs.details;
+            }
+            if (printCoverInput && typeof prefs.cover !== 'undefined') {
+                printCoverInput.checked = !!prefs.cover;
+            }
+            if (printTimeRangeInput && typeof prefs.timeRange !== 'undefined') {
+                printTimeRangeInput.checked = !!prefs.timeRange;
+            }
+            if (printEventEmojiInput && typeof prefs.eventEmoji !== 'undefined') {
+                printEventEmojiInput.checked = !!prefs.eventEmoji;
+            }
+            if (printEventColorInput && typeof prefs.eventColor !== 'undefined') {
+                printEventColorInput.checked = !!prefs.eventColor;
+            }
+            if (printPageBreakInput && typeof prefs.pageBreak !== 'undefined') {
+                printPageBreakInput.checked = !!prefs.pageBreak;
+            }
+            if (printPadPageInput && typeof prefs.padPage !== 'undefined') {
+                printPadPageInput.value = String(prefs.padPage);
+            }
+            if (printPadDayInput && typeof prefs.padDay !== 'undefined') {
+                printPadDayInput.value = String(prefs.padDay);
+            }
+            if (printPadEventInput && typeof prefs.padEvent !== 'undefined') {
+                printPadEventInput.value = String(prefs.padEvent);
+            }
+
+            if (typeof prefs.monthKey === 'string' && /^\d{4}-\d{2}$/.test(prefs.monthKey)) {
+                printSelectedMonthKey = prefs.monthKey;
+            }
+            if (typeof prefs.weekStartKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(prefs.weekStartKey)) {
+                printSelectedWeekStartKey = prefs.weekStartKey;
+            }
+
+            renderPrintPeriodSelectors();
+
+            if (Array.isArray(prefs.selectedTypes) && printTypeFilterInputs && printTypeFilterInputs.length) {
+                var selectedMap = {};
+                prefs.selectedTypes.forEach(function(typeKey) {
+                    var clean = String(typeKey || '').trim();
+                    if (clean) {
+                        selectedMap[clean] = true;
+                    }
+                });
+                printTypeFilterInputs.forEach(function(input) {
+                    var key = (input.getAttribute('data-print-type-filter') || '').trim();
+                    input.checked = Object.prototype.hasOwnProperty.call(selectedMap, key);
+                });
+            }
+
+            isApplyingPrintPrefs = false;
+        }
+
+        function collectPrintPrefsFromInputs() {
+            var selectedTypes = [];
+            if (printTypeFilterInputs && printTypeFilterInputs.length) {
+                printTypeFilterInputs.forEach(function(input) {
+                    if (!input || !input.checked) {
+                        return;
+                    }
+                    var typeKey = (input.getAttribute('data-print-type-filter') || '').trim();
+                    if (typeKey) {
+                        selectedTypes.push(typeKey);
+                    }
+                });
+            }
+
+            return {
+                mode: getPrintMode(),
+                span: getPrintSpan(),
+                details: isDetailsEnabled(),
+                cover: isCoverEnabled(),
+                timeRange: isTimeRangeEnabled(),
+                eventEmoji: isEventEmojiEnabled(),
+                eventColor: isEventColorEnabled(),
+                pageBreak: isPageBreakEnabled(),
+                padPage: getPrintPaddingValue(printPadPageInput, 0, 24, 10),
+                padDay: getPrintPaddingValue(printPadDayInput, 0, 16, 6),
+                padEvent: getPrintPaddingValue(printPadEventInput, 0, 16, 6),
+                monthKey: printSelectedMonthKey || '',
+                weekStartKey: printSelectedWeekStartKey || '',
+                selectedTypes: selectedTypes
+            };
+        }
+
+        function savePrintPrefsNow() {
+            if (!printPrefsEnabled || isApplyingPrintPrefs || !printConfig || !printConfig.ajaxUrl || !printConfig.prefsNonce) {
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('action', 'mj_member_calendar_print_prefs_save');
+            formData.append('nonce', String(printConfig.prefsNonce));
+            formData.append('prefs', JSON.stringify(collectPrintPrefsFromInputs()));
+
+            fetch(printConfig.ajaxUrl, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            }).catch(function() {
+                // Silent fail: preview remains functional even if persistence fails.
+            });
+        }
+
+        function queueSavePrintPrefs() {
+            if (!printPrefsEnabled || isApplyingPrintPrefs) {
+                return;
+            }
+            if (printPrefsSaveTimer) {
+                clearTimeout(printPrefsSaveTimer);
+            }
+            printPrefsSaveTimer = setTimeout(function() {
+                printPrefsSaveTimer = null;
+                savePrintPrefsNow();
+            }, 350);
         }
 
         function getDayNodeByKey(dayKey) {
@@ -1399,17 +1538,11 @@
             var labels = (printConfig && printConfig.labels) ? printConfig.labels : {};
             var weekdayLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
-            if (!periods.length) {
-                blocks.push('<p class="mj-print-empty">' + escapeHtml(labels.empty || 'Aucun événement à imprimer pour cette sélection.') + '</p>');
-            } else {
+            if (periods.length) {
                 periods.forEach(function(period, idx) {
                     var periodHtml = [];
                     periodHtml.push('<section class="mj-print-period' + (options.pageBreak && idx < periods.length - 1 ? ' has-break' : '') + '">');
                     periodHtml.push('<h2>' + escapeHtml(period.title) + '</h2>');
-
-                    if (!hasEventsInPeriod(period)) {
-                        periodHtml.push('<p class="mj-print-empty">' + escapeHtml(labels.empty || 'Aucun événement à imprimer pour cette sélection.') + '</p>');
-                    }
 
                     periodHtml.push('<div class="mj-print-cal">');
                     periodHtml.push('<div class="mj-print-cal__weekdays">');
@@ -1577,6 +1710,10 @@
             buildPrintPeriodEntries();
             setDefaultPrintPeriodSelection();
             renderPrintPeriodSelectors();
+            if (!hasAppliedPrintPrefs && printPrefsFromServer) {
+                applyPrintPrefsToInputs(printPrefsFromServer);
+                hasAppliedPrintPrefs = true;
+            }
             refreshPrintPreview();
             printModal.hidden = false;
             document.body.style.overflow = 'hidden';
@@ -1688,6 +1825,7 @@
                 updatePrintPageBreakLabel();
                 renderPrintPeriodSelectors();
                 refreshPrintPreview();
+                queueSavePrintPrefs();
             });
         }
 
@@ -1695,6 +1833,7 @@
             printMonthYearInput.addEventListener('change', function() {
                 renderPrintPeriodSelectors();
                 refreshPrintPreview();
+                queueSavePrintPrefs();
             });
         }
 
@@ -1702,6 +1841,7 @@
             printMonthInput.addEventListener('change', function() {
                 printSelectedMonthKey = (printMonthInput.value || '').trim();
                 refreshPrintPreview();
+                queueSavePrintPrefs();
             });
         }
 
@@ -1709,6 +1849,7 @@
             printWeekYearInput.addEventListener('change', function() {
                 renderPrintPeriodSelectors();
                 refreshPrintPreview();
+                queueSavePrintPrefs();
             });
         }
 
@@ -1716,57 +1857,104 @@
             printWeekInput.addEventListener('change', function() {
                 printSelectedWeekStartKey = (printWeekInput.value || '').trim();
                 refreshPrintPreview();
+                queueSavePrintPrefs();
             });
         }
 
         if (printSpanInput) {
-            printSpanInput.addEventListener('input', refreshPrintPreview);
-            printSpanInput.addEventListener('change', refreshPrintPreview);
+            printSpanInput.addEventListener('input', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+            printSpanInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         if (printPadPageInput) {
-            printPadPageInput.addEventListener('input', refreshPrintPreview);
-            printPadPageInput.addEventListener('change', refreshPrintPreview);
+            printPadPageInput.addEventListener('input', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+            printPadPageInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         if (printPadDayInput) {
-            printPadDayInput.addEventListener('input', refreshPrintPreview);
-            printPadDayInput.addEventListener('change', refreshPrintPreview);
+            printPadDayInput.addEventListener('input', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+            printPadDayInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         if (printPadEventInput) {
-            printPadEventInput.addEventListener('input', refreshPrintPreview);
-            printPadEventInput.addEventListener('change', refreshPrintPreview);
+            printPadEventInput.addEventListener('input', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+            printPadEventInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         if (printDetailsInput) {
-            printDetailsInput.addEventListener('change', refreshPrintPreview);
+            printDetailsInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         if (printCoverInput) {
-            printCoverInput.addEventListener('change', refreshPrintPreview);
+            printCoverInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         if (printTimeRangeInput) {
-            printTimeRangeInput.addEventListener('change', refreshPrintPreview);
+            printTimeRangeInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         if (printEventEmojiInput) {
-            printEventEmojiInput.addEventListener('change', refreshPrintPreview);
+            printEventEmojiInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         if (printEventColorInput) {
-            printEventColorInput.addEventListener('change', refreshPrintPreview);
+            printEventColorInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         if (printPageBreakInput) {
-            printPageBreakInput.addEventListener('change', refreshPrintPreview);
+            printPageBreakInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
         }
 
         renderPrintTypeFilters();
         buildPrintPeriodEntries();
         setDefaultPrintPeriodSelection();
         renderPrintPeriodSelectors();
+        if (!hasAppliedPrintPrefs && printPrefsFromServer) {
+            applyPrintPrefsToInputs(printPrefsFromServer);
+            hasAppliedPrintPrefs = true;
+        }
 
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape' && printModal && !printModal.hidden) {

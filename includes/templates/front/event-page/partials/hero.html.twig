@@ -11,6 +11,7 @@
 {% set price_label = hero.price_label|default('') %}
 {% set inline_schedule_html = hero.inline_schedule_html|default('') %}
 {% set schedule_preview = hero.schedule_preview|default('') %}
+{% set schedule_preview_rows = hero.schedule_preview_rows|default([]) %}
 {% set next_occurrence = hero.next_occurrence|default({}) %}
 {% set next_occurrence_label = hero.next_occurrence_label|default('') %}
 {% set photo_items = photos.items|default([]) %}
@@ -32,7 +33,27 @@
             {% if inline_schedule_html %}
                 {{ inline_schedule_html|raw }}
             {% elseif schedule_preview %}
-                <p class="mj-event-page__date mj-event-page__date--preview">{{ schedule_preview|nl2br }}</p>
+                {% if schedule_preview_rows|length > 0 %}
+                    <div class="mj-event-page__schedule-preview-list">
+                        {% for row in schedule_preview_rows %}
+                            {% set row_animateur = row.animateur|default(null) %}
+                            <div class="mj-event-page__schedule-preview-row">
+                                <p class="mj-event-page__date mj-event-page__date--preview">{{ row.text|default('') }}</p>
+                                {% if row_animateur and row_animateur.name|default('') %}
+                                    <span class="mj-event-page__schedule-animateur-avatar" title="{{ row_animateur.name|esc_attr }}" aria-label="{{ row_animateur.name|esc_attr }}">
+                                        {% if row_animateur.avatar_url|default('') %}
+                                            <img src="{{ row_animateur.avatar_url|esc_url }}" alt="" loading="lazy" decoding="async" />
+                                        {% else %}
+                                            <span class="mj-event-page__schedule-animateur-initials">{{ row_animateur.initials|default('?') }}</span>
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="mj-event-page__date mj-event-page__date--preview">{{ schedule_preview|nl2br }}</p>
+                {% endif %}
             {% elseif schedule_summary %}
                 <p class="mj-event-page__date">{{ schedule_summary }}</p>
             {% elseif display_label %}

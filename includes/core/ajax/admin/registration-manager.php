@@ -7236,6 +7236,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                     'min_start' => $start_at,
                     'max_end' => $end_at,
                     'count' => 0,
+                    'single_row' => null,
                 );
             }
 
@@ -7246,6 +7247,62 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 $stats_by_batch[$batch_storage_id]['max_end'] = $end_at;
             }
             $stats_by_batch[$batch_storage_id]['count']++;
+
+            $raw_meta = isset($row['meta']) ? $row['meta'] : array();
+            $row_meta = is_array($raw_meta)
+                ? $raw_meta
+                : (is_string($raw_meta) && $raw_meta !== '' ? json_decode($raw_meta, true) : null);
+            $row_meta = is_array($row_meta) ? $row_meta : array();
+
+            $single_location_id = 0;
+            if (isset($row_meta['location_id'])) {
+                $single_location_id = (int) $row_meta['location_id'];
+            } elseif (isset($row_meta['assigned_location_id'])) {
+                $single_location_id = (int) $row_meta['assigned_location_id'];
+            }
+
+            $single_location_name = '';
+            if (isset($row_meta['location_label']) && !is_array($row_meta['location_label'])) {
+                $single_location_name = sanitize_text_field((string) $row_meta['location_label']);
+            } elseif (isset($row_meta['assigned_location_name']) && !is_array($row_meta['assigned_location_name'])) {
+                $single_location_name = sanitize_text_field((string) $row_meta['assigned_location_name']);
+            }
+
+            $single_member_ids = array();
+            if (isset($row_meta['responsible_member_ids']) && is_array($row_meta['responsible_member_ids'])) {
+                $single_member_ids = $row_meta['responsible_member_ids'];
+            } elseif (isset($row_meta['assigned_member_ids']) && is_array($row_meta['assigned_member_ids'])) {
+                $single_member_ids = $row_meta['assigned_member_ids'];
+            } elseif (isset($row_meta['assigned_member_id'])) {
+                $single_member_ids = array($row_meta['assigned_member_id']);
+            }
+            $single_member_ids = array_values(array_unique(array_filter(array_map(static function ($member_id) {
+                return (int) $member_id;
+            }, $single_member_ids), static function ($member_id) {
+                return $member_id > 0;
+            })));
+
+            $single_member_names = array();
+            if (isset($row_meta['responsible_member_names']) && is_array($row_meta['responsible_member_names'])) {
+                $single_member_names = $row_meta['responsible_member_names'];
+            } elseif (isset($row_meta['assigned_member_names']) && is_array($row_meta['assigned_member_names'])) {
+                $single_member_names = $row_meta['assigned_member_names'];
+            } elseif (isset($row_meta['assigned_member_name']) && !is_array($row_meta['assigned_member_name'])) {
+                $single_member_names = array($row_meta['assigned_member_name']);
+            }
+            $single_member_names = array_values(array_unique(array_filter(array_map(static function ($member_name) {
+                return is_array($member_name) ? '' : sanitize_text_field((string) $member_name);
+            }, $single_member_names), static function ($member_name) {
+                return $member_name !== '';
+            })));
+
+            $stats_by_batch[$batch_storage_id]['single_row'] = array(
+                'status' => isset($row['status']) ? sanitize_key((string) $row['status']) : '',
+                'location_id' => $single_location_id,
+                'location_name' => $single_location_name,
+                'member_ids' => $single_member_ids,
+                'member_names' => $single_member_names,
+            );
         }
 
         foreach ($batch_rows as $batch_row) {
@@ -7289,6 +7346,98 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 ? $summary_raw
                 : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
             $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+
+            if ((int) $stats['count'] === 1) {
+                $single_row = isset($stats['single_row']) && is_array($stats['single_row'])
+                    ? $stats['single_row']
+                    : array();
+
+                $single_start_time = substr((string) $stats['min_start'], 11, 5);
+                $single_end_time = substr((string) $stats['max_end'], 11, 5);
+                if ($this->sanitizeTimeValue($single_start_time) !== '') {
+                    $config_arr['startTime'] = $single_start_time;
+                }
+                if ($this->sanitizeTimeValue($single_end_time) !== '') {
+                    $config_arr['endTime'] = $single_end_time;
+                }
+
+                $single_status_db = isset($single_row['status']) ? sanitize_key((string) $single_row['status']) : '';
+                if ($single_status_db !== '') {
+                    $single_status_front = $this->occurrenceStatusToFront($single_status_db);
+                    $summary_arr['generated_occurrence_status'] = $single_status_front;
+                    $config_arr['occurrenceStatus'] = $single_status_front;
+                }
+
+                $single_location_id = isset($single_row['location_id']) ? (int) $single_row['location_id'] : 0;
+                $single_location_name = isset($single_row['location_name'])
+                    ? sanitize_text_field((string) $single_row['location_name'])
+                    : '';
+
+                if ($single_location_id > 0) {
+                    $summary_arr['assigned_location_id'] = $single_location_id;
+                    if ($single_location_name === '' && class_exists(MjEventLocations::class)) {
+                        $location = MjEventLocations::find($single_location_id);
+                        if ($location && isset($location->name)) {
+                            $single_location_name = sanitize_text_field((string) $location->name);
+                        }
+                    }
+                    if ($single_location_name !== '') {
+                        $summary_arr['assigned_location_name'] = $single_location_name;
+                    } else {
+                        unset($summary_arr['assigned_location_name']);
+                    }
+                } else {
+                    unset($summary_arr['assigned_location_id']);
+                    unset($summary_arr['assigned_location_name']);
+                }
+
+                $single_member_ids = isset($single_row['member_ids']) && is_array($single_row['member_ids'])
+                    ? $single_row['member_ids']
+                    : array();
+                $single_member_ids = array_values(array_unique(array_filter(array_map(static function ($member_id) {
+                    return (int) $member_id;
+                }, $single_member_ids), static function ($member_id) {
+                    return $member_id > 0;
+                })));
+
+                $single_member_names = isset($single_row['member_names']) && is_array($single_row['member_names'])
+                    ? $single_row['member_names']
+                    : array();
+                $single_member_names = array_values(array_unique(array_filter(array_map(static function ($member_name) {
+                    return is_array($member_name) ? '' : sanitize_text_field((string) $member_name);
+                }, $single_member_names), static function ($member_name) {
+                    return $member_name !== '';
+                })));
+
+                if (!empty($single_member_ids)) {
+                    if (empty($single_member_names)) {
+                        foreach ($single_member_ids as $member_id) {
+                            $member = MjMembers::getById((int) $member_id);
+                            if (!$member) {
+                                continue;
+                            }
+                            $member_name = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
+                            if ($member_name === '') {
+                                $member_name = sprintf(__('Membre #%d', 'mj-member'), (int) $member_id);
+                            }
+                            $single_member_names[] = sanitize_text_field($member_name);
+                        }
+                        $single_member_names = array_values(array_unique($single_member_names));
+                    }
+
+                    $summary_arr['assigned_member_ids'] = $single_member_ids;
+                    $summary_arr['assigned_member_names'] = $single_member_names;
+                    $summary_arr['assigned_member_id'] = (int) $single_member_ids[0];
+                    $summary_arr['assigned_member_name'] = !empty($single_member_names)
+                        ? (string) $single_member_names[0]
+                        : '';
+                } else {
+                    unset($summary_arr['assigned_member_ids']);
+                    unset($summary_arr['assigned_member_names']);
+                    unset($summary_arr['assigned_member_id']);
+                    unset($summary_arr['assigned_member_name']);
+                }
+            }
 
             $mode = isset($config_arr['mode']) ? sanitize_key((string) $config_arr['mode']) : '';
             if (in_array($mode, array('manual_single', 'manual_range'), true)) {

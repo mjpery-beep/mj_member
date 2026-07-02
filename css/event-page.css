@@ -323,6 +323,47 @@
     color: var(--mj-event-text-muted);
 }
 
+.mj-event-page__schedule-preview-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: nowrap;
+}
+
+.mj-event-page__schedule-preview-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.mj-event-page__schedule-animateur-avatar {
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 9999px;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--mj-event-border) 75%, #fff 25%);
+    background: var(--mj-event-surface-alt);
+    color: var(--mj-event-text-muted);
+    flex-shrink: 0;
+}
+
+.mj-event-page__schedule-animateur-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.mj-event-page__schedule-animateur-initials {
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
 /* Weekly Schedule */
 .mj-event-page__weekly-schedule {
     margin-top: 0.5rem;
