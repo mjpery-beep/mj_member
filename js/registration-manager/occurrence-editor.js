@@ -33,6 +33,8 @@
     function OccurrenceEncoderPanel(props) {
         var event = props.event || null;
         var occurrencesProp = Array.isArray(props.occurrences) ? props.occurrences : [];
+        var calendarContextEventsProp = Array.isArray(props.calendarContextEvents) ? props.calendarContextEvents : [];
+        var calendarContextQuery = props.calendarContextQuery && typeof props.calendarContextQuery === 'object' ? props.calendarContextQuery : {};
         var strings = props.strings || {};
         var locale = props.locale || 'fr';
         var initialViewMode = sanitizeOccurrenceViewMode(props.initialViewMode);
@@ -49,6 +51,10 @@
         var _isPersisting = useState(false);
         var isPersisting = _isPersisting[0];
         var setIsPersisting = _isPersisting[1];
+
+        var _remoteCalendarContextEvents = useState([]);
+        var remoteCalendarContextEvents = _remoteCalendarContextEvents[0];
+        var setRemoteCalendarContextEvents = _remoteCalendarContextEvents[1];
 
         var resolvedLocale = useMemo(function () {
             return resolveLocaleTag(locale);
@@ -169,6 +175,83 @@
             return map;
         }, [localOccurrences]);
 
+        var calendarContextFilter = useMemo(function () {
+            return Array.isArray(calendarContextQuery.filter) ? calendarContextQuery.filter : [];
+        }, [calendarContextQuery.filter]);
+
+        var calendarContextFilterKey = useMemo(function () {
+            return calendarContextFilter.join('|');
+        }, [calendarContextFilter]);
+
+        var calendarContextSearch = typeof calendarContextQuery.search === 'string' ? calendarContextQuery.search : '';
+        var calendarContextSort = typeof calendarContextQuery.sort === 'string' && calendarContextQuery.sort !== '' ? calendarContextQuery.sort : 'date';
+        var calendarContextSortOrder = typeof calendarContextQuery.sortOrder === 'string' ? calendarContextQuery.sortOrder : '';
+        var calendarContextVisibleRange = useMemo(function () {
+            return computeCalendarContextVisibleRange(pivotDate, viewMode);
+        }, [pivotDate, viewMode]);
+
+        useEffect(function () {
+            if (!apiPost) {
+                setRemoteCalendarContextEvents([]);
+                return;
+            }
+            if (!calendarContextVisibleRange || !calendarContextVisibleRange.start || !calendarContextVisibleRange.end) {
+                setRemoteCalendarContextEvents([]);
+                return;
+            }
+
+            var isCancelled = false;
+            apiPost('mj_regmgr_get_calendar_context_events', {
+                filter: calendarContextFilter,
+                search: calendarContextSearch,
+                sort: calendarContextSort,
+                sortOrder: calendarContextSortOrder,
+                since: calendarContextVisibleRange.start,
+                until: calendarContextVisibleRange.end,
+            }).then(function (response) {
+                if (isCancelled) {
+                    return;
+                }
+                var items = response && Array.isArray(response.items) ? response.items : [];
+                setRemoteCalendarContextEvents(Array.isArray(items) ? items : []);
+            }).catch(function () {
+                if (isCancelled) {
+                    return;
+                }
+                setRemoteCalendarContextEvents([]);
+            });
+
+            return function () {
+                isCancelled = true;
+            };
+        }, [apiPost, calendarContextFilter, calendarContextFilterKey, calendarContextSearch, calendarContextSort, calendarContextSortOrder, calendarContextVisibleRange]);
+
+        var contextualCalendarEvents = useMemo(function () {
+            var sourceItems = remoteCalendarContextEvents.length > 0 ? remoteCalendarContextEvents : calendarContextEventsProp;
+            return sourceItems
+                .map(function (item, index) {
+                    return normalizeContextCalendarEvent(item, event, index, strings);
+                })
+                .filter(function (item) { return !!item; });
+        }, [remoteCalendarContextEvents, calendarContextEventsProp, event, strings]);
+
+        var contextualEventsByDate = useMemo(function () {
+            var map = {};
+            contextualCalendarEvents.forEach(function (item) {
+                var dates = buildIsoDateRange(item.startIso, item.endIso);
+                if (!dates.length && item.startIso) {
+                    dates = [item.startIso];
+                }
+                dates.forEach(function (dateIso) {
+                    if (!map[dateIso]) {
+                        map[dateIso] = [];
+                    }
+                    map[dateIso].push(item);
+                });
+            });
+            return map;
+        }, [contextualCalendarEvents]);
+
         var selectedOccurrence = useMemo(function () {
             if (!selectedOccurrenceId) {
                 return null;
@@ -249,23 +332,23 @@
             if (viewMode !== 'quarter') {
                 return [];
             }
-            return buildQuarterMonths(pivotDate, resolvedLocale, occurrencesByDate, selectedOccurrenceId);
-        }, [pivotDate, resolvedLocale, occurrencesByDate, selectedOccurrenceId, viewMode]);
+            return buildQuarterMonths(pivotDate, resolvedLocale, occurrencesByDate, contextualEventsByDate, selectedOccurrenceId);
+        }, [pivotDate, resolvedLocale, occurrencesByDate, contextualEventsByDate, selectedOccurrenceId, viewMode]);
 
         var singleMonthOverview = useMemo(function () {
             if (!(pivotDate instanceof Date) || Number.isNaN(pivotDate.getTime())) {
                 return null;
             }
             var monthDate = new Date(pivotDate.getFullYear(), pivotDate.getMonth(), 1);
-            return buildMonthOverview(monthDate, resolvedLocale, occurrencesByDate, selectedOccurrenceId);
-        }, [pivotDate, resolvedLocale, occurrencesByDate, selectedOccurrenceId]);
+            return buildMonthOverview(monthDate, resolvedLocale, occurrencesByDate, contextualEventsByDate, selectedOccurrenceId);
+        }, [pivotDate, resolvedLocale, occurrencesByDate, contextualEventsByDate, selectedOccurrenceId]);
 
         var weekOverview = useMemo(function () {
             if (viewMode !== 'week') {
                 return null;
             }
-            return buildWeekOverview(pivotDate, occurrencesByDate, selectedOccurrenceId);
-        }, [pivotDate, occurrencesByDate, selectedOccurrenceId, viewMode]);
+            return buildWeekOverview(pivotDate, occurrencesByDate, contextualEventsByDate, selectedOccurrenceId);
+        }, [pivotDate, occurrencesByDate, contextualEventsByDate, selectedOccurrenceId, viewMode]);
 
         var calendarMonths = viewMode === 'month'
             ? (singleMonthOverview ? [singleMonthOverview] : [])
@@ -1962,14 +2045,22 @@
                 h('div', { class: 'mj-regmgr-occurrence__card' }, [
                 selectedOccurrence && selectedDayOccurrences.length > 1 && h('div', { class: 'mj-regmgr-occurrence__occurrence-list' }, selectedDayOccurrences.map(function (item) {
                     var chipStatus = item && typeof item.status === 'string' ? normalizeOccurrenceStatus(item.status) : '';
+                    var chipTimeLabel = formatPreviewRange(item.startTime, item.endTime, !!item.isAllDay, getString(strings, 'occurrenceAllDayLabel', 'Toute la journée'));
+                    var chipLabel = buildOccurrenceChipLabel(item, chipTimeLabel);
                     return h('button', {
                         key: item.id,
                         type: 'button',
                         class: classNames('mj-regmgr-occurrence__occurrence-chip', {
                             'mj-regmgr-occurrence__occurrence-chip--active': item.id === selectedOccurrenceId,
                         }, chipStatus ? 'mj-regmgr-occurrence__occurrence-chip--status-' + chipStatus : null),
+                        title: buildOccurrenceTooltip(item, {
+                            strings: strings,
+                            locale: resolvedLocale,
+                            statusLabelMap: statusLabelMap,
+                        }),
+                        'aria-label': chipLabel,
                         onClick: function () { setSelectedOccurrenceId(item.id); },
-                    }, formatPreviewRange(item.startTime, item.endTime, !!item.isAllDay, getString(strings, 'occurrenceAllDayLabel', 'Toute la journée')));
+                    }, chipLabel);
                 })),
                 h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
                     h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceDateLabel', 'Date')),
@@ -3220,6 +3311,44 @@
                                         },
                                     }, [
                                         h('span', { class: 'mj-regmgr-occurrence__day-number' }, day.label),
+                                        day.otherEvents && day.otherEvents.length > 0 && h('div', {
+                                            style: {
+                                                marginTop: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                flexWrap: 'wrap',
+                                                minHeight: '10px',
+                                            },
+                                            title: day.otherEvents.map(function (item) {
+                                                return buildContextCalendarEventTooltip(item);
+                                            }).join('\n\n'),
+                                        }, [
+                                            day.otherEvents.slice(0, 4).map(function (item) {
+                                                var dotColor = resolveContextCalendarEventColor(item);
+                                                return h('span', {
+                                                    key: day.iso + '-ctx-' + item.id,
+                                                    style: {
+                                                        width: '7px',
+                                                        height: '7px',
+                                                        borderRadius: '999px',
+                                                        background: dotColor,
+                                                        boxShadow: '0 0 0 1px rgba(255,255,255,0.95)',
+                                                        flex: '0 0 auto',
+                                                        opacity: 0.82,
+                                                    },
+                                                    'aria-hidden': true,
+                                                });
+                                            }),
+                                            day.otherEvents.length > 4 && h('span', {
+                                                style: {
+                                                    fontSize: '10px',
+                                                    fontWeight: 700,
+                                                    color: '#64748b',
+                                                    lineHeight: 1,
+                                                },
+                                            }, '+' + String(day.otherEvents.length - 4)),
+                                        ]),
                                         rangeSelection && isIsoDateInsideRange(day.iso, rangeSelection.startIso, rangeSelection.endIso) && h('div', {
                                             style: {
                                                 marginTop: '5px',
@@ -3241,7 +3370,7 @@
                                                 flexDirection: 'column',
                                                 gap: '3px',
                                             },
-                                        }, day.occurrences.slice(0, 4).map(function (occurrence, occurrenceIndex) {
+                                        }, day.occurrences.map(function (occurrence, occurrenceIndex) {
                                             var chipBatchId = getOccurrenceBatchId(occurrence);
                                             var chipBatchSize = chipBatchId
                                                 ? localOccurrences.filter(function (item) { return getOccurrenceBatchId(item) === chipBatchId; }).length
@@ -3263,6 +3392,13 @@
                                                 }
                                             }
                                             var chipIsConnected = chipBatchSize > 1;
+                                            var occurrenceTimeLabel = formatPreviewRange(
+                                                occurrence.startTime,
+                                                occurrence.endTime,
+                                                !!occurrence.isAllDay,
+                                                getString(strings, 'occurrenceAllDayLabel', 'Toute la journée')
+                                            );
+                                            var occurrenceChipLabel = buildOccurrenceChipLabel(occurrence, occurrenceTimeLabel);
                                             return h('div', {
                                                 key: day.iso + '-occ-chip-' + occurrence.id + '-' + occurrenceIndex,
                                                 draggable: true,
@@ -3321,13 +3457,23 @@
                                                     minHeight: '18px',
                                                     zIndex: chipIsConnected ? 3 : 2,
                                                 },
-                                                title: (occurrence.title || occurrence.noteCalendar || formatPreviewRange(
-                                                    occurrence.startTime,
-                                                    occurrence.endTime,
-                                                    !!occurrence.isAllDay,
-                                                    getString(strings, 'occurrenceAllDayLabel', 'Toute la journée')
-                                                )),
-                                            }, []);
+                                                title: buildOccurrenceTooltip(occurrence, {
+                                                    strings: strings,
+                                                    locale: resolvedLocale,
+                                                    statusLabelMap: statusLabelMap,
+                                                }),
+                                                'aria-label': occurrenceChipLabel,
+                                            }, [
+                                                h('span', {
+                                                    style: {
+                                                        display: 'block',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap',
+                                                        fontWeight: 600,
+                                                    },
+                                                }, occurrenceChipLabel),
+                                            ]);
                                         })),
                                     ]);
                                 }));
@@ -3387,6 +3533,52 @@
                                         combinedLabel && h('span', { class: 'mj-regmgr-occurrence__week-column-title' }, combinedLabel),
                                         day.timeSummary && h('span', { class: 'mj-regmgr-occurrence__week-column-summary' }, day.timeSummary),
                                         hasOccurrences && h('span', { class: 'mj-regmgr-occurrence__week-column-count' }, day.occurrences.length),
+                                        day.otherEvents && day.otherEvents.length > 0 && h('div', {
+                                            style: {
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                gap: '4px',
+                                                marginTop: '6px',
+                                            },
+                                        }, day.otherEvents.slice(0, 2).map(function (item) {
+                                            var pillColor = resolveContextCalendarEventColor(item);
+                                            var pillBg = hexToRgba(pillColor, 0.12) || 'rgba(100, 116, 139, 0.12)';
+                                            return h('span', {
+                                                key: day.iso + '-ctx-pill-' + item.id,
+                                                title: buildContextCalendarEventTooltip(item),
+                                                style: {
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    maxWidth: '100%',
+                                                    padding: '2px 7px',
+                                                    borderRadius: '999px',
+                                                    background: pillBg,
+                                                    color: pillColor,
+                                                    boxShadow: 'inset 0 0 0 1px ' + (hexToRgba(pillColor, 0.22) || 'rgba(100, 116, 139, 0.22)'),
+                                                    fontSize: '10px',
+                                                    fontWeight: 600,
+                                                    lineHeight: 1.2,
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                },
+                                            }, buildContextCalendarEventShortLabel(item));
+                                        }).concat(day.otherEvents.length > 2 ? [h('span', {
+                                            key: day.iso + '-ctx-more',
+                                            style: {
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                padding: '2px 6px',
+                                                borderRadius: '999px',
+                                                background: 'rgba(100, 116, 139, 0.08)',
+                                                color: '#64748b',
+                                                fontSize: '10px',
+                                                fontWeight: 700,
+                                            },
+                                            title: day.otherEvents.map(function (item) {
+                                                return buildContextCalendarEventTooltip(item);
+                                            }).join('\n\n'),
+                                        }, '+' + String(day.otherEvents.length - 2))] : [])),
                                     ]),
                                     h('div', {
                                         class: 'mj-regmgr-occurrence__week-column-body',
@@ -3449,12 +3641,18 @@
                                             }
                                             var statusKey = occurrence.status ? normalizeOccurrenceStatus(occurrence.status) : 'planned';
                                             var isSelectedBlock = selectedOccurrenceId === occurrence.id;
-                                            var ariaLabel = formatTimeRange(
+                                            var blockTimeLabel = formatTimeRange(
                                                 occurrence.startTime,
                                                 occurrence.endTime,
                                                 !!occurrence.isAllDay,
                                                 getString(strings, 'occurrenceAllDayLabel', 'Toute la journée')
                                             );
+                                            var blockTitleLabel = buildOccurrencePrimaryLabel(occurrence, blockTimeLabel);
+                                            var blockTooltip = buildOccurrenceTooltip(occurrence, {
+                                                strings: strings,
+                                                locale: resolvedLocale,
+                                                statusLabelMap: statusLabelMap,
+                                            });
                                             return h('button', {
                                                 key: occurrence.id,
                                                 type: 'button',
@@ -3500,7 +3698,8 @@
                                                 onMouseLeave: function () {
                                                     setHoveredBatchId('');
                                                 },
-                                                'aria-label': ariaLabel,
+                                                title: blockTooltip,
+                                                'aria-label': blockTooltip,
                                             }, [
                                                 h('span', {
                                                     onPointerDown: function (event) {
@@ -3517,12 +3716,8 @@
                                                         cursor: 'ns-resize',
                                                     },
                                                 }),
-                                                h('span', { class: 'mj-regmgr-occurrence__week-block-time' }, formatPreviewRange(
-                                                    occurrence.startTime,
-                                                    occurrence.endTime,
-                                                    !!occurrence.isAllDay,
-                                                    getString(strings, 'occurrenceAllDayLabel', 'Toute la journée')
-                                                )),
+                                                h('span', { class: 'mj-regmgr-occurrence__week-block-time' }, blockTimeLabel),
+                                                blockTitleLabel !== blockTimeLabel && h('span', { class: 'mj-regmgr-occurrence__week-block-status' }, blockTitleLabel),
                                                 statusLabelMap[statusKey] && h('span', { class: 'mj-regmgr-occurrence__week-block-status' }, statusLabelMap[statusKey]),
                                                 occurrence.status === 'cancelled' && occurrence.reason && h('span', { class: 'mj-regmgr-occurrence__week-block-reason' }, occurrence.reason),
                                                 h('span', {
@@ -3828,6 +4023,177 @@
             return 0;
         });
         return normalised;
+    }
+
+    function buildOccurrencePrimaryLabel(occurrence, fallbackLabel) {
+        if (occurrence && typeof occurrence.title === 'string' && occurrence.title.trim() !== '') {
+            return occurrence.title.trim();
+        }
+        if (occurrence && typeof occurrence.noteCalendar === 'string' && occurrence.noteCalendar.trim() !== '') {
+            return occurrence.noteCalendar.trim();
+        }
+        if (occurrence && typeof occurrence.noteSchedule === 'string' && occurrence.noteSchedule.trim() !== '') {
+            return occurrence.noteSchedule.trim();
+        }
+        return fallbackLabel || '';
+    }
+
+    function buildOccurrenceChipLabel(occurrence, timeLabel) {
+        var primaryLabel = buildOccurrencePrimaryLabel(occurrence, timeLabel);
+        if (!timeLabel || primaryLabel === timeLabel) {
+            return primaryLabel;
+        }
+        return timeLabel + ' • ' + primaryLabel;
+    }
+
+    function buildOccurrenceTooltip(occurrence, options) {
+        var strings = options && options.strings ? options.strings : null;
+        var locale = options && typeof options.locale === 'string' ? options.locale : 'fr';
+        var statusLabelMap = options && options.statusLabelMap ? options.statusLabelMap : null;
+        var allDayLabel = getString(strings, 'occurrenceAllDayLabel', 'Toute la journée');
+        var dateLabel = occurrence && occurrence.date ? occurrence.date : '';
+        var parsedDate = parseISODate(dateLabel);
+        if (parsedDate) {
+            try {
+                dateLabel = capitalizeLabel(parsedDate.toLocaleDateString(locale, {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                }));
+            } catch (error) {
+                dateLabel = capitalizeLabel(parsedDate.toLocaleDateString('fr', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                }));
+            }
+        }
+        var timeLabel = formatTimeRange(
+            occurrence ? occurrence.startTime : '',
+            occurrence ? occurrence.endTime : '',
+            !!(occurrence && occurrence.isAllDay),
+            allDayLabel
+        );
+        var primaryLabel = buildOccurrencePrimaryLabel(occurrence, timeLabel);
+        var statusKey = normalizeOccurrenceStatus(occurrence && occurrence.status);
+        var statusLabel = statusLabelMap && statusLabelMap[statusKey]
+            ? statusLabelMap[statusKey]
+            : (statusKey ? statusKey : '');
+        var lines = [];
+        if (primaryLabel) {
+            lines.push(primaryLabel);
+        }
+        if (dateLabel) {
+            lines.push(dateLabel);
+        }
+        if (timeLabel && timeLabel !== primaryLabel) {
+            lines.push(timeLabel);
+        }
+        if (statusLabel) {
+            lines.push(statusLabel);
+        }
+        if (occurrence && typeof occurrence.reason === 'string' && occurrence.reason.trim() !== '') {
+            lines.push(getString(strings, 'occurrenceCancelReasonLabel', 'Raison') + ': ' + occurrence.reason.trim());
+        }
+        return lines.join('\n');
+    }
+
+    function normalizeContextCalendarEvent(sourceEvent, currentEvent, index, strings) {
+        if (!sourceEvent) {
+            return null;
+        }
+        if (currentEvent && sourceEvent.id && currentEvent.id && Number(sourceEvent.id) === Number(currentEvent.id)) {
+            return null;
+        }
+        var startDate = parseISODateTime(sourceEvent.dateDebut || sourceEvent.start_date || sourceEvent.startDate || sourceEvent.start);
+        var endDate = parseISODateTime(sourceEvent.dateFin || sourceEvent.end_date || sourceEvent.endDate || sourceEvent.end);
+        if (!startDate) {
+            return null;
+        }
+        if (!endDate || Number.isNaN(endDate.getTime())) {
+            endDate = new Date(startDate.getTime());
+        }
+        var startIso = formatISODate(startDate);
+        var endIso = formatISODate(endDate);
+        var normalizedRange = normalizeIsoDateRange(startIso, endIso);
+        var title = typeof sourceEvent.title === 'string' && sourceEvent.title.trim() !== ''
+            ? sourceEvent.title.trim()
+            : getString(strings, 'eventUntitled', 'Sans titre');
+        var emoji = typeof sourceEvent.emoji === 'string' ? sourceEvent.emoji.trim() : '';
+        return {
+            id: sourceEvent.id ? String(sourceEvent.id) : 'context-event-' + index,
+            title: title,
+            emoji: emoji,
+            status: typeof sourceEvent.status === 'string' ? sourceEvent.status : '',
+            type: typeof sourceEvent.type === 'string' ? sourceEvent.type : '',
+            accentColor: resolveContextCalendarEventColorValue(sourceEvent),
+            startIso: normalizedRange ? normalizedRange.start : startIso,
+            endIso: normalizedRange ? normalizedRange.end : endIso,
+            scheduleDetail: typeof sourceEvent.scheduleDetail === 'string' ? sourceEvent.scheduleDetail.trim() : '',
+            scheduleSummary: typeof sourceEvent.scheduleSummary === 'string' ? sourceEvent.scheduleSummary.trim() : '',
+        };
+    }
+
+    function buildContextCalendarEventShortLabel(event) {
+        if (!event) {
+            return '';
+        }
+        var prefix = event.emoji ? (event.emoji + ' ') : '';
+        return prefix + event.title;
+    }
+
+    function buildContextCalendarEventTooltip(event) {
+        if (!event) {
+            return '';
+        }
+        var lines = [buildContextCalendarEventShortLabel(event)];
+        if (event.startIso && event.endIso) {
+            lines.push(event.startIso === event.endIso ? event.startIso : (event.startIso + ' → ' + event.endIso));
+        }
+        if (event.scheduleDetail) {
+            lines.push(event.scheduleDetail);
+        } else if (event.scheduleSummary) {
+            lines.push(event.scheduleSummary);
+        }
+        return lines.join('\n');
+    }
+
+    function resolveContextCalendarEventColorValue(sourceEvent) {
+        if (!sourceEvent || typeof sourceEvent !== 'object') {
+            return '';
+        }
+        var candidate = sourceEvent.accentColor || sourceEvent.accent_color || sourceEvent.typeColor || sourceEvent.type_color || '';
+        return isValidHexColor(candidate) ? candidate : '';
+    }
+
+    function resolveContextCalendarEventColor(event) {
+        if (event && isValidHexColor(event.accentColor)) {
+            return event.accentColor;
+        }
+        return '#64748b';
+    }
+
+    function isValidHexColor(value) {
+        return typeof value === 'string' && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim());
+    }
+
+    function hexToRgba(hex, alpha) {
+        if (!isValidHexColor(hex)) {
+            return '';
+        }
+        var normalized = hex.trim().replace('#', '');
+        if (normalized.length === 3) {
+            normalized = normalized.split('').map(function (part) { return part + part; }).join('');
+        }
+        var red = parseInt(normalized.slice(0, 2), 16);
+        var green = parseInt(normalized.slice(2, 4), 16);
+        var blue = parseInt(normalized.slice(4, 6), 16);
+        if ([red, green, blue].some(function (part) { return Number.isNaN(part); })) {
+            return '';
+        }
+        return 'rgba(' + red + ', ' + green + ', ' + blue + ', ' + alpha + ')';
     }
 
     function formatDateForLocale(date, locale, includeMonth, includeYear) {
@@ -4679,7 +5045,7 @@
         return 'fr';
     }
 
-    function buildQuarterMonths(pivotDate, locale, occurrencesByDate, selectedId) {
+    function buildQuarterMonths(pivotDate, locale, occurrencesByDate, contextualEventsByDate, selectedId) {
         if (!(pivotDate instanceof Date) || Number.isNaN(pivotDate.getTime())) {
             return [];
         }
@@ -4687,9 +5053,42 @@
         var base = new Date(pivotDate.getFullYear(), pivotDate.getMonth(), 1);
         for (var offset = 0; offset < 4; offset++) {
             var monthDate = new Date(base.getFullYear(), base.getMonth() + offset, 1);
-            months.push(buildMonthOverview(monthDate, locale, occurrencesByDate, selectedId));
+            months.push(buildMonthOverview(monthDate, locale, occurrencesByDate, contextualEventsByDate, selectedId));
         }
         return months;
+    }
+
+    function computeCalendarContextVisibleRange(pivotDate, viewMode) {
+        if (!(pivotDate instanceof Date) || Number.isNaN(pivotDate.getTime())) {
+            return null;
+        }
+
+        if (viewMode === 'week') {
+            var weekStart = alignDateToWeekStart(pivotDate);
+            var weekEnd = addDays(weekStart, 6);
+            return {
+                start: formatISODate(weekStart),
+                end: formatISODate(weekEnd),
+            };
+        }
+
+        var firstVisibleMonth = new Date(pivotDate.getFullYear(), pivotDate.getMonth(), 1);
+        var lastVisibleMonth = viewMode === 'quarter'
+            ? new Date(pivotDate.getFullYear(), pivotDate.getMonth() + 3, 1)
+            : firstVisibleMonth;
+
+        var firstDay = new Date(firstVisibleMonth.getFullYear(), firstVisibleMonth.getMonth(), 1);
+        var startOffset = (firstDay.getDay() + 6) % 7;
+        var visibleStart = new Date(firstVisibleMonth.getFullYear(), firstVisibleMonth.getMonth(), 1 - startOffset);
+
+        var lastDay = new Date(lastVisibleMonth.getFullYear(), lastVisibleMonth.getMonth() + 1, 0);
+        var endOffset = (7 - ((lastDay.getDay() + 6) % 7) - 1 + 7) % 7;
+        var visibleEnd = new Date(lastVisibleMonth.getFullYear(), lastVisibleMonth.getMonth(), lastDay.getDate() + endOffset);
+
+        return {
+            start: formatISODate(visibleStart),
+            end: formatISODate(visibleEnd),
+        };
     }
 
     function alignDateToWeekStart(date) {
@@ -4704,7 +5103,7 @@
         return reference;
     }
 
-    function buildWeekOverview(pivotDate, occurrencesByDate, selectedId) {
+    function buildWeekOverview(pivotDate, occurrencesByDate, contextualEventsByDate, selectedId) {
         if (!(pivotDate instanceof Date) || Number.isNaN(pivotDate.getTime())) {
             return null;
         }
@@ -4719,6 +5118,7 @@
             current.setHours(0, 0, 0, 0);
             var iso = formatISODate(current);
             var sourceList = occurrencesByDate[iso] || [];
+            var otherEvents = Array.isArray(contextualEventsByDate[iso]) ? contextualEventsByDate[iso] : [];
             var occurrences = [];
             sourceList.forEach(function (occ, index) {
                 if (!occ) {
@@ -4762,6 +5162,7 @@
                 weekdayIndex: weekdayIndex,
                 dayNumber: current.getDate(),
                 occurrences: occurrences,
+                otherEvents: otherEvents,
                 timeSummary: deriveOccurrenceTimeSummary(occurrences),
                 status: dayStatus,
                 isSelected: isSelected,
@@ -4784,7 +5185,7 @@
         };
     }
 
-    function buildMonthOverview(monthDate, locale, occurrencesByDate, selectedId) {
+    function buildMonthOverview(monthDate, locale, occurrencesByDate, contextualEventsByDate, selectedId) {
         var month = monthDate.getMonth();
         var year = monthDate.getFullYear();
         var monthLabel;
@@ -4805,6 +5206,7 @@
                 var current = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + (weekIndex * 7) + dayIndex);
                 var iso = formatISODate(current);
                 var list = occurrencesByDate[iso] || [];
+                var otherEvents = Array.isArray(contextualEventsByDate[iso]) ? contextualEventsByDate[iso] : [];
                 var dayStatus = deriveDayStatus(list);
                 var isSelected = selectedId ? list.some(function (item) { return item.id === selectedId; }) : false;
                 var timeSummary = deriveOccurrenceTimeSummary(list);
@@ -4815,6 +5217,7 @@
                     isToday: isSameDate(current, today),
                     hasOccurrences: list.length > 0,
                     occurrences: list,
+                    otherEvents: otherEvents,
                     isSelected: isSelected,
                     timeSummary: timeSummary,
                     status: dayStatus,

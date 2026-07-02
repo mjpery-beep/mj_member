@@ -6217,6 +6217,13 @@
                                         key: selectedEvent ? (occurrenceTabKey + '-' + selectedEvent.id) : occurrenceTabKey,
                                         event: eventDetails,
                                         occurrences: Array.isArray(eventDetails.occurrences) ? eventDetails.occurrences : [],
+                                        calendarContextEvents: events,
+                                        calendarContextQuery: {
+                                            filter: filter,
+                                            search: search,
+                                            sort: eventSort,
+                                            sortOrder: eventSortOrder,
+                                        },
                                         strings: strings,
                                         locale: config.locale || 'fr',
                                         onPersistOccurrences: handlePersistEventOccurrences,

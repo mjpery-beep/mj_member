@@ -91,6 +91,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         self::$currentInstance = $this;
 
         add_action('wp_ajax_mj_regmgr_get_events', [$this, 'getEvents']);
+        add_action('wp_ajax_mj_regmgr_get_calendar_context_events', [$this, 'getCalendarContextEvents']);
         add_action('wp_ajax_mj_regmgr_get_event_details', [$this, 'getEventDetails']);
         add_action('wp_ajax_nopriv_mj_regmgr_get_event_details', [$this, 'getEventDetails']);
         add_action('wp_ajax_mj_regmgr_get_event_photos', [$this, 'getEventPhotos']);
@@ -2408,6 +2409,211 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'perPage' => $per_page,
                 'totalPages' => $total > 0 ? ceil($total / $per_page) : 1,
             ),
+        ));
+    }
+
+    public function getCalendarContextEvents() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        $since = isset($_POST['since']) ? sanitize_text_field((string) $_POST['since']) : '';
+        $until = isset($_POST['until']) ? sanitize_text_field((string) $_POST['until']) : '';
+        if ($since === '' || $until === '') {
+            wp_send_json_error(array('message' => __('Période calendrier invalide.', 'mj-member')), 400);
+            return;
+        }
+
+        $since_ts = strtotime($since);
+        $until_ts = strtotime($until . ' 23:59:59');
+        if ($since_ts === false || $until_ts === false || $until_ts < $since_ts) {
+            wp_send_json_error(array('message' => __('Période calendrier invalide.', 'mj-member')), 400);
+            return;
+        }
+
+        $raw_filter = isset($_POST['filter']) ? $_POST['filter'] : null;
+        if (is_array($raw_filter)) {
+            $active_filters = array_filter(array_map('sanitize_key', $raw_filter), function($v) { return $v !== ''; });
+        } elseif (is_string($raw_filter) && $raw_filter !== '') {
+            $single = sanitize_key($raw_filter);
+            $active_filters = ($single !== '' && $single !== 'all') ? array($single) : array();
+        } else {
+            $active_filters = array('assigned');
+        }
+
+        $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+        $sort = isset($_POST['sort']) ? sanitize_key($_POST['sort']) : 'date';
+        $sort_order_param = isset($_POST['sortOrder']) ? strtoupper(sanitize_key($_POST['sortOrder'])) : '';
+        $sort_map = array(
+            'date'  => 'date_debut',
+            'title' => 'title',
+            'type'  => 'type',
+            'status' => 'status',
+            'created' => 'created_at',
+        );
+        $orderby = isset($sort_map[$sort]) ? $sort_map[$sort] : 'date_debut';
+        $default_order = ($sort === 'title') ? 'ASC' : 'DESC';
+        $order = in_array($sort_order_param, array('ASC', 'DESC'), true) ? $sort_order_param : $default_order;
+        $now = current_time('mysql');
+
+        $use_assigned = in_array('assigned', $active_filters, true);
+        $use_favorites = in_array('favorites', $active_filters, true);
+        $favorite_event_ids = array();
+        if ($use_favorites) {
+            $fav_events = get_user_meta(get_current_user_id(), '_mj_regmgr_fav_events', true);
+            $favorite_event_ids = is_array($fav_events) ? array_map('intval', $fav_events) : array();
+        }
+
+        $status_constraints = array();
+        $type_constraints = array();
+        $use_after = false;
+        foreach ($active_filters as $f) {
+            switch ($f) {
+                case 'upcoming':
+                    $status_constraints[] = MjEvents::STATUS_ACTIVE;
+                    $use_after = true;
+                    break;
+                case 'past':
+                    $status_constraints[] = MjEvents::STATUS_PAST;
+                    break;
+                case 'draft':
+                    $status_constraints[] = MjEvents::STATUS_DRAFT;
+                    break;
+                case 'internal':
+                    $type_constraints[] = MjEvents::TYPE_INTERNE;
+                    break;
+            }
+        }
+
+        $events = array();
+        if ($use_assigned) {
+            $assigned_args = array(
+                'orderby' => $orderby,
+                'order' => $order,
+            );
+            if (!empty($status_constraints)) {
+                $assigned_args['statuses'] = array_unique($status_constraints);
+            } else {
+                $assigned_args['statuses'] = array(MjEvents::STATUS_ACTIVE);
+            }
+            $all_assigned = MjEventAnimateurs::get_events_for_member($auth['member_id'], $assigned_args);
+            if ($search !== '') {
+                $search_lower = mb_strtolower($search);
+                $all_assigned = array_filter($all_assigned, function($event) use ($search_lower) {
+                    return mb_strpos(mb_strtolower((string) $event->title), $search_lower) !== false;
+                });
+            }
+            if (!empty($type_constraints)) {
+                $all_assigned = array_filter($all_assigned, function($event) use ($type_constraints) {
+                    return isset($event->type) && in_array($event->type, $type_constraints, true);
+                });
+            }
+            if ($use_after) {
+                $all_assigned = array_filter($all_assigned, function($event) use ($now) {
+                    return isset($event->date_debut) && $event->date_debut >= $now;
+                });
+            }
+            if ($use_favorites) {
+                if (empty($favorite_event_ids)) {
+                    $all_assigned = array();
+                } else {
+                    $all_assigned = array_filter($all_assigned, function($event) use ($favorite_event_ids) {
+                        return isset($event->id) && in_array((int) $event->id, $favorite_event_ids, true);
+                    });
+                }
+            }
+            $events = array_values($all_assigned);
+        } else {
+            $args = array(
+                'search' => $search,
+                'orderby' => $orderby,
+                'order' => $order,
+                'limit' => 500,
+                'offset' => 0,
+            );
+            if (!empty($status_constraints)) {
+                $args['statuses'] = array_unique($status_constraints);
+            }
+            if (!empty($type_constraints)) {
+                $args['types'] = array_unique($type_constraints);
+            }
+            if ($use_after) {
+                $args['after'] = $now;
+            }
+            if ($use_favorites) {
+                $args['ids'] = empty($favorite_event_ids) ? array(0) : $favorite_event_ids;
+            }
+            $events = MjEvents::get_all($args);
+        }
+
+        $type_labels = MjEvents::get_type_labels();
+        $status_labels = MjEvents::get_status_labels();
+        $items = array();
+
+        foreach ($events as $event) {
+            if (!$event) {
+                continue;
+            }
+            $summary = $this->buildEventSidebarItem($event, $type_labels, $status_labels);
+            if (!$summary) {
+                continue;
+            }
+
+            $raw_occurrences = array();
+            if (class_exists(MjEventSchedule::class)) {
+                $raw_occurrences = MjEventSchedule::get_occurrences(
+                    $event,
+                    array(
+                        'since' => $since,
+                        'until' => $until,
+                        'include_past' => true,
+                        'include_cancelled' => true,
+                        'max' => 400,
+                    )
+                );
+            }
+
+            $occurrences = $this->formatEventOccurrencesForFront($raw_occurrences);
+            if (empty($occurrences)) {
+                continue;
+            }
+
+            foreach ($occurrences as $occurrence) {
+                $start_value = isset($occurrence['start']) ? (string) $occurrence['start'] : '';
+                if ($start_value === '') {
+                    continue;
+                }
+                $start_ts = strtotime($start_value);
+                if ($start_ts === false || $start_ts < $since_ts || $start_ts > $until_ts) {
+                    continue;
+                }
+
+                $items[] = array(
+                    'id' => $summary['id'] . ':' . $occurrence['id'],
+                    'eventId' => $summary['id'],
+                    'title' => isset($summary['title']) ? (string) $summary['title'] : '',
+                    'emoji' => isset($summary['emoji']) ? (string) $summary['emoji'] : '',
+                    'type' => isset($summary['type']) ? (string) $summary['type'] : '',
+                    'typeLabel' => isset($summary['typeLabel']) ? (string) $summary['typeLabel'] : '',
+                    'status' => isset($summary['status']) ? (string) $summary['status'] : '',
+                    'accentColor' => isset($summary['accentColor']) ? (string) $summary['accentColor'] : '',
+                    'start' => $start_value,
+                    'end' => isset($occurrence['end']) ? (string) $occurrence['end'] : '',
+                    'date' => isset($occurrence['date']) ? (string) $occurrence['date'] : substr($start_value, 0, 10),
+                    'startTime' => isset($occurrence['startTime']) ? (string) $occurrence['startTime'] : '',
+                    'endTime' => isset($occurrence['endTime']) ? (string) $occurrence['endTime'] : '',
+                    'isAllDay' => !empty($occurrence['isAllDay']),
+                    'reason' => isset($occurrence['reason']) ? (string) $occurrence['reason'] : '',
+                    'noteCalendar' => isset($occurrence['noteCalendar']) ? (string) $occurrence['noteCalendar'] : '',
+                    'scheduleSummary' => isset($summary['scheduleSummary']) ? (string) $summary['scheduleSummary'] : '',
+                    'scheduleDetail' => isset($summary['scheduleDetail']) ? (string) $summary['scheduleDetail'] : '',
+                );
+            }
+        }
+
+        wp_send_json_success(array(
+            'items' => $items,
         ));
     }
 
