@@ -41,10 +41,11 @@
         var onPersistOccurrences = typeof props.onPersistOccurrences === 'function' ? props.onPersistOccurrences : null;
         var apiPost = typeof props.apiPost === 'function' ? props.apiPost : null;
         var onBatchesUpdate = typeof props.onBatchesUpdate === 'function' ? props.onBatchesUpdate : null;
-        var globalLocationOptions = Array.isArray(props.globalLocationOptions) ? props.globalLocationOptions : [];
-        var globalMemberOptions = Array.isArray(props.globalMemberOptions) ? props.globalMemberOptions : [];
+        var globalLocationOptions = props.globalLocationOptions || null;
+        var globalMemberOptions = props.globalMemberOptions || null;
+        var globalVolunteerOptions = props.globalVolunteerOptions || null;
 
-        var _loadedGlobalOptions = useState({ locations: [], members: [] });
+        var _loadedGlobalOptions = useState({ locations: [], members: [], volunteers: [] });
         var loadedGlobalOptions = _loadedGlobalOptions[0];
         var setLoadedGlobalOptions = _loadedGlobalOptions[1];
 
@@ -786,21 +787,14 @@
         }, [generationHistory]);
 
         var lotLocationOptions = useMemo(function () {
-            var rawOptions = globalLocationOptions.length > 0 ? globalLocationOptions : loadedGlobalOptions.locations;
-            if (Array.isArray(rawOptions) && rawOptions.length > 0) {
-                return rawOptions
-                    .map(function (option) {
-                        if (!option || typeof option !== 'object') {
-                            return null;
-                        }
-                        var locId = option.id !== undefined ? parseInt(option.id, 10) : parseInt(option.value || option.location_id || '0', 10);
-                        var locName = option.name || option.label || option.text || '';
-                        if (locId <= 0 || !locName) {
-                            return null;
-                        }
-                        return { id: locId, name: String(locName) };
-                    })
-                    .filter(function (option) { return !!option; });
+            var parsedGlobal = normalizeSelectableOptions(globalLocationOptions, 'location');
+            if (parsedGlobal.length > 0) {
+                return parsedGlobal;
+            }
+
+            var parsedLoaded = normalizeSelectableOptions(loadedGlobalOptions.locations, 'location');
+            if (parsedLoaded.length > 0) {
+                return parsedLoaded;
             }
 
             var map = {};
@@ -830,21 +824,18 @@
         }, [globalLocationOptions, loadedGlobalOptions.locations, event && event.locationLinks, event && event.location]);
 
         var lotMemberOptions = useMemo(function () {
-            var rawMembers = globalMemberOptions.length > 0 ? globalMemberOptions : loadedGlobalOptions.members;
-            if (Array.isArray(rawMembers) && rawMembers.length > 0) {
-                return rawMembers
-                    .map(function (member) {
-                        if (!member || typeof member !== 'object') {
-                            return null;
-                        }
-                        var memberId = member.id !== undefined ? parseInt(member.id, 10) : parseInt(member.value || member.member_id || '0', 10);
-                        var memberName = member.name || member.label || member.text || '';
-                        if (memberId <= 0 || !memberName) {
-                            return null;
-                        }
-                        return { id: memberId, name: String(memberName) };
-                    })
-                    .filter(function (member) { return !!member; });
+            var parsedGlobalAnimateurs = normalizeSelectableOptions(globalMemberOptions, 'member');
+            var parsedGlobalVolunteers = normalizeSelectableOptions(globalVolunteerOptions, 'member');
+            var mergedGlobal = mergeSelectableOptions(parsedGlobalAnimateurs, parsedGlobalVolunteers);
+            if (mergedGlobal.length > 0) {
+                return mergedGlobal;
+            }
+
+            var parsedLoadedAnimateurs = normalizeSelectableOptions(loadedGlobalOptions.members, 'member');
+            var parsedLoadedVolunteers = normalizeSelectableOptions(loadedGlobalOptions.volunteers, 'member');
+            var mergedLoaded = mergeSelectableOptions(parsedLoadedAnimateurs, parsedLoadedVolunteers);
+            if (mergedLoaded.length > 0) {
+                return mergedLoaded;
             }
 
             if (!event || !Array.isArray(event.animateurs)) {
@@ -860,7 +851,7 @@
                     return { id: memberId, name: memberName };
                 })
                 .filter(function (member) { return !!member; });
-        }, [globalMemberOptions, loadedGlobalOptions.members, event && event.animateurs]);
+        }, [globalMemberOptions, globalVolunteerOptions, loadedGlobalOptions.members, loadedGlobalOptions.volunteers, event && event.animateurs]);
 
         var locationNameById = useMemo(function () {
             var map = {};
@@ -1108,7 +1099,9 @@
             if (!apiPost || eventId <= 0) {
                 return;
             }
-            if (globalLocationOptions.length > 0 || globalMemberOptions.length > 0) {
+            if ((globalLocationOptions && (Array.isArray(globalLocationOptions) ? globalLocationOptions.length > 0 : Object.keys(globalLocationOptions).length > 0))
+                || (globalMemberOptions && (Array.isArray(globalMemberOptions) ? globalMemberOptions.length > 0 : Object.keys(globalMemberOptions).length > 0))
+                || (globalVolunteerOptions && (Array.isArray(globalVolunteerOptions) ? globalVolunteerOptions.length > 0 : Object.keys(globalVolunteerOptions).length > 0))) {
                 return;
             }
 
@@ -1116,14 +1109,15 @@
                 .then(function (data) {
                     var options = data && data.form && data.form.options ? data.form.options : {};
                     setLoadedGlobalOptions({
-                        locations: Array.isArray(options.locations) ? options.locations : [],
-                        members: Array.isArray(options.animateurs) ? options.animateurs : [],
+                        locations: options.locations || [],
+                        members: options.animateurs || [],
+                        volunteers: options.volunteers || [],
                     });
                 })
                 .catch(function () {
                     // Keep graceful fallback to event-specific options.
                 });
-        }, [apiPost, event && event.id, globalLocationOptions, globalMemberOptions]);
+        }, [apiPost, event && event.id, globalLocationOptions, globalMemberOptions, globalVolunteerOptions]);
 
         var lastSavedSchedulePreviewRef = useRef(null);
         useEffect(function () {
@@ -2040,7 +2034,7 @@
                     }
                 },
                 title: editorCardTitle,
-                size: 'large',
+                size: 'medium',
             }, [
                 h('div', { class: 'mj-regmgr-occurrence__card' }, [
                 selectedOccurrence && selectedDayOccurrences.length > 1 && h('div', { class: 'mj-regmgr-occurrence__occurrence-list' }, selectedDayOccurrences.map(function (item) {
@@ -2089,6 +2083,52 @@
                         placeholder: getString(strings, 'occurrenceTitlePlaceholder', 'Ex: Stage découverte'),
                         onInput: function (event) { handleEditorChange('title', event.currentTarget.value); },
                     }),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceLocationLabel', 'Lieu de cette occurrence')),
+                    h('select', {
+                        class: 'mj-regmgr-occurrence__input',
+                        value: String(editorState.locationId || ''),
+                        onInput: function (event) { handleEditorChange('locationId', event.currentTarget.value); },
+                    }, [
+                        h('option', { value: '' }, getString(strings, 'occurrenceLocationDefault', 'Lieu par défaut de l\'événement')),
+                    ].concat(lotLocationOptions.map(function (option) {
+                        return h('option', { key: 'occ-location-' + option.id, value: String(option.id) }, option.name);
+                    }))),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceResponsiblesLabel', 'Responsables (animateur, coordinateur, bénévole)')),
+                    lotMemberOptions.length === 0
+                        ? h('p', { class: 'mj-regmgr-occurrence__hint', style: { margin: 0 } }, getString(strings, 'occurrenceResponsiblesEmpty', 'Aucun membre disponible.'))
+                        : h('div', {
+                            style: {
+                                display: 'grid',
+                                gap: '6px',
+                                maxHeight: '180px',
+                                overflowY: 'auto',
+                                padding: '8px 10px',
+                                border: '1px solid rgba(148, 163, 184, 0.35)',
+                                borderRadius: '10px',
+                                background: '#fff',
+                            },
+                        }, lotMemberOptions.map(function (memberOption) {
+                            var checked = Array.isArray(editorState.responsibleMemberIds)
+                                ? editorState.responsibleMemberIds.indexOf(memberOption.id) !== -1
+                                : false;
+                            return h('label', {
+                                key: 'occ-responsible-' + memberOption.id,
+                                style: { display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' },
+                            }, [
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: checked,
+                                    onChange: function (event) {
+                                        handleToggleResponsibleMember(memberOption.id, !!event.currentTarget.checked);
+                                    },
+                                }),
+                                h('span', null, memberOption.name),
+                            ]);
+                        })),
                 ]),
                 h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
                     h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceTypeLabel', 'Type')),
@@ -2698,6 +2738,39 @@
             });
         }, []);
 
+        var handleToggleResponsibleMember = useCallback(function (memberId, checked) {
+            var normalizedMemberId = parseInt(memberId, 10);
+            if (Number.isNaN(normalizedMemberId) || normalizedMemberId <= 0) {
+                return;
+            }
+            setEditorState(function (prev) {
+                var next = Object.assign({}, prev);
+                var existing = Array.isArray(next.responsibleMemberIds) ? next.responsibleMemberIds.slice() : [];
+                var nextIds;
+                if (checked) {
+                    if (existing.indexOf(normalizedMemberId) === -1) {
+                        existing.push(normalizedMemberId);
+                    }
+                    nextIds = existing;
+                } else {
+                    nextIds = existing.filter(function (id) {
+                        return parseInt(id, 10) !== normalizedMemberId;
+                    });
+                }
+                next.responsibleMemberIds = nextIds;
+                return next;
+            });
+        }, []);
+
+        var openEditorForOccurrence = useCallback(function (occurrence) {
+            if (!occurrence || !occurrence.id) {
+                return;
+            }
+            setSelectedOccurrenceId(occurrence.id);
+            setEditorState(createEditorState(occurrence));
+            openOccurrenceEditor(occurrence.date || '');
+        }, [setSelectedOccurrenceId, setEditorState, openOccurrenceEditor]);
+
         var handleCancelEdit = useCallback(function () {
             modalReopenGuardUntilRef.current = Date.now() + 300;
             occurrenceEditorModal.close();
@@ -2716,6 +2789,27 @@
             var resolvedStartTime = isAllDayOccurrence ? '00:00' : editorState.startTime;
             var resolvedEndTime = isAllDayOccurrence ? '23:59' : editorState.endTime;
             var titleValue = typeof editorState.title === 'string' ? editorState.title.trim() : '';
+            var locationId = parseInt(editorState.locationId, 10);
+            if (Number.isNaN(locationId) || locationId < 0) {
+                locationId = 0;
+            }
+            var locationLabel = locationId > 0 && locationNameById[locationId]
+                ? String(locationNameById[locationId])
+                : '';
+            var responsibleMemberIds = Array.isArray(editorState.responsibleMemberIds)
+                ? editorState.responsibleMemberIds
+                    .map(function (value) { return parseInt(value, 10); })
+                    .filter(function (value) { return !Number.isNaN(value) && value > 0; })
+                : [];
+            var uniqueResponsibleMemberIds = [];
+            responsibleMemberIds.forEach(function (value) {
+                if (uniqueResponsibleMemberIds.indexOf(value) === -1) {
+                    uniqueResponsibleMemberIds.push(value);
+                }
+            });
+            var responsibleMemberNames = uniqueResponsibleMemberIds
+                .map(function (value) { return memberNameById[value] ? String(memberNameById[value]) : ''; })
+                .filter(function (value) { return value !== ''; });
             var previousList = cloneOccurrenceList(localOccurrences);
             var previousSelection = selectedOccurrenceId;
             if (editorState.id) {
@@ -2732,6 +2826,10 @@
                         reason: editorState.reason,
                         source: occ && occ.source ? occ.source : 'manual',
                         noteCalendar: titleValue,
+                        locationId: locationId,
+                        locationLabel: locationLabel,
+                        responsibleMemberIds: uniqueResponsibleMemberIds,
+                        responsibleMemberNames: responsibleMemberNames,
                     });
                 });
                 setLocalOccurrences(updatedList);
@@ -2764,6 +2862,10 @@
                         reason: editorState.reason,
                         source: 'manual',
                         noteCalendar: titleValue,
+                        locationId: locationId,
+                        locationLabel: locationLabel,
+                        responsibleMemberIds: uniqueResponsibleMemberIds,
+                        responsibleMemberNames: responsibleMemberNames,
                         createAsManualLot: true,
                         createAsManualLotGroup: manualLotGroup,
                         createAsManualLotMode: manualLotMode,
@@ -2783,7 +2885,7 @@
                     // Already handled by parent notifications
                 });
             }
-        }, [editorState, localOccurrences, selectedOccurrenceId, persistOccurrences]);
+        }, [editorState, localOccurrences, selectedOccurrenceId, persistOccurrences, locationNameById, memberNameById]);
 
         var handleDeleteOccurrence = useCallback(function (options) {
             if (!selectedOccurrenceId) {
@@ -3413,7 +3515,7 @@
                                                     if (event && typeof event.stopPropagation === 'function') {
                                                         event.stopPropagation();
                                                     }
-                                                    setSelectedOccurrenceId(occurrence.id);
+                                                    openEditorForOccurrence(occurrence);
                                                     setActiveBatchId(chipBatchId);
                                                 },
                                                 style: {
@@ -3636,8 +3738,8 @@
                                             var effectiveEnd = Math.min(weekTimeScale.max, Math.max(endMinutes, effectiveStart + 30));
                                             var blockTop = ((effectiveStart - weekTimeScale.min) / weekTimelineRange) * WEEK_VIEW_HEIGHT;
                                             var blockHeight = ((effectiveEnd - effectiveStart) / weekTimelineRange) * WEEK_VIEW_HEIGHT;
-                                            if (blockHeight < 24) {
-                                                blockHeight = 24;
+                                            if (blockHeight < 34) {
+                                                blockHeight = 34;
                                             }
                                             var statusKey = occurrence.status ? normalizeOccurrenceStatus(occurrence.status) : 'planned';
                                             var isSelectedBlock = selectedOccurrenceId === occurrence.id;
@@ -3683,7 +3785,7 @@
                                                 },
                                                 onClick: function (event) {
                                                     event.stopPropagation();
-                                                    setSelectedOccurrenceId(occurrence.id);
+                                                    openEditorForOccurrence(occurrence);
                                                     setActiveBatchId(getOccurrenceBatchId(occurrence));
                                                 },
                                                 onPointerDown: function (event) {
@@ -3710,7 +3812,7 @@
                                                         top: '-2px',
                                                         left: '8px',
                                                         right: '8px',
-                                                        height: '7px',
+                                                        height: '5px',
                                                         borderRadius: '8px',
                                                         background: 'rgba(255,255,255,0.62)',
                                                         cursor: 'ns-resize',
@@ -3729,7 +3831,7 @@
                                                         bottom: '-2px',
                                                         left: '8px',
                                                         right: '8px',
-                                                        height: '7px',
+                                                        height: '5px',
                                                         borderRadius: '8px',
                                                         background: 'rgba(255,255,255,0.62)',
                                                         cursor: 'ns-resize',
@@ -4093,6 +4195,12 @@
         }
         if (statusLabel) {
             lines.push(statusLabel);
+        }
+        if (occurrence && typeof occurrence.locationLabel === 'string' && occurrence.locationLabel.trim() !== '') {
+            lines.push(getString(strings, 'occurrenceTooltipLocation', 'Lieu') + ': ' + occurrence.locationLabel.trim());
+        }
+        if (occurrence && Array.isArray(occurrence.responsibleMemberNames) && occurrence.responsibleMemberNames.length > 0) {
+            lines.push(getString(strings, 'occurrenceTooltipResponsibles', 'Responsables') + ': ' + occurrence.responsibleMemberNames.join(', '));
         }
         if (occurrence && typeof occurrence.reason === 'string' && occurrence.reason.trim() !== '') {
             lines.push(getString(strings, 'occurrenceCancelReasonLabel', 'Raison') + ': ' + occurrence.reason.trim());
@@ -4672,6 +4780,92 @@
         });
     }
 
+    function normalizeSelectableOptions(source, kind) {
+        if (!source) {
+            return [];
+        }
+
+        var entries = [];
+        if (Array.isArray(source)) {
+            entries = source.slice();
+        } else if (typeof source === 'object') {
+            Object.keys(source).forEach(function (key) {
+                entries.push({
+                    id: key,
+                    value: key,
+                    label: source[key],
+                    name: source[key],
+                    text: source[key],
+                });
+            });
+        }
+
+        return entries
+            .map(function (entry) {
+                if (!entry || typeof entry !== 'object') {
+                    return null;
+                }
+
+                var idValue = 0;
+                if (entry.id !== undefined) {
+                    idValue = parseInt(entry.id, 10);
+                } else if (entry.value !== undefined) {
+                    idValue = parseInt(entry.value, 10);
+                } else if (kind === 'location' && entry.location_id !== undefined) {
+                    idValue = parseInt(entry.location_id, 10);
+                } else if (kind === 'member' && entry.member_id !== undefined) {
+                    idValue = parseInt(entry.member_id, 10);
+                }
+
+                var nameValue = '';
+                if (typeof entry.name === 'string' && entry.name.trim() !== '') {
+                    nameValue = entry.name.trim();
+                } else if (typeof entry.label === 'string' && entry.label.trim() !== '') {
+                    nameValue = entry.label.trim();
+                } else if (typeof entry.text === 'string' && entry.text.trim() !== '') {
+                    nameValue = entry.text.trim();
+                } else if (typeof entry.title === 'string' && entry.title.trim() !== '') {
+                    nameValue = entry.title.trim();
+                }
+
+                if (idValue <= 0 || nameValue === '') {
+                    return null;
+                }
+
+                return {
+                    id: idValue,
+                    name: String(nameValue),
+                };
+            })
+            .filter(function (entry) { return !!entry; });
+    }
+
+    function mergeSelectableOptions(primaryList, secondaryList) {
+        var merged = [];
+        var seen = {};
+
+        function pushList(list) {
+            if (!Array.isArray(list)) {
+                return;
+            }
+            list.forEach(function (item) {
+                if (!item || !item.id) {
+                    return;
+                }
+                var key = String(item.id);
+                if (seen[key]) {
+                    return;
+                }
+                seen[key] = true;
+                merged.push(item);
+            });
+        }
+
+        pushList(primaryList);
+        pushList(secondaryList);
+        return merged;
+    }
+
     function normalizeOccurrence(occurrence, index) {
         var start = parseISODateTime(occurrence && (occurrence.start || occurrence.start_time || occurrence.date));
         var end = parseISODateTime(occurrence && occurrence.end);
@@ -4715,6 +4909,78 @@
             titleValue = occurrence.note_calendar;
         }
 
+        var meta = occurrence && occurrence.meta && typeof occurrence.meta === 'object' && occurrence.meta !== null
+            ? occurrence.meta
+            : null;
+
+        var locationIdValue = 0;
+        if (occurrence && occurrence.locationId !== undefined) {
+            locationIdValue = parseInt(occurrence.locationId, 10);
+        } else if (occurrence && occurrence.location_id !== undefined) {
+            locationIdValue = parseInt(occurrence.location_id, 10);
+        } else if (meta && meta.location_id !== undefined) {
+            locationIdValue = parseInt(meta.location_id, 10);
+        } else if (meta && meta.assigned_location_id !== undefined) {
+            locationIdValue = parseInt(meta.assigned_location_id, 10);
+        }
+        if (Number.isNaN(locationIdValue) || locationIdValue < 0) {
+            locationIdValue = 0;
+        }
+
+        var locationLabelValue = '';
+        if (occurrence && typeof occurrence.locationLabel === 'string') {
+            locationLabelValue = occurrence.locationLabel;
+        } else if (occurrence && typeof occurrence.location_label === 'string') {
+            locationLabelValue = occurrence.location_label;
+        } else if (meta && typeof meta.location_label === 'string') {
+            locationLabelValue = meta.location_label;
+        } else if (meta && typeof meta.assigned_location_name === 'string') {
+            locationLabelValue = meta.assigned_location_name;
+        }
+
+        var responsibleIdsSource = [];
+        if (occurrence && Array.isArray(occurrence.responsibleMemberIds)) {
+            responsibleIdsSource = occurrence.responsibleMemberIds;
+        } else if (occurrence && Array.isArray(occurrence.responsible_member_ids)) {
+            responsibleIdsSource = occurrence.responsible_member_ids;
+        } else if (occurrence && Array.isArray(occurrence.assigned_member_ids)) {
+            responsibleIdsSource = occurrence.assigned_member_ids;
+        } else if (meta && Array.isArray(meta.responsible_member_ids)) {
+            responsibleIdsSource = meta.responsible_member_ids;
+        } else if (meta && Array.isArray(meta.assigned_member_ids)) {
+            responsibleIdsSource = meta.assigned_member_ids;
+        } else if (occurrence && occurrence.assigned_member_id) {
+            responsibleIdsSource = [occurrence.assigned_member_id];
+        } else if (meta && meta.assigned_member_id) {
+            responsibleIdsSource = [meta.assigned_member_id];
+        }
+        var responsibleMemberIdsValue = responsibleIdsSource
+            .map(function (value) { return parseInt(value, 10); })
+            .filter(function (value) { return !Number.isNaN(value) && value > 0; });
+        responsibleMemberIdsValue = responsibleMemberIdsValue.filter(function (value, valueIndex) {
+            return responsibleMemberIdsValue.indexOf(value) === valueIndex;
+        });
+
+        var responsibleNamesSource = [];
+        if (occurrence && Array.isArray(occurrence.responsibleMemberNames)) {
+            responsibleNamesSource = occurrence.responsibleMemberNames;
+        } else if (occurrence && Array.isArray(occurrence.responsible_member_names)) {
+            responsibleNamesSource = occurrence.responsible_member_names;
+        } else if (occurrence && Array.isArray(occurrence.assigned_member_names)) {
+            responsibleNamesSource = occurrence.assigned_member_names;
+        } else if (meta && Array.isArray(meta.responsible_member_names)) {
+            responsibleNamesSource = meta.responsible_member_names;
+        } else if (meta && Array.isArray(meta.assigned_member_names)) {
+            responsibleNamesSource = meta.assigned_member_names;
+        } else if (occurrence && typeof occurrence.assigned_member_name === 'string') {
+            responsibleNamesSource = [occurrence.assigned_member_name];
+        } else if (meta && typeof meta.assigned_member_name === 'string') {
+            responsibleNamesSource = [meta.assigned_member_name];
+        }
+        var responsibleMemberNamesValue = responsibleNamesSource
+            .map(function (value) { return String(value || '').trim(); })
+            .filter(function (value) { return value !== ''; });
+
         var generationBatchValue = '';
         if (occurrence && typeof occurrence.generationBatchId === 'string') {
             generationBatchValue = occurrence.generationBatchId;
@@ -4738,6 +5004,10 @@
             noteSchedule: occurrence && typeof occurrence.noteSchedule === 'string' ? occurrence.noteSchedule : '',
             noteCalendar: occurrence && typeof occurrence.noteCalendar === 'string' ? occurrence.noteCalendar : '',
             title: titleValue,
+            locationId: locationIdValue,
+            locationLabel: locationLabelValue,
+            responsibleMemberIds: responsibleMemberIdsValue,
+            responsibleMemberNames: responsibleMemberNamesValue,
         };
     }
 
@@ -5244,6 +5514,8 @@
                 status: 'planned',
                 reason: '',
                 title: '',
+                locationId: '',
+                responsibleMemberIds: [],
             };
         }
         return {
@@ -5256,6 +5528,14 @@
             status: occurrence.status || 'planned',
             reason: occurrence.reason || '',
             title: occurrence.title || occurrence.noteCalendar || '',
+            locationId: occurrence.locationId && parseInt(occurrence.locationId, 10) > 0
+                ? String(parseInt(occurrence.locationId, 10))
+                : '',
+            responsibleMemberIds: Array.isArray(occurrence.responsibleMemberIds)
+                ? occurrence.responsibleMemberIds
+                    .map(function (value) { return parseInt(value, 10); })
+                    .filter(function (value) { return !Number.isNaN(value) && value > 0; })
+                : [],
         };
     }
 

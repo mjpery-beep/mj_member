@@ -1572,6 +1572,84 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             } elseif (!empty($item['note_calendar'])) {
                 $meta['note_calendar'] = sanitize_textarea_field((string) $item['note_calendar']);
             }
+
+            $location_id = 0;
+            if (isset($item['locationId'])) {
+                $location_id = (int) $item['locationId'];
+            } elseif (isset($item['location_id'])) {
+                $location_id = (int) $item['location_id'];
+            }
+            if ($location_id > 0) {
+                $meta['location_id'] = $location_id;
+                $meta['assigned_location_id'] = $location_id;
+            }
+
+            $location_label = '';
+            if (!empty($item['locationLabel']) && !is_array($item['locationLabel'])) {
+                $location_label = sanitize_text_field((string) $item['locationLabel']);
+            } elseif (!empty($item['location_label']) && !is_array($item['location_label'])) {
+                $location_label = sanitize_text_field((string) $item['location_label']);
+            }
+            if ($location_label !== '') {
+                $meta['location_label'] = $location_label;
+                $meta['assigned_location_name'] = $location_label;
+            }
+
+            $member_ids_source = array();
+            if (isset($item['responsibleMemberIds']) && is_array($item['responsibleMemberIds'])) {
+                $member_ids_source = $item['responsibleMemberIds'];
+            } elseif (isset($item['responsible_member_ids']) && is_array($item['responsible_member_ids'])) {
+                $member_ids_source = $item['responsible_member_ids'];
+            } elseif (isset($item['memberIds']) && is_array($item['memberIds'])) {
+                $member_ids_source = $item['memberIds'];
+            } elseif (isset($item['member_ids']) && is_array($item['member_ids'])) {
+                $member_ids_source = $item['member_ids'];
+            } elseif (isset($item['assigned_member_ids']) && is_array($item['assigned_member_ids'])) {
+                $member_ids_source = $item['assigned_member_ids'];
+            }
+            $member_ids = array();
+            foreach ($member_ids_source as $raw_member_id) {
+                $member_id = (int) $raw_member_id;
+                if ($member_id > 0) {
+                    $member_ids[] = $member_id;
+                }
+            }
+            if (!empty($member_ids)) {
+                $member_ids = array_values(array_unique($member_ids));
+                $meta['responsible_member_ids'] = $member_ids;
+                $meta['assigned_member_ids'] = $member_ids;
+                $meta['assigned_member_id'] = (int) $member_ids[0];
+            }
+
+            $member_names_source = array();
+            if (isset($item['responsibleMemberNames']) && is_array($item['responsibleMemberNames'])) {
+                $member_names_source = $item['responsibleMemberNames'];
+            } elseif (isset($item['responsible_member_names']) && is_array($item['responsible_member_names'])) {
+                $member_names_source = $item['responsible_member_names'];
+            } elseif (isset($item['memberNames']) && is_array($item['memberNames'])) {
+                $member_names_source = $item['memberNames'];
+            } elseif (isset($item['member_names']) && is_array($item['member_names'])) {
+                $member_names_source = $item['member_names'];
+            } elseif (isset($item['assigned_member_names']) && is_array($item['assigned_member_names'])) {
+                $member_names_source = $item['assigned_member_names'];
+            }
+            $member_names = array();
+            foreach ($member_names_source as $raw_member_name) {
+                if (is_array($raw_member_name)) {
+                    continue;
+                }
+                $member_name = sanitize_text_field((string) $raw_member_name);
+                if ($member_name !== '') {
+                    $member_names[] = $member_name;
+                }
+            }
+            if (!empty($member_names)) {
+                $member_names = array_values(array_unique($member_names));
+                $meta['responsible_member_names'] = $member_names;
+                $meta['assigned_member_names'] = $member_names;
+                $meta['assigned_member_name'] = (string) $member_names[0];
+            }
+
             if ($status !== '') {
                 $meta['status'] = $status;
             }
@@ -1682,6 +1760,10 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $is_all_day = false;
             $note_schedule = '';
             $note_calendar = '';
+            $location_id = 0;
+            $location_label = '';
+            $responsible_member_ids = array();
+            $responsible_member_names = array();
             $meta = array();
             if (isset($occurrence['meta'])) {
                 $meta = $occurrence['meta'];
@@ -1710,7 +1792,65 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 if (is_array($meta) && isset($meta['note_calendar'])) {
                     $note_calendar = sanitize_textarea_field((string) $meta['note_calendar']);
                 }
+                if (is_array($meta) && isset($meta['location_id'])) {
+                    $location_id = (int) $meta['location_id'];
+                } elseif (is_array($meta) && isset($meta['assigned_location_id'])) {
+                    $location_id = (int) $meta['assigned_location_id'];
+                }
+                if (is_array($meta) && isset($meta['location_label']) && !is_array($meta['location_label'])) {
+                    $location_label = sanitize_text_field((string) $meta['location_label']);
+                } elseif (is_array($meta) && isset($meta['assigned_location_name']) && !is_array($meta['assigned_location_name'])) {
+                    $location_label = sanitize_text_field((string) $meta['assigned_location_name']);
+                }
+                if (is_array($meta) && isset($meta['responsible_member_ids']) && is_array($meta['responsible_member_ids'])) {
+                    foreach ($meta['responsible_member_ids'] as $raw_member_id) {
+                        $member_id = (int) $raw_member_id;
+                        if ($member_id > 0) {
+                            $responsible_member_ids[] = $member_id;
+                        }
+                    }
+                } elseif (is_array($meta) && isset($meta['assigned_member_ids']) && is_array($meta['assigned_member_ids'])) {
+                    foreach ($meta['assigned_member_ids'] as $raw_member_id) {
+                        $member_id = (int) $raw_member_id;
+                        if ($member_id > 0) {
+                            $responsible_member_ids[] = $member_id;
+                        }
+                    }
+                } elseif (is_array($meta) && isset($meta['assigned_member_id'])) {
+                    $member_id = (int) $meta['assigned_member_id'];
+                    if ($member_id > 0) {
+                        $responsible_member_ids[] = $member_id;
+                    }
+                }
+                if (is_array($meta) && isset($meta['responsible_member_names']) && is_array($meta['responsible_member_names'])) {
+                    foreach ($meta['responsible_member_names'] as $raw_member_name) {
+                        if (is_array($raw_member_name)) {
+                            continue;
+                        }
+                        $member_name = sanitize_text_field((string) $raw_member_name);
+                        if ($member_name !== '') {
+                            $responsible_member_names[] = $member_name;
+                        }
+                    }
+                } elseif (is_array($meta) && isset($meta['assigned_member_names']) && is_array($meta['assigned_member_names'])) {
+                    foreach ($meta['assigned_member_names'] as $raw_member_name) {
+                        if (is_array($raw_member_name)) {
+                            continue;
+                        }
+                        $member_name = sanitize_text_field((string) $raw_member_name);
+                        if ($member_name !== '') {
+                            $responsible_member_names[] = $member_name;
+                        }
+                    }
+                } elseif (is_array($meta) && isset($meta['assigned_member_name']) && !is_array($meta['assigned_member_name'])) {
+                    $single_member_name = sanitize_text_field((string) $meta['assigned_member_name']);
+                    if ($single_member_name !== '') {
+                        $responsible_member_names[] = $single_member_name;
+                    }
+                }
             }
+            $responsible_member_ids = array_values(array_unique($responsible_member_ids));
+            $responsible_member_names = array_values(array_unique($responsible_member_names));
 
             $generation_batch_id = '';
             if (isset($occurrence['generation_batch_id']) && $occurrence['generation_batch_id'] !== '') {
@@ -1735,6 +1875,10 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'isAllDay' => $is_all_day,
                 'status' => $status,
                 'reason' => $reason,
+                'locationId' => $location_id,
+                'locationLabel' => $location_label,
+                'responsibleMemberIds' => $responsible_member_ids,
+                'responsibleMemberNames' => $responsible_member_names,
                 'source' => isset($occurrence['source']) ? sanitize_key((string) $occurrence['source']) : MjEventOccurrences::SOURCE_MANUAL,
                 'visibility' => isset($occurrence['visibility']) ? sanitize_key((string) $occurrence['visibility']) : MjEventOccurrences::VISIBILITY_TOUS,
                 'generationBatchId' => $generation_batch_id,

@@ -6228,12 +6228,15 @@
                                         locale: config.locale || 'fr',
                                         onPersistOccurrences: handlePersistEventOccurrences,
                                         apiPost: api.post,
-                                        globalLocationOptions: eventEditorData && eventEditorData.options && Array.isArray(eventEditorData.options.locations)
+                                        globalLocationOptions: eventEditorData && eventEditorData.options
                                             ? eventEditorData.options.locations
-                                            : [],
-                                        globalMemberOptions: eventEditorData && eventEditorData.options && Array.isArray(eventEditorData.options.animateurs)
+                                            : null,
+                                        globalMemberOptions: eventEditorData && eventEditorData.options
                                             ? eventEditorData.options.animateurs
-                                            : [],
+                                            : null,
+                                        globalVolunteerOptions: eventEditorData && eventEditorData.options
+                                            ? eventEditorData.options.volunteers
+                                            : null,
                                         onBatchesUpdate: function (batches) {
                                             setEventDetails(function (prev) {
                                                 return prev ? Object.assign({}, prev, { occurrenceGenerationBatches: batches }) : prev;

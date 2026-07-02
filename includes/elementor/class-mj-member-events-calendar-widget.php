@@ -1388,11 +1388,71 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     $normalized_entry['label'] = (string) $occurrence['label'];
                 }
 
+                $occurrence_meta = array();
+                if (isset($occurrence['meta']) && is_array($occurrence['meta'])) {
+                    $occurrence_meta = $occurrence['meta'];
+                }
+
+                $occurrence_status = '';
+                if (isset($occurrence['status']) && !is_array($occurrence['status'])) {
+                    $occurrence_status = sanitize_key((string) $occurrence['status']);
+                } elseif (!empty($occurrence_meta['status']) && !is_array($occurrence_meta['status'])) {
+                    $occurrence_status = sanitize_key((string) $occurrence_meta['status']);
+                }
+                if ($occurrence_status !== '') {
+                    $normalized_entry['status'] = $occurrence_status;
+                }
+
+                if (!empty($occurrence['note_calendar']) && !is_array($occurrence['note_calendar'])) {
+                    $normalized_entry['title_override'] = sanitize_text_field((string) $occurrence['note_calendar']);
+                } elseif (!empty($occurrence_meta['note_calendar']) && !is_array($occurrence_meta['note_calendar'])) {
+                    $normalized_entry['title_override'] = sanitize_text_field((string) $occurrence_meta['note_calendar']);
+                }
+
+                if (!empty($occurrence['location_label']) && !is_array($occurrence['location_label'])) {
+                    $normalized_entry['location_label'] = sanitize_text_field((string) $occurrence['location_label']);
+                } elseif (!empty($occurrence_meta['location_label']) && !is_array($occurrence_meta['location_label'])) {
+                    $normalized_entry['location_label'] = sanitize_text_field((string) $occurrence_meta['location_label']);
+                } elseif (!empty($occurrence_meta['assigned_location_name']) && !is_array($occurrence_meta['assigned_location_name'])) {
+                    $normalized_entry['location_label'] = sanitize_text_field((string) $occurrence_meta['assigned_location_name']);
+                }
+
+                $responsible_names = array();
+                if (!empty($occurrence['responsible_member_names']) && is_array($occurrence['responsible_member_names'])) {
+                    $responsible_names = $occurrence['responsible_member_names'];
+                } elseif (!empty($occurrence['assigned_member_names']) && is_array($occurrence['assigned_member_names'])) {
+                    $responsible_names = $occurrence['assigned_member_names'];
+                } elseif (!empty($occurrence_meta['responsible_member_names']) && is_array($occurrence_meta['responsible_member_names'])) {
+                    $responsible_names = $occurrence_meta['responsible_member_names'];
+                } elseif (!empty($occurrence_meta['assigned_member_names']) && is_array($occurrence_meta['assigned_member_names'])) {
+                    $responsible_names = $occurrence_meta['assigned_member_names'];
+                } elseif (!empty($occurrence_meta['assigned_member_name']) && !is_array($occurrence_meta['assigned_member_name'])) {
+                    $responsible_names = array($occurrence_meta['assigned_member_name']);
+                }
+                if (!empty($responsible_names)) {
+                    $normalized_entry['responsible_member_names'] = array_values(array_filter(array_map(
+                        static function ($name) {
+                            return sanitize_text_field((string) $name);
+                        },
+                        $responsible_names
+                    )));
+                }
+
                 if (!empty($occurrence['is_cancelled'])) {
                     $normalized_entry['is_cancelled'] = true;
                 }
+                if (empty($normalized_entry['is_cancelled'])) {
+                    $is_cancelled_status = in_array($occurrence_status, array('cancelled', 'annule', 'status_annule'), true);
+                    if ($is_cancelled_status) {
+                        $normalized_entry['is_cancelled'] = true;
+                    }
+                }
                 if (!empty($occurrence['cancellation_reason']) && !is_array($occurrence['cancellation_reason'])) {
                     $normalized_entry['cancellation_reason'] = sanitize_text_field((string) $occurrence['cancellation_reason']);
+                } elseif (!empty($occurrence['reason']) && !is_array($occurrence['reason'])) {
+                    $normalized_entry['cancellation_reason'] = sanitize_text_field((string) $occurrence['reason']);
+                } elseif (!empty($occurrence_meta['reason']) && !is_array($occurrence_meta['reason'])) {
+                    $normalized_entry['cancellation_reason'] = sanitize_text_field((string) $occurrence_meta['reason']);
                 }
 
                 $normalized_occurrences[] = $normalized_entry;
@@ -1508,6 +1568,29 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     $schedule_label = $time_label;
                 }
 
+                $occurrence_title = $title;
+                if (!empty($occurrence['title_override']) && !is_array($occurrence['title_override'])) {
+                    $occurrence_title = sanitize_text_field((string) $occurrence['title_override']);
+                }
+                if ($occurrence_title === '') {
+                    $occurrence_title = $title;
+                }
+
+                $occurrence_location_label = $location_label;
+                if (!empty($occurrence['location_label']) && !is_array($occurrence['location_label'])) {
+                    $occurrence_location_label = sanitize_text_field((string) $occurrence['location_label']);
+                }
+
+                $occurrence_responsible_names = array();
+                if (!empty($occurrence['responsible_member_names']) && is_array($occurrence['responsible_member_names'])) {
+                    $occurrence_responsible_names = array_values(array_filter(array_map(
+                        static function ($name) {
+                            return sanitize_text_field((string) $name);
+                        },
+                        $occurrence['responsible_member_names']
+                    )));
+                }
+
                 $occurrence_is_cancelled = !empty($occurrence['is_cancelled']);
                 $occurrence_cancellation_reason = '';
                 if ($occurrence_is_cancelled) {
@@ -1521,7 +1604,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                 $months[$month_key]['days'][$day_key]['events'][] = array(
                     'id' => $occurrence_key,
-                    'title' => $title,
+                    'title' => $occurrence_title,
                     'emoji' => $emoji_value,
                     'time' => $time_label,
                     'schedule_label' => $schedule_label,
@@ -1532,8 +1615,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'type_key' => $event_type_key,
                     'start_ts' => $start_ts,
                     'price' => $price_value,
-                    'location_label' => $location_label,
+                    'location_label' => $occurrence_location_label,
                     'location_links' => $location_links,
+                    'occurrence_responsible_names' => $occurrence_responsible_names,
                     'description_excerpt' => $description_preview,
                     'age_min' => $age_min,
                     'age_max' => $age_max,
@@ -2414,6 +2498,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $preview_recurrence = (!$event_is_closure && !empty($event_entry['recurrence_summary'])) ? (string) $event_entry['recurrence_summary'] : '';
                             $preview_registration = (!$event_is_closure && !empty($event_entry['registration_label'])) ? (string) $event_entry['registration_label'] : '';
                             $preview_animateurs = (!$event_is_closure && !empty($event_entry['animateurs']) && is_array($event_entry['animateurs'])) ? $event_entry['animateurs'] : array();
+                            $preview_responsibles = (!$event_is_closure && !empty($event_entry['occurrence_responsible_names']) && is_array($event_entry['occurrence_responsible_names']))
+                                ? array_values(array_filter(array_map('sanitize_text_field', $event_entry['occurrence_responsible_names'])))
+                                : array();
 
                             $preview_recurring_schedule_entries = array();
                             if (!$event_is_closure && isset($event_entry['recurring_schedule_preview']) && is_array($event_entry['recurring_schedule_preview'])) {
@@ -2463,8 +2550,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             }
 
                             $has_preview_animateurs = !$event_is_closure && !empty($preview_animateurs);
+                            $has_preview_responsibles = !$event_is_closure && !empty($preview_responsibles);
 
-                            if ($preview_cover !== '' || $price_label !== '' || $preview_schedule !== '' || $preview_location !== '' || $preview_description !== '' || $preview_age !== '' || $preview_recurrence !== '' || $preview_registration !== '' || $has_preview_animateurs) {
+                            if ($preview_cover !== '' || $price_label !== '' || $preview_schedule !== '' || $preview_location !== '' || $preview_description !== '' || $preview_age !== '' || $preview_recurrence !== '' || $preview_registration !== '' || $has_preview_animateurs || $has_preview_responsibles) {
                                 echo '<div class="mj-member-events-calendar__event-preview" aria-hidden="true">';
                                 echo '<div class="mj-member-events-calendar__event-preview-content">';
                                 if ($preview_cover !== '' || $has_preview_animateurs || $preview_registration !== '' || $preview_age !== '') {
@@ -2583,6 +2671,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 }
                                 if ($preview_location !== '') {
                                     echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Lieu', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_location) . '</span></div>';
+                                }
+                                if ($has_preview_responsibles) {
+                                    echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Responsables', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html(implode(', ', $preview_responsibles)) . '</span></div>';
                                 }
                                 // Afficher les lieux multiples
                                 $preview_location_links = isset($event_entry['location_links']) && is_array($event_entry['location_links']) ? $event_entry['location_links'] : array();
