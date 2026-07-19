@@ -2706,16 +2706,65 @@ if (!defined('ABSPATH')) {
 
                             <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
                                 <h3 style="margin:0 0 8px 0;">2) Exporter</h3>
-                                <p style="margin:0 0 10px 0; color:#64748b;">Telecharge une archive ZIP complete.</p>
+                                <p style="margin:0 0 10px 0; color:#64748b;">Genere une URL signee avec token pour telecharger une archive ZIP complete.</p>
                                 <button type="submit" class="button" form="mj-fixtures-export-form">Exporter les fixtures</button>
+                                <?php if (!empty($fixtures_export_download_url)) : ?>
+                                    <p style="margin:12px 0 6px 0; color:#334155;"><strong>URL generee</strong></p>
+                                    <input
+                                        type="text"
+                                        readonly
+                                        value="<?php echo esc_attr((string) $fixtures_export_download_url); ?>"
+                                        class="large-text code"
+                                        onclick="this.select();"
+                                        style="margin-bottom:8px;"
+                                    />
+                                    <p style="margin:0; color:#64748b; font-size:12px;">
+                                        Fichier: <?php echo esc_html((string) $fixtures_export_download_filename); ?>
+                                    </p>
+                                    <?php if (!empty($fixtures_export_download_expires_at)) : ?>
+                                        <p style="margin:4px 0 0 0; color:#64748b; font-size:12px;">
+                                            Expire le: <?php echo esc_html(wp_date('d/m/Y H:i:s', (int) $fixtures_export_download_expires_at)); ?>
+                                        </p>
+                                    <?php endif; ?>
+                                <?php endif; ?>
                             </div>
 
                             <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
                                 <h3 style="margin:0 0 8px 0;">3) Importer</h3>
-                                <p style="margin:0 0 10px 0; color:#64748b;">Importe une archive ZIP dans <code>data/fixtures</code>.</p>
-                                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                                    <input type="file" form="mj-fixtures-import-form" name="mj_fixtures_zip" accept=".zip" required />
+                                <p style="margin:0 0 10px 0; color:#64748b;">Importe une archive ZIP dans <code>data/fixtures</code> depuis un fichier local ou une URL distante.</p>
+                                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+                                    <input type="file" form="mj-fixtures-import-form" name="mj_fixtures_zip" accept=".zip" />
                                     <button type="submit" form="mj-fixtures-import-form" class="button">Importer</button>
+                                </div>
+                                <label style="display:block; margin-bottom:4px; color:#334155;">URL d'une archive ZIP</label>
+                                <input
+                                    type="url"
+                                    form="mj-fixtures-import-form"
+                                    name="mj_fixtures_zip_url"
+                                    placeholder="https://exemple.com/mj-member-fixtures.zip"
+                                    class="large-text"
+                                />
+                                <p style="margin:6px 0 0 0; color:#64748b; font-size:12px;">Si une URL est fournie, elle est prioritaire sur le fichier local.</p>
+                                <script>
+                                (function () {
+                                    var form = document.getElementById('mj-fixtures-import-form');
+                                    if (!form) {
+                                        return;
+                                    }
+
+                                    form.addEventListener('submit', function (event) {
+                                        var fileInput = form.querySelector('input[name="mj_fixtures_zip"]');
+                                        var urlInput = form.querySelector('input[name="mj_fixtures_zip_url"]');
+                                        var hasFile = !!(fileInput && fileInput.files && fileInput.files.length > 0);
+                                        var hasUrl = !!(urlInput && urlInput.value && urlInput.value.trim() !== '');
+
+                                        if (!hasFile && !hasUrl) {
+                                            event.preventDefault();
+                                            window.alert('Selectionnez un fichier ZIP ou renseignez une URL ZIP.');
+                                        }
+                                    });
+                                })();
+                                </script>
                                 </div>
                             </div>
 

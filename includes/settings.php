@@ -8,6 +8,8 @@ namespace Mj\Member\Module\Admin {
         public function register(): void {
             add_action('wp_ajax_mj_member_run_manual_backup_action', 'mj_member_ajax_run_manual_backup_action');
             add_action('wp_ajax_mj_member_save_media_backup_settings_ajax', 'mj_member_save_media_backup_settings_ajax');
+            add_action('admin_post_mj_member_download_fixtures', 'mj_member_download_fixtures_archive');
+            add_action('admin_post_nopriv_mj_member_download_fixtures', 'mj_member_download_fixtures_archive');
         }
     }
 }
@@ -112,6 +114,35 @@ if (!function_exists('mj_member_sanitize_pdf_rich_html')) {
     }
 }
 
+if (!function_exists('mj_member_download_fixtures_archive')) {
+    function mj_member_download_fixtures_archive(): void {
+        if (!class_exists(MjFixturesManager::class)) {
+            wp_die(esc_html__('Gestionnaire de fixtures indisponible.', 'mj-member'), 500);
+        }
+
+        $token = isset($_GET['token']) ? sanitize_text_field((string) wp_unslash($_GET['token'])) : '';
+        $archive = MjFixturesManager::getExportArchiveByToken($token);
+        if (is_wp_error($archive)) {
+            wp_die(esc_html($archive->get_error_message()), 403);
+        }
+
+        $archivePath = isset($archive['path']) ? (string) $archive['path'] : '';
+        $downloadName = isset($archive['filename']) ? sanitize_file_name((string) $archive['filename']) : 'mj-member-fixtures.zip';
+        $mime = isset($archive['mime']) ? (string) $archive['mime'] : 'application/zip';
+
+        if ($archivePath === '' || !is_readable($archivePath)) {
+            wp_die(esc_html__('Archive de téléchargement indisponible.', 'mj-member'), 404);
+        }
+
+        nocache_headers();
+        header('Content-Type: ' . $mime);
+        header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+        header('Content-Length: ' . (string) filesize($archivePath));
+        readfile($archivePath);
+        exit;
+    }
+}
+
 // Admin settings page for plugin
 function mj_settings_page() {
     if (function_exists('wp_enqueue_media')) {
@@ -159,6 +190,9 @@ function mj_settings_page() {
     // Handle backup profile CRUD and media backup actions (separate forms)
     // -----------------------------------------------------------------------
     $backup_notices = array();
+    $fixtures_export_download_url = '';
+    $fixtures_export_download_filename = '';
+    $fixtures_export_download_expires_at = 0;
 
     $is_main_settings_submit = isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force']) || isset($_POST['mj_backup_run_now']);
 
@@ -410,7 +444,12 @@ function mj_settings_page() {
             $backup_notices[] = array('type' => 'success', 'message' => '✅ Préférences fixtures enregistrées.');
         } elseif ($fixturesAction === 'import' && class_exists(MjFixturesManager::class)) {
             $file = isset($_FILES['mj_fixtures_zip']) && is_array($_FILES['mj_fixtures_zip']) ? $_FILES['mj_fixtures_zip'] : array();
-            $importResult = MjFixturesManager::importArchive($file);
+            $importUrl = isset($_POST['mj_fixtures_zip_url']) ? esc_url_raw((string) wp_unslash($_POST['mj_fixtures_zip_url'])) : '';
+            if ($importUrl !== '') {
+                $importResult = MjFixturesManager::importArchiveFromUrl($importUrl);
+            } else {
+                $importResult = MjFixturesManager::importArchive($file);
+            }
             if (is_wp_error($importResult)) {
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($importResult->get_error_message()));
             } else {
@@ -427,18 +466,32 @@ function mj_settings_page() {
             if (is_wp_error($archive)) {
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($archive->get_error_message()));
             } else {
-                $downloadName = isset($archive['filename']) ? (string) $archive['filename'] : 'mj-member-fixtures.zip';
-                $archivePath = isset($archive['path']) ? (string) $archive['path'] : '';
-                if ($archivePath !== '' && is_readable($archivePath)) {
-                    nocache_headers();
-                    header('Content-Type: application/zip');
-                    header('Content-Disposition: attachment; filename="' . sanitize_file_name($downloadName) . '"');
-                    header('Content-Length: ' . (string) filesize($archivePath));
-                    readfile($archivePath);
-                    @unlink($archivePath);
-                    exit;
+                $tokenized = MjFixturesManager::createExportDownloadToken($archive);
+                if (is_wp_error($tokenized)) {
+                    $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($tokenized->get_error_message()));
+                } else {
+                    $fixtures_export_download_url = (string) ($tokenized['url'] ?? '');
+                    $fixtures_export_download_filename = (string) ($tokenized['filename'] ?? 'mj-member-fixtures.zip');
+                    $fixtures_export_download_expires_at = (int) ($tokenized['expires_at'] ?? 0);
+                    $backup_notices[] = array(
+                        'type' => 'success',
+                        'message' => '✅ URL de téléchargement fixtures générée. Utilisez le lien ci-dessous dans la section Exporter.',
+                    );
                 }
-                $backup_notices[] = array('type' => 'error', 'message' => '❌ Archive export introuvable après génération.');
+            }
+        }
+    }
+
+    if ($fixtures_export_download_url === '' && class_exists(MjFixturesManager::class)) {
+        $lastExportToken = (string) get_option(MjFixturesManager::OPTION_LAST_EXPORT_TOKEN, '');
+        if ($lastExportToken !== '') {
+            $lastExportInfo = MjFixturesManager::describeExportToken($lastExportToken);
+            if (is_wp_error($lastExportInfo)) {
+                delete_option(MjFixturesManager::OPTION_LAST_EXPORT_TOKEN);
+            } else {
+                $fixtures_export_download_url = (string) ($lastExportInfo['url'] ?? '');
+                $fixtures_export_download_filename = (string) ($lastExportInfo['filename'] ?? 'mj-member-fixtures.zip');
+                $fixtures_export_download_expires_at = (int) ($lastExportInfo['expires_at'] ?? 0);
             }
         }
     }

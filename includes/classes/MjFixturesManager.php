@@ -11,6 +11,9 @@ if (!defined('ABSPATH')) {
 
 final class MjFixturesManager
 {
+    public const EXPORT_TOKEN_TRANSIENT_PREFIX = 'mj_fixtures_export_';
+    public const EXPORT_TOKEN_TTL = HOUR_IN_SECONDS;
+    public const OPTION_LAST_EXPORT_TOKEN = 'mj_fixtures_last_export_token';
     public const OPTION_CREATE_SELECTED = 'mj_fixtures_create_selected_sources';
     public const OPTION_RESTORE_SELECTED = 'mj_fixtures_restore_selected_sources';
     public const OPTION_RESTORE_CLEAN = 'mj_fixtures_restore_clean_before_sources';
@@ -443,12 +446,108 @@ final class MjFixturesManager
             return new WP_Error('fixtures_upload_extension', __('Le fichier doit etre une archive ZIP.', 'mj-member'));
         }
 
+        return self::importArchiveFromPath((string) $uploadedFile['tmp_name']);
+    }
+
+    public static function importArchiveFromUrl(string $url)
+    {
+        $url = esc_url_raw(trim($url));
+        if ($url === '' || !preg_match('/^https?:\/\//i', $url)) {
+            return new WP_Error('fixtures_import_url_invalid', __('URL ZIP invalide.', 'mj-member'));
+        }
+
+        $tmpFile = download_url($url, 30);
+        if (is_wp_error($tmpFile) || !is_string($tmpFile) || $tmpFile === '') {
+            return new WP_Error('fixtures_import_url_download', __('Impossible de télécharger l\'archive ZIP distante.', 'mj-member'));
+        }
+
+        $result = self::importArchiveFromPath($tmpFile);
+        @unlink($tmpFile);
+
+        return $result;
+    }
+
+    public static function createExportDownloadToken(array $archive): array|WP_Error
+    {
+        $archivePath = isset($archive['path']) ? (string) $archive['path'] : '';
+        $archiveFilename = isset($archive['filename']) ? sanitize_file_name((string) $archive['filename']) : 'mj-member-fixtures.zip';
+        if ($archivePath === '' || !is_readable($archivePath)) {
+            return new WP_Error('fixtures_export_missing', __('Archive d\'export introuvable.', 'mj-member'));
+        }
+
+        $token = wp_generate_password(32, false, false);
+        set_transient(
+            self::EXPORT_TOKEN_TRANSIENT_PREFIX . $token,
+            array(
+                'path' => $archivePath,
+                'filename' => $archiveFilename,
+                'mime' => (string) ($archive['mime'] ?? 'application/zip'),
+                'created_at' => time(),
+                'expires_at' => time() + self::EXPORT_TOKEN_TTL,
+            ),
+            self::EXPORT_TOKEN_TTL
+        );
+
+        update_option(self::OPTION_LAST_EXPORT_TOKEN, $token, false);
+
+        return array(
+            'token' => $token,
+            'url' => self::buildExportDownloadUrl($token),
+            'filename' => $archiveFilename,
+            'expires_at' => time() + self::EXPORT_TOKEN_TTL,
+        );
+    }
+
+    public static function describeExportToken(string $token): array|WP_Error
+    {
+        $token = sanitize_text_field($token);
+        if ($token === '') {
+            return new WP_Error('fixtures_export_token_missing', __('Token de téléchargement manquant.', 'mj-member'));
+        }
+
+        $payload = get_transient(self::EXPORT_TOKEN_TRANSIENT_PREFIX . $token);
+        if (!is_array($payload)) {
+            return new WP_Error('fixtures_export_token_invalid', __('Lien de téléchargement expiré ou invalide.', 'mj-member'));
+        }
+
+        $path = isset($payload['path']) ? (string) $payload['path'] : '';
+        if ($path === '' || !is_readable($path)) {
+            delete_transient(self::EXPORT_TOKEN_TRANSIENT_PREFIX . $token);
+            if (get_option(self::OPTION_LAST_EXPORT_TOKEN, '') === $token) {
+                delete_option(self::OPTION_LAST_EXPORT_TOKEN);
+            }
+            return new WP_Error('fixtures_export_token_missing_file', __('Archive de téléchargement indisponible.', 'mj-member'));
+        }
+
+        return array(
+            'token' => $token,
+            'url' => self::buildExportDownloadUrl($token),
+            'filename' => sanitize_file_name((string) ($payload['filename'] ?? 'mj-member-fixtures.zip')),
+            'mime' => (string) ($payload['mime'] ?? 'application/zip'),
+            'created_at' => (int) ($payload['created_at'] ?? 0),
+            'expires_at' => (int) ($payload['expires_at'] ?? 0),
+            'path' => $path,
+        );
+    }
+
+    public static function getExportArchiveByToken(string $token): array|WP_Error
+    {
+        $described = self::describeExportToken($token);
+        if (is_wp_error($described)) {
+            return $described;
+        }
+
+        return $described;
+    }
+
+    private static function importArchiveFromPath(string $zipPath)
+    {
         if (!class_exists('ZipArchive')) {
             return new WP_Error('fixtures_zip_missing', __('ZipArchive est indisponible sur ce serveur.', 'mj-member'));
         }
 
         $zip = new \ZipArchive();
-        if ($zip->open((string) $uploadedFile['tmp_name']) !== true) {
+        if ($zip->open($zipPath) !== true) {
             return new WP_Error('fixtures_zip_open', __('Impossible d\'ouvrir l\'archive ZIP.', 'mj-member'));
         }
 
@@ -1110,6 +1209,17 @@ final class MjFixturesManager
         }
 
         return $files;
+    }
+
+    private static function buildExportDownloadUrl(string $token): string
+    {
+        return add_query_arg(
+            array(
+                'action' => 'mj_member_download_fixtures',
+                'token' => rawurlencode($token),
+            ),
+            admin_url('admin-post.php')
+        );
     }
 
     private static function writeJsonFileAtomic(string $path, array $payload): bool
