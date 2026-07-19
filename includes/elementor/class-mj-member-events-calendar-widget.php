@@ -302,6 +302,22 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'print_default_theme',
+            array(
+                'label' => __('Impression: thème par défaut', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'light',
+                'options' => array(
+                    'light' => __('Clair (fond blanc)', 'mj-member'),
+                    'dark' => __('Sombre (fond noir)', 'mj-member'),
+                ),
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
             'print_default_span',
             array(
                 'label' => __('Impression: nombre d\'unités par défaut', 'mj-member'),
@@ -648,6 +664,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $print_default_mode = isset($settings['print_default_mode']) && in_array($settings['print_default_mode'], array('week', 'month'), true)
             ? (string) $settings['print_default_mode']
             : 'month';
+        $print_default_theme = isset($settings['print_default_theme']) && in_array($settings['print_default_theme'], array('light', 'dark'), true)
+            ? (string) $settings['print_default_theme']
+            : 'light';
         $print_default_details = !isset($settings['print_default_details']) || $settings['print_default_details'] === 'yes';
         $print_default_cover = isset($settings['print_default_cover']) && $settings['print_default_cover'] === 'yes';
         $print_default_time_range = !isset($settings['print_default_time_range']) || $settings['print_default_time_range'] === 'yes';
@@ -666,6 +685,18 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         if ($print_default_span > 12) {
             $print_default_span = 12;
         }
+        $print_header_image_id = (int) get_option('mj_calendar_print_header_image_id', 0);
+        $print_header_image_url = $print_header_image_id > 0 ? wp_get_attachment_image_url($print_header_image_id, 'large') : '';
+        if (!is_string($print_header_image_url) || $print_header_image_url === '') {
+            $print_header_image_url = $print_header_image_id > 0 ? (string) wp_get_attachment_url($print_header_image_id) : '';
+        }
+        $print_footer_image_id = (int) get_option('mj_calendar_print_footer_image_id', 0);
+        $print_footer_image_url = $print_footer_image_id > 0 ? wp_get_attachment_image_url($print_footer_image_id, 'large') : '';
+        if (!is_string($print_footer_image_url) || $print_footer_image_url === '') {
+            $print_footer_image_url = $print_footer_image_id > 0 ? (string) wp_get_attachment_url($print_footer_image_id) : '';
+        }
+        $print_default_header_image = $print_header_image_url !== '';
+        $print_default_footer_image = $print_footer_image_url !== '';
 
         $cover_width_settings = self::normalize_cover_width_settings($settings);
 
@@ -3215,6 +3246,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<span>' . esc_html__('Afficher la couleur des événements', 'mj-member') . '</span>';
             echo '</label>';
             echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="header-image"' . ($print_default_header_image ? ' checked' : '') . ' />';
+            echo '<span>' . esc_html__('Afficher l’image d’en-tête', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="footer-image"' . ($print_default_footer_image ? ' checked' : '') . ' />';
+            echo '<span>' . esc_html__('Afficher l’image de pied de page', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
             echo '<span>' . esc_html__('Padding page', 'mj-member') . '</span>';
             echo '<input type="range" min="0" max="24" step="1" value="10" data-print-option="pad-page" />';
             echo '</label>';
@@ -3231,6 +3270,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<select data-print-option="mode">';
             echo '<option value="week"' . selected($print_default_mode, 'week', false) . '>' . esc_html__('Semaine', 'mj-member') . '</option>';
             echo '<option value="month"' . selected($print_default_mode, 'month', false) . '>' . esc_html__('Mois', 'mj-member') . '</option>';
+            echo '</select>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Thème', 'mj-member') . '</span>';
+            echo '<select data-print-option="theme">';
+            echo '<option value="light"' . selected($print_default_theme, 'light', false) . '>' . esc_html__('Clair', 'mj-member') . '</option>';
+            echo '<option value="dark"' . selected($print_default_theme, 'dark', false) . '>' . esc_html__('Sombre', 'mj-member') . '</option>';
             echo '</select>';
             echo '</label>';
             echo '<label class="mj-cal-print__option" data-print-month-picker hidden>';
@@ -3267,6 +3313,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '</div>';
             echo '<div class="mj-cal-print__footer">';
             echo '<button type="button" class="mj-cal-print__ghost" data-calendar-print-close>' . esc_html__('Fermer', 'mj-member') . '</button>';
+            echo '<button type="button" class="mj-cal-print__ghost" data-calendar-action="save-image">' . esc_html__('Enregistrer l\'image', 'mj-member') . '</button>';
             echo '<button type="button" class="mj-cal-print__primary" data-calendar-action="print-now">' . esc_html__('Imprimer', 'mj-member') . '</button>';
             echo '</div>';
             echo '</div>';
@@ -3299,11 +3346,16 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'prefsNonce' => $print_prefs_enabled ? wp_create_nonce('mj_member_calendar_print_prefs') : '',
                 'userPrefs' => $print_user_prefs,
                 'defaultMode' => $print_default_mode,
+                'defaultTheme' => $print_default_theme,
                 'defaultDetails' => $print_default_details,
                 'defaultCover' => $print_default_cover,
                 'defaultTimeRange' => $print_default_time_range,
                 'defaultEventEmoji' => $print_default_event_emoji,
                 'defaultEventColor' => $print_default_event_color,
+                'defaultHeaderImage' => $print_default_header_image,
+                'defaultFooterImage' => $print_default_footer_image,
+                'headerImageUrl' => $print_header_image_url,
+                'footerImageUrl' => $print_footer_image_url,
                 'defaultSpan' => $print_default_span,
                 'defaultPageBreak' => $print_default_page_break,
                 'labels' => array(
@@ -3354,6 +3406,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             'print_default_event_emoji' => 'yes',
             'print_default_event_color' => 'yes',
             'print_default_mode' => 'month',
+            'print_default_theme' => 'light',
             'print_default_span' => 1,
             'print_default_page_break' => 'yes',
             'current_week_only' => '',

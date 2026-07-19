@@ -464,6 +464,8 @@ function mj_settings_page() {
         $default_avatar_id = isset($_POST['mj_login_default_avatar_id']) ? intval($_POST['mj_login_default_avatar_id']) : 0;
         $cards_background_id = isset($_POST['mj_cards_pdf_background_image_id']) ? intval($_POST['mj_cards_pdf_background_image_id']) : 0;
         $cards_background_back_id = isset($_POST['mj_cards_pdf_background_back_image_id']) ? intval($_POST['mj_cards_pdf_background_back_image_id']) : 0;
+        $calendar_print_header_image_id = isset($_POST['mj_calendar_print_header_image_id']) ? intval($_POST['mj_calendar_print_header_image_id']) : 0;
+        $calendar_print_footer_image_id = isset($_POST['mj_calendar_print_footer_image_id']) ? intval($_POST['mj_calendar_print_footer_image_id']) : 0;
         $cards_double_sided = isset($_POST['mj_cards_pdf_double_sided']) ? '1' : '0';
         $registration_page = isset($_POST['mj_login_registration_page']) ? intval($_POST['mj_login_registration_page']) : 0;
         $openai_api_key = isset($_POST['mj_openai_api_key']) ? sanitize_text_field(wp_unslash($_POST['mj_openai_api_key'])) : '';
@@ -517,6 +519,8 @@ function mj_settings_page() {
         update_option('mj_login_default_avatar_id', $default_avatar_id > 0 ? $default_avatar_id : 0);
         update_option('mj_cards_pdf_background_image_id', $cards_background_id > 0 ? $cards_background_id : 0);
         update_option('mj_cards_pdf_background_back_image_id', $cards_background_back_id > 0 ? $cards_background_back_id : 0);
+        update_option('mj_calendar_print_header_image_id', $calendar_print_header_image_id > 0 ? $calendar_print_header_image_id : 0);
+        update_option('mj_calendar_print_footer_image_id', $calendar_print_footer_image_id > 0 ? $calendar_print_footer_image_id : 0);
         update_option('mj_cards_pdf_double_sided', $cards_double_sided);
         update_option('mj_login_registration_page', $registration_page > 0 ? $registration_page : 0);
         update_option('mj_member_openai_api_key', $openai_api_key);
@@ -1014,6 +1018,8 @@ function mj_settings_page() {
 
     $cards_pdf_background_id = (int) get_option('mj_cards_pdf_background_image_id', 0);
     $cards_pdf_background_back_id = (int) get_option('mj_cards_pdf_background_back_image_id', 0);
+    $calendar_print_header_image_id = (int) get_option('mj_calendar_print_header_image_id', 0);
+    $calendar_print_footer_image_id = (int) get_option('mj_calendar_print_footer_image_id', 0);
     $cards_pdf_double_sided = get_option('mj_cards_pdf_double_sided', '0') === '1';
     $cards_pdf_background_src = '';
     if ($cards_pdf_background_id > 0) {
@@ -1037,6 +1043,32 @@ function mj_settings_page() {
             $fallback_background_back_url = wp_get_attachment_url($cards_pdf_background_back_id);
             if ($fallback_background_back_url) {
                 $cards_pdf_background_back_src = $fallback_background_back_url;
+            }
+        }
+    }
+
+    $calendar_print_header_image_src = '';
+    if ($calendar_print_header_image_id > 0) {
+        $calendar_print_header_image = wp_get_attachment_image_src($calendar_print_header_image_id, 'large');
+        if ($calendar_print_header_image) {
+            $calendar_print_header_image_src = $calendar_print_header_image[0];
+        } else {
+            $fallback_calendar_print_header_url = wp_get_attachment_url($calendar_print_header_image_id);
+            if ($fallback_calendar_print_header_url) {
+                $calendar_print_header_image_src = $fallback_calendar_print_header_url;
+            }
+        }
+    }
+
+    $calendar_print_footer_image_src = '';
+    if ($calendar_print_footer_image_id > 0) {
+        $calendar_print_footer_image = wp_get_attachment_image_src($calendar_print_footer_image_id, 'large');
+        if ($calendar_print_footer_image) {
+            $calendar_print_footer_image_src = $calendar_print_footer_image[0];
+        } else {
+            $fallback_calendar_print_footer_url = wp_get_attachment_url($calendar_print_footer_image_id);
+            if ($fallback_calendar_print_footer_url) {
+                $calendar_print_footer_image_src = $fallback_calendar_print_footer_url;
             }
         }
     }

@@ -1102,6 +1102,34 @@ if (!defined('ABSPATH')) {
                             <small style="color:#666; display:block; margin-top:4px;">Définissez une image spécifique pour le verso. Si aucun visuel n’est sélectionné, le verso restera uni.</small>
                         </div>
 
+                        <p>
+                            <label for="mj-calendar-print-header-image-id">Image d'en-tête pour l'impression du calendrier</label><br>
+                            <input type="hidden" name="mj_calendar_print_header_image_id" id="mj-calendar-print-header-image-id" value="<?php echo esc_attr($calendar_print_header_image_id); ?>" />
+                            <div id="mj-calendar-print-header-image-preview" class="mj-card-background-preview" style="margin:8px 0; max-width:360px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#f8fafc;">
+                                <img src="<?php echo !empty($calendar_print_header_image_src) ? esc_url($calendar_print_header_image_src) : ''; ?>" alt="" style="display:<?php echo !empty($calendar_print_header_image_src) ? 'block' : 'none'; ?>; width:100%; height:auto;" />
+                                <span class="mj-calendar-print-header-image-preview__placeholder" style="display:<?php echo !empty($calendar_print_header_image_src) ? 'none' : 'block'; ?>; padding:20px; text-align:center; color:#64748b; font-size:13px;">Aucune image d'en-tête sélectionnée</span>
+                            </div>
+                            <div class="mj-card-background-actions" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <button type="button" class="button" id="mj-calendar-print-header-image-select">Choisir une image</button>
+                                <button type="button" class="button-secondary" id="mj-calendar-print-header-image-clear" <?php echo $calendar_print_header_image_id ? '' : 'style="display:none;"'; ?>>Retirer</button>
+                            </div>
+                            <small style="color:#666; display:block; margin-top:4px;">Cette image pourra être affichée en haut des impressions de l'horaire.</small>
+                        </p>
+
+                        <p>
+                            <label for="mj-calendar-print-footer-image-id">Image de pied de page pour l'impression du calendrier</label><br>
+                            <input type="hidden" name="mj_calendar_print_footer_image_id" id="mj-calendar-print-footer-image-id" value="<?php echo esc_attr($calendar_print_footer_image_id); ?>" />
+                            <div id="mj-calendar-print-footer-image-preview" class="mj-card-background-preview" style="margin:8px 0; max-width:360px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#f8fafc;">
+                                <img src="<?php echo !empty($calendar_print_footer_image_src) ? esc_url($calendar_print_footer_image_src) : ''; ?>" alt="" style="display:<?php echo !empty($calendar_print_footer_image_src) ? 'block' : 'none'; ?>; width:100%; height:auto;" />
+                                <span class="mj-calendar-print-footer-image-preview__placeholder" style="display:<?php echo !empty($calendar_print_footer_image_src) ? 'none' : 'block'; ?>; padding:20px; text-align:center; color:#64748b; font-size:13px;">Aucune image de pied de page sélectionnée</span>
+                            </div>
+                            <div class="mj-card-background-actions" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <button type="button" class="button" id="mj-calendar-print-footer-image-select">Choisir une image</button>
+                                <button type="button" class="button-secondary" id="mj-calendar-print-footer-image-clear" <?php echo $calendar_print_footer_image_id ? '' : 'style="display:none;"'; ?>>Retirer</button>
+                            </div>
+                            <small style="color:#666; display:block; margin-top:4px;">Cette image pourra être affichée en bas des impressions de l'horaire.</small>
+                        </p>
+
                         <div style="background:#eff6ff; border-left:4px solid #2563eb; padding:18px 20px; border-radius:10px; margin-top:24px; margin-bottom:18px;">
                             <h2 style="margin:0 0 8px 0;"><?php esc_html_e('Signature par défaut des messages', 'mj-member'); ?></h2>
                             <p style="margin:0; color:#475569;">
@@ -3517,8 +3545,112 @@ if (!defined('ABSPATH')) {
                 renderCardBackPreview('');
             });
 
+            var calendarPrintHeaderFrame;
+            var calendarPrintHeaderSelectButton = $('#mj-calendar-print-header-image-select');
+            var calendarPrintHeaderClearButton = $('#mj-calendar-print-header-image-clear');
+            var calendarPrintHeaderPreview = $('#mj-calendar-print-header-image-preview');
+            var calendarPrintHeaderInput = $('#mj-calendar-print-header-image-id');
+            var calendarPrintHeaderImage = calendarPrintHeaderPreview.find('img');
+            var calendarPrintHeaderPlaceholder = calendarPrintHeaderPreview.find('.mj-calendar-print-header-image-preview__placeholder');
+
+            function renderCalendarPrintHeaderPreview(url) {
+                if (url) {
+                    calendarPrintHeaderImage.attr('src', url).show();
+                    calendarPrintHeaderPlaceholder.hide();
+                    calendarPrintHeaderClearButton.show();
+                } else {
+                    calendarPrintHeaderImage.attr('src', '').hide();
+                    calendarPrintHeaderPlaceholder.show();
+                    calendarPrintHeaderClearButton.hide();
+                }
+            }
+
+            calendarPrintHeaderSelectButton.on('click', function (event) {
+                event.preventDefault();
+
+                if (calendarPrintHeaderFrame) {
+                    calendarPrintHeaderFrame.open();
+                    return;
+                }
+
+                calendarPrintHeaderFrame = wp.media({
+                    title: '<?php echo esc_js(__('Choisir une image d\'en-tête', 'mj-member')); ?>',
+                    library: { type: 'image' },
+                    button: { text: '<?php echo esc_js(__('Utiliser cette image', 'mj-member')); ?>' },
+                    multiple: false
+                });
+
+                calendarPrintHeaderFrame.on('select', function () {
+                    var attachment = calendarPrintHeaderFrame.state().get('selection').first().toJSON();
+                    var imageUrl = attachment.sizes && attachment.sizes.large ? attachment.sizes.large.url : attachment.url;
+                    calendarPrintHeaderInput.val(attachment.id);
+                    renderCalendarPrintHeaderPreview(imageUrl);
+                });
+
+                calendarPrintHeaderFrame.open();
+            });
+
+            calendarPrintHeaderClearButton.on('click', function (event) {
+                event.preventDefault();
+                calendarPrintHeaderInput.val('');
+                renderCalendarPrintHeaderPreview('');
+            });
+
+            var calendarPrintFooterFrame;
+            var calendarPrintFooterSelectButton = $('#mj-calendar-print-footer-image-select');
+            var calendarPrintFooterClearButton = $('#mj-calendar-print-footer-image-clear');
+            var calendarPrintFooterPreview = $('#mj-calendar-print-footer-image-preview');
+            var calendarPrintFooterInput = $('#mj-calendar-print-footer-image-id');
+            var calendarPrintFooterImage = calendarPrintFooterPreview.find('img');
+            var calendarPrintFooterPlaceholder = calendarPrintFooterPreview.find('.mj-calendar-print-footer-image-preview__placeholder');
+
+            function renderCalendarPrintFooterPreview(url) {
+                if (url) {
+                    calendarPrintFooterImage.attr('src', url).show();
+                    calendarPrintFooterPlaceholder.hide();
+                    calendarPrintFooterClearButton.show();
+                } else {
+                    calendarPrintFooterImage.attr('src', '').hide();
+                    calendarPrintFooterPlaceholder.show();
+                    calendarPrintFooterClearButton.hide();
+                }
+            }
+
+            calendarPrintFooterSelectButton.on('click', function (event) {
+                event.preventDefault();
+
+                if (calendarPrintFooterFrame) {
+                    calendarPrintFooterFrame.open();
+                    return;
+                }
+
+                calendarPrintFooterFrame = wp.media({
+                    title: '<?php echo esc_js(__('Choisir une image de pied de page', 'mj-member')); ?>',
+                    library: { type: 'image' },
+                    button: { text: '<?php echo esc_js(__('Utiliser cette image', 'mj-member')); ?>' },
+                    multiple: false
+                });
+
+                calendarPrintFooterFrame.on('select', function () {
+                    var attachment = calendarPrintFooterFrame.state().get('selection').first().toJSON();
+                    var imageUrl = attachment.sizes && attachment.sizes.large ? attachment.sizes.large.url : attachment.url;
+                    calendarPrintFooterInput.val(attachment.id);
+                    renderCalendarPrintFooterPreview(imageUrl);
+                });
+
+                calendarPrintFooterFrame.open();
+            });
+
+            calendarPrintFooterClearButton.on('click', function (event) {
+                event.preventDefault();
+                calendarPrintFooterInput.val('');
+                renderCalendarPrintFooterPreview('');
+            });
+
             renderCardPreview(cardImage.length && cardImage.attr('src') ? cardImage.attr('src') : '');
             renderCardBackPreview(cardBackImage.length && cardBackImage.attr('src') ? cardBackImage.attr('src') : '');
+            renderCalendarPrintHeaderPreview(calendarPrintHeaderImage.length && calendarPrintHeaderImage.attr('src') ? calendarPrintHeaderImage.attr('src') : '');
+            renderCalendarPrintFooterPreview(calendarPrintFooterImage.length && calendarPrintFooterImage.attr('src') ? calendarPrintFooterImage.attr('src') : '');
             refreshCardBackVisibility();
         })(jQuery);
 

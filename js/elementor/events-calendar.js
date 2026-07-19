@@ -484,6 +484,7 @@
         var todayBtn = root.querySelector('[data-calendar-action="today"]');
         var openPrintBtn = root.querySelector('[data-calendar-action="open-print"]');
         var printNowBtn = root.querySelector('[data-calendar-action="print-now"]');
+        var saveImageBtn = root.querySelector('[data-calendar-action="save-image"]');
         var printModal = root.querySelector('[data-calendar-print-modal]');
         var printPreviewFrame = root.querySelector('[data-calendar-print-preview]');
         var printCloseBtns = toArray(root.querySelectorAll('[data-calendar-print-close]'));
@@ -499,12 +500,15 @@
         var printPadPageInput = root.querySelector('[data-print-option="pad-page"]');
         var printPadDayInput = root.querySelector('[data-print-option="pad-day"]');
         var printPadEventInput = root.querySelector('[data-print-option="pad-event"]');
+        var printThemeInput = root.querySelector('[data-print-option="theme"]');
         var printSpanInput = root.querySelector('[data-print-option="span"]');
         var printDetailsInput = root.querySelector('[data-print-option="details"]');
         var printCoverInput = root.querySelector('[data-print-option="cover"]');
         var printTimeRangeInput = root.querySelector('[data-print-option="time-range"]');
         var printEventEmojiInput = root.querySelector('[data-print-option="event-emoji"]');
         var printEventColorInput = root.querySelector('[data-print-option="event-color"]');
+        var printHeaderImageInput = root.querySelector('[data-print-option="header-image"]');
+        var printFooterImageInput = root.querySelector('[data-print-option="footer-image"]');
         var printPageBreakInput = root.querySelector('[data-print-option="page-break"]');
         var printPageBreakLabel = root.querySelector('[data-print-option-page-break-label]');
         var printTypeFiltersWrap = root.querySelector('[data-print-type-filters]');
@@ -519,6 +523,7 @@
         var printPrefsSaveTimer = null;
         var isApplyingPrintPrefs = false;
         var hasAppliedPrintPrefs = false;
+        var lastPrintSnapshot = null;
         var todayMonthKey = root.getAttribute('data-calendar-today') || '';
         if (config && config.todayMonth) {
             todayMonthKey = config.todayMonth;
@@ -709,6 +714,16 @@
                 return 'week';
             }
             return printModeInput.value === 'month' ? 'month' : 'week';
+        }
+
+        function getPrintTheme() {
+            if (printThemeInput) {
+                return printThemeInput.value === 'dark' ? 'dark' : 'light';
+            }
+            if (printConfig && printConfig.defaultTheme === 'dark') {
+                return 'dark';
+            }
+            return 'light';
         }
 
         function parseMonthKey(monthKey) {
@@ -1073,6 +1088,20 @@
             return typeof printConfig.defaultEventStyle === 'undefined' ? true : !!printConfig.defaultEventStyle;
         }
 
+        function isHeaderImageEnabled() {
+            if (printHeaderImageInput) {
+                return !!printHeaderImageInput.checked;
+            }
+            return !!(printConfig && printConfig.defaultHeaderImage && printConfig.headerImageUrl);
+        }
+
+        function isFooterImageEnabled() {
+            if (printFooterImageInput) {
+                return !!printFooterImageInput.checked;
+            }
+            return !!(printConfig && printConfig.defaultFooterImage && printConfig.footerImageUrl);
+        }
+
         function formatTypeLabel(typeKey) {
             if (!typeKey) {
                 return 'Type';
@@ -1195,6 +1224,9 @@
             if (printModeInput && (prefs.mode === 'week' || prefs.mode === 'month')) {
                 printModeInput.value = prefs.mode;
             }
+            if (printThemeInput && (prefs.theme === 'light' || prefs.theme === 'dark')) {
+                printThemeInput.value = prefs.theme;
+            }
             if (printSpanInput && typeof prefs.span !== 'undefined') {
                 printSpanInput.value = String(prefs.span);
             }
@@ -1212,6 +1244,12 @@
             }
             if (printEventColorInput && typeof prefs.eventColor !== 'undefined') {
                 printEventColorInput.checked = !!prefs.eventColor;
+            }
+            if (printHeaderImageInput && typeof prefs.headerImage !== 'undefined') {
+                printHeaderImageInput.checked = !!prefs.headerImage;
+            }
+            if (printFooterImageInput && typeof prefs.footerImage !== 'undefined') {
+                printFooterImageInput.checked = !!prefs.footerImage;
             }
             if (printPageBreakInput && typeof prefs.pageBreak !== 'undefined') {
                 printPageBreakInput.checked = !!prefs.pageBreak;
@@ -1268,12 +1306,15 @@
 
             return {
                 mode: getPrintMode(),
+                theme: getPrintTheme(),
                 span: getPrintSpan(),
                 details: isDetailsEnabled(),
                 cover: isCoverEnabled(),
                 timeRange: isTimeRangeEnabled(),
                 eventEmoji: isEventEmojiEnabled(),
                 eventColor: isEventColorEnabled(),
+                headerImage: isHeaderImageEnabled(),
+                footerImage: isFooterImageEnabled(),
                 pageBreak: isPageBreakEnabled(),
                 padPage: getPrintPaddingValue(printPadPageInput, 0, 24, 10),
                 padDay: getPrintPaddingValue(printPadDayInput, 0, 16, 6),
@@ -1537,6 +1578,26 @@
             var blocks = [];
             var labels = (printConfig && printConfig.labels) ? printConfig.labels : {};
             var weekdayLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+            var headerImageUrl = options.headerImage && options.headerImageUrl ? String(options.headerImageUrl) : '';
+            var footerImageUrl = options.footerImage && options.footerImageUrl ? String(options.footerImageUrl) : '';
+            var theme = options.theme === 'dark' ? 'dark' : 'light';
+            var isDarkTheme = theme === 'dark';
+            var pageBg = isDarkTheme ? '#0f1115' : '#ffffff';
+            var pageText = isDarkTheme ? '#f5f7fa' : '#111111';
+            var titleBorder = isDarkTheme ? '#2a2f36' : '#dddddd';
+            var weekdayText = isDarkTheme ? '#aeb6c2' : '#666666';
+            var dayBorder = isDarkTheme ? '#2f3742' : '#e4e4e4';
+            var dayBg = isDarkTheme ? '#171c23' : '#ffffff';
+            var dayPaddingBg = isDarkTheme ? '#141920' : '#fafafa';
+            var dayHead = isDarkTheme ? '#d6dde8' : '#444444';
+            var eventBorder = isDarkTheme ? '#323a46' : '#efefef';
+            var eventBg = isDarkTheme ? '#202733' : '#ffffff';
+            var eventTitle = isDarkTheme ? '#f6f8fc' : '#111111';
+            var eventMeta = isDarkTheme ? '#c2cad7' : '#444444';
+            var typeLabelBorder = isDarkTheme ? '#3c4552' : '#d7d7d7';
+            var typeLabelBg = isDarkTheme ? '#2a3240' : '#f6f6f6';
+            var typeLabelColor = isDarkTheme ? '#e2e7f0' : '#444444';
+            var emptyText = isDarkTheme ? '#aeb6c2' : '#666666';
 
             if (periods.length) {
                 periods.forEach(function(period, idx) {
@@ -1625,29 +1686,34 @@
                 '<meta name="viewport" content="width=device-width, initial-scale=1" />',
                 '<title>' + escapeHtml(title) + '</title>',
                 '<style>',
-                'body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:' + pagePaddingCss + 'px;color:#111;}',
-                'h2{font-size:18px;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid #ddd;}',
+                'body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:' + pagePaddingCss + 'px;color:' + pageText + ';background:' + pageBg + ';}',
+                'h2{font-size:18px;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid ' + titleBorder + ';color:' + pageText + ';}',
                 '.mj-print-cal{display:grid;gap:8px;}',
                 '.mj-print-cal__weekdays,.mj-print-cal__week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}',
-                '.mj-print-cal__weekdays span{font-size:11px;font-weight:700;text-transform:uppercase;color:#666;padding:2px 4px;}',
-                '.mj-print-cal__day{border:1px solid #e4e4e4;border-radius:8px;min-height:80px;padding:' + dayPaddingCss + 'px;display:flex;flex-direction:column;gap:6px;}',
-                '.mj-print-cal__day.is-padding{background:#fafafa;border-style:dashed;}',
-                '.mj-print-cal__day-head{font-size:11px;font-weight:700;color:#444;}',
+                '.mj-print-cal__weekdays span{font-size:11px;font-weight:700;text-transform:uppercase;color:' + weekdayText + ';padding:2px 4px;}',
+                '.mj-print-cal__day{border:1px solid ' + dayBorder + ';border-radius:8px;min-height:80px;padding:' + dayPaddingCss + 'px;display:flex;flex-direction:column;gap:6px;background:' + dayBg + ';}',
+                '.mj-print-cal__day.is-padding{background:' + dayPaddingBg + ';border-style:dashed;}',
+                '.mj-print-cal__day-head{font-size:11px;font-weight:700;color:' + dayHead + ';}',
                 '.mj-print-cal__events{display:grid;gap:6px;}',
-                '.mj-print-event{border:1px solid #efefef;border-radius:6px;padding:' + eventPaddingCss + 'px;background:#fff;display:grid;gap:4px;}',
-                '.mj-print-event-cover{width:100%;height:56px;object-fit:cover;border-radius:4px;}',
-                '.mj-print-event-title{font-size:12px;font-weight:700;line-height:1.2;display:flex;align-items:center;gap:6px;}',
+                '.mj-print-event{border:1px solid ' + eventBorder + ';border-radius:6px;padding:' + eventPaddingCss + 'px;background:' + eventBg + ';display:grid;gap:4px;}',
+                '.mj-print-event-cover{width:100%;aspect-ratio:1 / 1;object-fit:cover;border-radius:4px;display:block;}',
+                '.mj-print-event-title{font-size:12px;font-weight:700;line-height:1.2;display:flex;align-items:center;gap:6px;color:' + eventTitle + ';}',
                 '.mj-print-event-emoji{font-size:13px;line-height:1;}',
                 '.mj-print-event-title-text{display:inline;}',
-                '.mj-print-event-meta,.mj-print-event-details{font-size:10px;color:#444;line-height:1.3;}',
-                '.mj-print-event-type-label{display:inline-flex;align-items:center;align-self:flex-start;border:1px solid #d7d7d7;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;line-height:1.2;background:#f6f6f6;color:#444;}',
-                '.mj-print-empty{font-size:13px;color:#666;}',
+                '.mj-print-event-meta,.mj-print-event-details{font-size:10px;color:' + eventMeta + ';line-height:1.3;}',
+                '.mj-print-event-type-label{display:inline-flex;align-items:center;align-self:flex-start;border:1px solid ' + typeLabelBorder + ';border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;line-height:1.2;background:' + typeLabelBg + ';color:' + typeLabelColor + ';}',
+                '.mj-print-empty{font-size:13px;color:' + emptyText + ';}',
                 '.mj-print-period + .mj-print-period{margin-top:14px;}',
+                '.mj-print-doc-image{margin:0 0 12px;}',
+                '.mj-print-doc-image img{display:block;width:100%;max-height:130px;object-fit:contain;object-position:center;}',
+                '.mj-print-doc-image--footer{margin:14px 0 0;}',
                 '@media print{body{padding:' + pagePaddingCss + 'px;} .mj-print-period.has-break{page-break-after:always;break-after:page;}}',
                 '</style>',
                 '</head>',
                 '<body>',
+                (headerImageUrl ? '<div class="mj-print-doc-image mj-print-doc-image--header"><img src="' + escapeHtml(headerImageUrl) + '" alt="" /></div>' : ''),
                 blocks.join(''),
+                (footerImageUrl ? '<div class="mj-print-doc-image mj-print-doc-image--footer"><img src="' + escapeHtml(footerImageUrl) + '" alt="" /></div>' : ''),
                 '</body>',
                 '</html>'
             ].join('');
@@ -1664,18 +1730,517 @@
                 : (labels.pagePerWeek || 'Une page par semaine');
         }
 
+        function waitForPreviewImages(doc) {
+            if (!doc || !doc.images || !doc.images.length) {
+                return Promise.resolve();
+            }
+
+            var pending = toArray(doc.images).filter(function(img) {
+                return !img.complete;
+            });
+
+            if (!pending.length) {
+                return Promise.resolve();
+            }
+
+            return Promise.all(pending.map(function(img) {
+                return new Promise(function(resolve) {
+                    var done = false;
+                    function finish() {
+                        if (done) {
+                            return;
+                        }
+                        done = true;
+                        resolve();
+                    }
+                    img.addEventListener('load', finish, { once: true });
+                    img.addEventListener('error', finish, { once: true });
+                    setTimeout(finish, 2500);
+                });
+            })).then(function() {
+                return undefined;
+            });
+        }
+
+        function buildImageFileName() {
+            var mode = getPrintMode();
+            var suffix = mode === 'month' ? 'mois' : 'semaine';
+            var periodKey = mode === 'month'
+                ? (printSelectedMonthKey || 'calendrier')
+                : (printSelectedWeekStartKey || 'horaire');
+            return 'horaire-' + suffix + '-' + periodKey + '.jpg';
+        }
+
+        function clonePrintSnapshot(periods, options) {
+            return {
+                periods: JSON.parse(JSON.stringify(periods || [])),
+                options: JSON.parse(JSON.stringify(options || {}))
+            };
+        }
+
+        function drawRoundedRect(ctx, x, y, width, height, radius) {
+            var r = Math.max(0, Math.min(radius, width / 2, height / 2));
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + width, y, x + width, y + height, r);
+            ctx.arcTo(x + width, y + height, x, y + height, r);
+            ctx.arcTo(x, y + height, x, y, r);
+            ctx.arcTo(x, y, x + width, y, r);
+            ctx.closePath();
+        }
+
+        function drawImageCover(ctx, image, x, y, width, height, radius) {
+            if (!image || !image.naturalWidth || !image.naturalHeight || width <= 0 || height <= 0) {
+                return;
+            }
+
+            var sourceWidth = image.naturalWidth;
+            var sourceHeight = image.naturalHeight;
+            var sourceRatio = sourceWidth / sourceHeight;
+            var targetRatio = width / height;
+            var cropWidth = sourceWidth;
+            var cropHeight = sourceHeight;
+            var cropX = 0;
+            var cropY = 0;
+
+            if (sourceRatio > targetRatio) {
+                cropWidth = sourceHeight * targetRatio;
+                cropX = (sourceWidth - cropWidth) / 2;
+            } else if (sourceRatio < targetRatio) {
+                cropHeight = sourceWidth / targetRatio;
+                cropY = (sourceHeight - cropHeight) / 2;
+            }
+
+            ctx.save();
+            drawRoundedRect(ctx, x, y, width, height, radius);
+            ctx.clip();
+            ctx.drawImage(
+                image,
+                cropX,
+                cropY,
+                cropWidth,
+                cropHeight,
+                x,
+                y,
+                width,
+                height
+            );
+            ctx.restore();
+        }
+
+        function wrapCanvasText(ctx, text, maxWidth) {
+            var content = String(text || '').trim();
+            if (!content) {
+                return [];
+            }
+
+            var words = content.split(/\s+/);
+            var lines = [];
+            var current = '';
+
+            words.forEach(function(word) {
+                var candidate = current ? current + ' ' + word : word;
+                if (!current || ctx.measureText(candidate).width <= maxWidth) {
+                    current = candidate;
+                } else {
+                    lines.push(current);
+                    current = word;
+                }
+            });
+
+            if (current) {
+                lines.push(current);
+            }
+
+            return lines;
+        }
+
+        function drawCanvasTextBlock(ctx, lines, x, y, lineHeight, maxLines) {
+            var rendered = 0;
+            lines.slice(0, maxLines).forEach(function(line, index) {
+                var output = line;
+                if (index === maxLines - 1 && lines.length > maxLines) {
+                    output = line.replace(/[\s.,;:!?-]*$/, '') + '...';
+                }
+                ctx.fillText(output, x, y + (rendered * lineHeight));
+                rendered += 1;
+            });
+            return rendered * lineHeight;
+        }
+
+        function loadImageForCanvas(url) {
+            return new Promise(function(resolve) {
+                if (!url) {
+                    resolve(null);
+                    return;
+                }
+
+                var img = new Image();
+                var done = false;
+                function finish(result) {
+                    if (done) {
+                        return;
+                    }
+                    done = true;
+                    resolve(result);
+                }
+
+                img.crossOrigin = 'anonymous';
+                img.onload = function() { finish(img); };
+                img.onerror = function() { finish(null); };
+                setTimeout(function() { finish(null); }, 3000);
+                img.src = url;
+            });
+        }
+
+        async function savePreviewAsJpeg() {
+            if (!lastPrintSnapshot || !lastPrintSnapshot.periods) {
+                throw new Error('snapshot-unavailable');
+            }
+
+            var snapshot = lastPrintSnapshot;
+            var periods = snapshot.periods || [];
+            var options = snapshot.options || {};
+            var pagePadding = typeof options.pagePadding === 'number' ? options.pagePadding : 10;
+            var dayPadding = typeof options.dayPadding === 'number' ? options.dayPadding : 6;
+            var eventPadding = typeof options.eventPadding === 'number' ? options.eventPadding : 6;
+            var theme = options.theme === 'dark' ? 'dark' : 'light';
+            var isDarkTheme = theme === 'dark';
+            var palette = {
+                pageBg: isDarkTheme ? '#0f1115' : '#ffffff',
+                heading: isDarkTheme ? '#f5f7fa' : '#111111',
+                weekday: isDarkTheme ? '#aeb6c2' : '#666666',
+                dayBg: isDarkTheme ? '#171c23' : '#ffffff',
+                dayPaddingBg: isDarkTheme ? '#141920' : '#fafafa',
+                dayBorder: isDarkTheme ? '#2f3742' : '#e4e4e4',
+                dayPaddingBorder: isDarkTheme ? '#3d4653' : '#d8d8d8',
+                dayHead: isDarkTheme ? '#d6dde8' : '#444444',
+                eventBg: isDarkTheme ? '#202733' : '#ffffff',
+                eventBorder: isDarkTheme ? '#323a46' : '#efefef',
+                eventTitle: isDarkTheme ? '#f6f8fc' : '#111111',
+                eventMeta: isDarkTheme ? '#c2cad7' : '#444444',
+                pillBg: isDarkTheme ? '#2a3240' : '#f6f6f6',
+                pillBorder: isDarkTheme ? '#3c4552' : '#d7d7d7',
+                pillText: isDarkTheme ? '#e2e7f0' : '#444444'
+            };
+            var headerImageUrl = options.headerImage && options.headerImageUrl ? String(options.headerImageUrl) : '';
+            var footerImageUrl = options.footerImage && options.footerImageUrl ? String(options.footerImageUrl) : '';
+            var canvasWidth = 1600;
+            var weekdayGap = 6;
+            var blockGap = 8;
+            var periodGap = 18;
+            var weekdayHeight = 20;
+            var dayWidth = Math.floor((canvasWidth - (pagePadding * 2) - (weekdayGap * 6)) / 7);
+            var measureCanvas = document.createElement('canvas');
+            var measureCtx = measureCanvas.getContext('2d');
+            if (!measureCtx) {
+                throw new Error('canvas-unavailable');
+            }
+
+            var imageCache = {};
+            async function getImage(url) {
+                if (!url) {
+                    return null;
+                }
+                if (!Object.prototype.hasOwnProperty.call(imageCache, url)) {
+                    imageCache[url] = loadImageForCanvas(url);
+                }
+                return imageCache[url];
+            }
+
+            function getImageFittedHeight(image, width, maxHeight, fallbackHeight) {
+                if (!image || !image.naturalWidth || !image.naturalHeight || width <= 0) {
+                    return fallbackHeight;
+                }
+                var raw = width * (image.naturalHeight / image.naturalWidth);
+                if (!isFinite(raw) || raw <= 0) {
+                    return fallbackHeight;
+                }
+                return Math.max(30, Math.min(maxHeight, raw));
+            }
+
+            var headerImage = headerImageUrl ? await getImage(headerImageUrl) : null;
+            var footerImage = footerImageUrl ? await getImage(footerImageUrl) : null;
+            var headerDrawHeight = headerImage ? getImageFittedHeight(headerImage, canvasWidth - (pagePadding * 2), 130, 56) : 0;
+            var footerDrawHeight = footerImage ? getImageFittedHeight(footerImage, canvasWidth - (pagePadding * 2), 130, 56) : 0;
+
+            function measureEventHeight(eventItem) {
+                var innerWidth = dayWidth - (dayPadding * 2) - (eventPadding * 2);
+                var height = eventPadding * 2 + 4;
+
+                if (options.cover && eventItem.cover) {
+                    height += innerWidth + 4;
+                }
+
+                measureCtx.font = '700 12px Arial, sans-serif';
+                var titleLines = wrapCanvasText(measureCtx, eventItem.title || '', Math.max(60, innerWidth - 20));
+                height += Math.max(14, Math.min(titleLines.length, 3) * 14);
+
+                if (options.timeRange && eventItem.meta) {
+                    height += 14;
+                }
+                if (eventItem.type) {
+                    height += 18;
+                }
+                if (options.details && eventItem.details) {
+                    measureCtx.font = '400 10px Arial, sans-serif';
+                    var detailLines = wrapCanvasText(measureCtx, eventItem.details, Math.max(60, innerWidth));
+                    height += Math.min(detailLines.length, 4) * 12;
+                }
+
+                return Math.max(42, height);
+            }
+
+            var totalHeight = pagePadding;
+            if (headerImage) {
+                totalHeight += headerDrawHeight + 12;
+            }
+            periods.forEach(function(period) {
+                totalHeight += 34;
+                totalHeight += weekdayHeight + blockGap;
+                (period.weeks || []).forEach(function(week) {
+                    var weekHeight = 80;
+                    (week.cells || []).forEach(function(cell) {
+                        if (!cell || cell.isPadding) {
+                            return;
+                        }
+                        var cellHeight = Math.max(80, dayPadding * 2 + 18);
+                        (cell.events || []).forEach(function(eventItem, eventIndex) {
+                            cellHeight += measureEventHeight(eventItem);
+                            if (eventIndex < cell.events.length - 1) {
+                                cellHeight += 6;
+                            }
+                        });
+                        weekHeight = Math.max(weekHeight, cellHeight);
+                    });
+                    totalHeight += weekHeight + blockGap;
+                });
+                totalHeight += periodGap;
+            });
+            if (footerImage) {
+                totalHeight += 14 + footerDrawHeight;
+            }
+            totalHeight += pagePadding;
+
+            var canvas = document.createElement('canvas');
+            canvas.width = canvasWidth;
+            canvas.height = Math.max(600, totalHeight);
+            var ctx = canvas.getContext('2d');
+            if (!ctx) {
+                throw new Error('canvas-unavailable');
+            }
+
+            ctx.fillStyle = palette.pageBg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            var weekdayLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+            var cursorY = pagePadding;
+
+            if (headerImage) {
+                try {
+                    ctx.drawImage(headerImage, pagePadding, cursorY, canvasWidth - (pagePadding * 2), headerDrawHeight);
+                    cursorY += headerDrawHeight + 12;
+                } catch (error) {
+                    // Ignore header drawing errors.
+                }
+            }
+
+            for (var pi = 0; pi < periods.length; pi += 1) {
+                var period = periods[pi];
+                ctx.font = '700 18px Arial, sans-serif';
+                ctx.fillStyle = palette.heading;
+                ctx.fillText(String(period.title || ''), pagePadding, cursorY + 18);
+                cursorY += 30;
+
+                ctx.font = '700 11px Arial, sans-serif';
+                ctx.fillStyle = palette.weekday;
+                for (var wdi = 0; wdi < weekdayLabels.length; wdi += 1) {
+                    var weekdayX = pagePadding + (wdi * (dayWidth + weekdayGap));
+                    ctx.fillText(weekdayLabels[wdi], weekdayX + 4, cursorY + 11);
+                }
+                cursorY += weekdayHeight + blockGap;
+
+                for (var wi = 0; wi < (period.weeks || []).length; wi += 1) {
+                    var week = period.weeks[wi];
+                    var computedWeekHeight = 80;
+                    (week.cells || []).forEach(function(cell) {
+                        if (!cell || cell.isPadding) {
+                            return;
+                        }
+                        var cellHeight = Math.max(80, dayPadding * 2 + 18);
+                        (cell.events || []).forEach(function(eventItem, eventIndex) {
+                            cellHeight += measureEventHeight(eventItem);
+                            if (eventIndex < cell.events.length - 1) {
+                                cellHeight += 6;
+                            }
+                        });
+                        computedWeekHeight = Math.max(computedWeekHeight, cellHeight);
+                    });
+
+                    for (var ci = 0; ci < (week.cells || []).length; ci += 1) {
+                        var cell = week.cells[ci];
+                        var cellX = pagePadding + (ci * (dayWidth + weekdayGap));
+                        var cellY = cursorY;
+
+                        ctx.save();
+                        drawRoundedRect(ctx, cellX, cellY, dayWidth, computedWeekHeight, 8);
+                        ctx.fillStyle = cell && cell.isPadding ? palette.dayPaddingBg : palette.dayBg;
+                        ctx.fill();
+                        ctx.lineWidth = 1;
+                        ctx.strokeStyle = cell && cell.isPadding ? palette.dayPaddingBorder : palette.dayBorder;
+                        ctx.stroke();
+                        ctx.restore();
+
+                        if (!cell || cell.isPadding) {
+                            continue;
+                        }
+
+                        var innerX = cellX + dayPadding;
+                        var innerY = cellY + dayPadding;
+                        var innerWidth = dayWidth - (dayPadding * 2);
+
+                        ctx.font = '700 11px Arial, sans-serif';
+                        ctx.fillStyle = palette.dayHead;
+                        ctx.fillText(String(cell.dayNumber || ''), innerX, innerY + 11);
+                        innerY += 18;
+
+                        for (var ei = 0; ei < (cell.events || []).length; ei += 1) {
+                            var eventItem = cell.events[ei];
+                            var eventHeight = measureEventHeight(eventItem);
+                            var eventX = innerX;
+                            var eventY = innerY;
+                            var eventWidth = innerWidth;
+
+                            ctx.save();
+                            drawRoundedRect(ctx, eventX, eventY, eventWidth, eventHeight, 6);
+                            ctx.fillStyle = (options.eventColor && eventItem.accentColor)
+                                ? (hexToRgba(eventItem.accentColor, isDarkTheme ? 0.2 : 0.16) || palette.eventBg)
+                                : palette.eventBg;
+                            ctx.fill();
+                            ctx.lineWidth = 1;
+                            ctx.strokeStyle = (options.eventColor && eventItem.accentColor)
+                                ? (hexToRgba(eventItem.accentColor, isDarkTheme ? 0.5 : 0.45) || palette.eventBorder)
+                                : palette.eventBorder;
+                            ctx.stroke();
+                            ctx.restore();
+
+                            var contentX = eventX + eventPadding;
+                            var contentY = eventY + eventPadding;
+                            var contentWidth = eventWidth - (eventPadding * 2);
+
+                            if (options.cover && eventItem.cover) {
+                                var coverImage = await getImage(eventItem.cover);
+                                if (coverImage) {
+                                    try {
+                                        drawImageCover(ctx, coverImage, contentX, contentY, contentWidth, contentWidth, 4);
+                                        contentY += contentWidth + 4;
+                                    } catch (error) {
+                                        // Ignore cover drawing failures, keep export working.
+                                    }
+                                }
+                            }
+
+                            var titleOffsetX = contentX;
+                            ctx.font = '700 12px Arial, sans-serif';
+                            ctx.fillStyle = palette.eventTitle;
+                            if (options.eventEmoji && eventItem.emoji) {
+                                ctx.fillText(String(eventItem.emoji), contentX, contentY + 12);
+                                titleOffsetX += 18;
+                            }
+                            var titleLines = wrapCanvasText(ctx, eventItem.title || '', Math.max(60, contentWidth - (titleOffsetX - contentX)));
+                            drawCanvasTextBlock(ctx, titleLines, titleOffsetX, contentY + 11, 14, 3);
+                            contentY += Math.max(16, Math.min(titleLines.length, 3) * 14);
+
+                            ctx.font = '400 10px Arial, sans-serif';
+                            ctx.fillStyle = palette.eventMeta;
+                            if (options.timeRange && eventItem.meta) {
+                                ctx.fillText(String(eventItem.meta), contentX, contentY + 10);
+                                contentY += 14;
+                            }
+
+                            if (eventItem.type) {
+                                var pillText = String(eventItem.type);
+                                ctx.font = '600 10px Arial, sans-serif';
+                                var pillWidth = Math.min(contentWidth, ctx.measureText(pillText).width + 16);
+                                ctx.save();
+                                drawRoundedRect(ctx, contentX, contentY, pillWidth, 16, 999);
+                                ctx.fillStyle = eventItem.accentColor
+                                    ? (hexToRgba(eventItem.accentColor, isDarkTheme ? 0.22 : 0.18) || palette.pillBg)
+                                    : palette.pillBg;
+                                ctx.fill();
+                                ctx.lineWidth = 1;
+                                ctx.strokeStyle = eventItem.accentColor
+                                    ? (hexToRgba(eventItem.accentColor, isDarkTheme ? 0.5 : 0.42) || palette.pillBorder)
+                                    : palette.pillBorder;
+                                ctx.stroke();
+                                ctx.restore();
+                                ctx.fillStyle = eventItem.accentColor || palette.pillText;
+                                ctx.fillText(pillText, contentX + 8, contentY + 11);
+                                contentY += 20;
+                            }
+
+                            if (options.details && eventItem.details) {
+                                ctx.font = '400 10px Arial, sans-serif';
+                                ctx.fillStyle = palette.eventMeta;
+                                var detailLines = wrapCanvasText(ctx, eventItem.details, Math.max(60, contentWidth));
+                                drawCanvasTextBlock(ctx, detailLines, contentX, contentY + 10, 12, 4);
+                            }
+
+                            innerY += eventHeight + 6;
+                        }
+                    }
+
+                    cursorY += computedWeekHeight + blockGap;
+                }
+
+                cursorY += periodGap;
+            }
+
+            if (footerImage) {
+                cursorY += 14;
+                try {
+                    ctx.drawImage(footerImage, pagePadding, cursorY, canvasWidth - (pagePadding * 2), footerDrawHeight);
+                } catch (error) {
+                    // Ignore footer drawing errors.
+                }
+            }
+
+            return new Promise(function(resolve, reject) {
+                canvas.toBlob(function(jpegBlob) {
+                    if (!jpegBlob) {
+                        reject(new Error('blob-unavailable'));
+                        return;
+                    }
+                    var downloadUrl = URL.createObjectURL(jpegBlob);
+                    var anchor = document.createElement('a');
+                    anchor.href = downloadUrl;
+                    anchor.download = buildImageFileName();
+                    document.body.appendChild(anchor);
+                    anchor.click();
+                    anchor.remove();
+                    setTimeout(function() {
+                        URL.revokeObjectURL(downloadUrl);
+                    }, 1000);
+                    resolve();
+                }, 'image/jpeg', 0.92);
+            });
+        }
+
         function refreshPrintPreview() {
             if (!printConfig || !printConfig.enabled || !printPreviewFrame) {
                 return;
             }
 
             var mode = getPrintMode();
+            var theme = getPrintTheme();
             var span = getPrintSpan();
             var details = isDetailsEnabled();
             var cover = isCoverEnabled();
             var timeRange = isTimeRangeEnabled();
             var eventEmoji = isEventEmojiEnabled();
             var eventColor = isEventColorEnabled();
+            var headerImage = isHeaderImageEnabled();
+            var footerImage = isFooterImageEnabled();
             var pagePadding = getPrintPaddingValue(printPadPageInput, 0, 24, 10);
             var dayPadding = getPrintPaddingValue(printPadDayInput, 0, 16, 6);
             var eventPadding = getPrintPaddingValue(printPadEventInput, 0, 16, 6);
@@ -1687,19 +2252,27 @@
                 ? collectMonthPeriods(span, details, cover, selectedTypesMap, selectedMonthStartIndex)
                 : collectWeekPeriods(span, details, cover, selectedTypesMap, selectedWeekAnchorDate);
 
-            printPreviewFrame.srcdoc = buildPrintDocumentHtml(periods, {
+            var printRenderOptions = {
                 mode: mode,
+                theme: theme,
                 span: span,
                 details: details,
                 cover: cover,
                 timeRange: timeRange,
                 eventEmoji: eventEmoji,
                 eventColor: eventColor,
+                headerImage: headerImage,
+                footerImage: footerImage,
+                headerImageUrl: (printConfig && printConfig.headerImageUrl) ? String(printConfig.headerImageUrl) : '',
+                footerImageUrl: (printConfig && printConfig.footerImageUrl) ? String(printConfig.footerImageUrl) : '',
                 pagePadding: pagePadding,
                 dayPadding: dayPadding,
                 eventPadding: eventPadding,
                 pageBreak: pageBreak
-            });
+            };
+
+            printPreviewFrame.srcdoc = buildPrintDocumentHtml(periods, printRenderOptions);
+            lastPrintSnapshot = clonePrintSnapshot(periods, printRenderOptions);
             updatePrintPageBreakLabel();
         }
 
@@ -1820,10 +2393,37 @@
             });
         }
 
+        if (saveImageBtn && printConfig && printConfig.enabled) {
+            saveImageBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (saveImageBtn.disabled) {
+                    return;
+                }
+
+                refreshPrintPreview();
+                saveImageBtn.disabled = true;
+
+                savePreviewAsJpeg()
+                    .catch(function() {
+                        alert('Impossible de générer l\'image JPEG.');
+                    })
+                    .finally(function() {
+                        saveImageBtn.disabled = false;
+                    });
+            });
+        }
+
         if (printModeInput) {
             printModeInput.addEventListener('change', function() {
                 updatePrintPageBreakLabel();
                 renderPrintPeriodSelectors();
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+
+        if (printThemeInput) {
+            printThemeInput.addEventListener('change', function() {
                 refreshPrintPreview();
                 queueSavePrintPrefs();
             });
@@ -1935,6 +2535,20 @@
 
         if (printEventColorInput) {
             printEventColorInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+
+        if (printHeaderImageInput) {
+            printHeaderImageInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+
+        if (printFooterImageInput) {
+            printFooterImageInput.addEventListener('change', function() {
                 refreshPrintPreview();
                 queueSavePrintPrefs();
             });

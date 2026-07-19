@@ -71,6 +71,8 @@ final class EventsController implements AjaxHandlerInterface {
             'timeRange',
             'eventEmoji',
             'eventColor',
+            'headerImage',
+            'footerImage',
             'pageBreak',
         );
         foreach ($bool_fields as $field) {
@@ -83,6 +85,13 @@ final class EventsController implements AjaxHandlerInterface {
             $mode = sanitize_key((string) $prefs['mode']);
             if (in_array($mode, array('week', 'month'), true)) {
                 $out['mode'] = $mode;
+            }
+        }
+
+        if (isset($prefs['theme'])) {
+            $theme = sanitize_key((string) $prefs['theme']);
+            if (in_array($theme, array('light', 'dark'), true)) {
+                $out['theme'] = $theme;
             }
         }
 
