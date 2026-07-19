@@ -197,21 +197,32 @@ final class MjFixturesMediaImporter
             return new WP_Error('fixtures_media_invalid', __('wp_media.json est invalide (items manquant).', 'mj-member'));
         }
 
+        $sourceUploadsBaseUrl = isset($decoded['source_uploads_base_url']) ? esc_url_raw((string) $decoded['source_uploads_base_url']) : '';
+        $sourceSiteUrl = isset($decoded['source_site_url']) ? esc_url_raw((string) $decoded['source_site_url']) : '';
+
         $queue = array();
         foreach ((array) $decoded['items'] as $item) {
             if (!is_array($item)) {
                 continue;
             }
-            $sourceUrl = isset($item['source_url']) ? esc_url_raw((string) $item['source_url']) : '';
-            if ($sourceUrl === '' || !preg_match('/^https?:\/\//i', $sourceUrl)) {
+
+            $sourceUrl = self::resolveSourceUrl($item, $sourceUploadsBaseUrl, $sourceSiteUrl);
+            $relativeFile = isset($item['file']) ? ltrim(str_replace('..', '', (string) $item['file']), '/\\') : '';
+
+            if ($sourceUrl === '' && $relativeFile === '') {
                 continue;
             }
 
             $queue[] = array(
                 'source_url' => $sourceUrl,
                 'source_file_name' => sanitize_file_name((string) ($item['source_file_name'] ?? '')),
+                'file' => $relativeFile,
                 'post' => isset($item['post']) && is_array($item['post']) ? $item['post'] : array(),
             );
+        }
+
+        if (empty($queue)) {
+            return new WP_Error('fixtures_media_empty', __('Aucune image exploitable dans wp_media.json (ni source_url ni fichier media/*).', 'mj-member'));
         }
 
         return $queue;
@@ -220,10 +231,20 @@ final class MjFixturesMediaImporter
     private static function importOne(array $item, bool $overwrite): array
     {
         $sourceUrl = esc_url_raw((string) ($item['source_url'] ?? ''));
-        if ($sourceUrl === '' || !preg_match('/^https?:\/\//i', $sourceUrl)) {
-            return array('status' => 'failed', 'message' => __('URL source invalide.', 'mj-member'));
+        if ($sourceUrl !== '' && preg_match('/^https?:\/\//i', $sourceUrl)) {
+            return self::importOneRemote($item, $overwrite, $sourceUrl);
         }
 
+        $relativeFile = isset($item['file']) ? ltrim(str_replace('..', '', (string) $item['file']), '/\\') : '';
+        if ($relativeFile !== '') {
+            return self::importOneLocalFile($item, $overwrite, $relativeFile);
+        }
+
+        return array('status' => 'failed', 'message' => __('Image sans URL source ni fichier local exploitable.', 'mj-member'));
+    }
+
+    private static function importOneRemote(array $item, bool $overwrite, string $sourceUrl): array
+    {
         $existing = self::findAttachmentBySourceUrl($sourceUrl);
         if ($existing > 0 && !$overwrite) {
             return array('status' => 'skipped', 'message' => sprintf(__('Déjà présent: %s', 'mj-member'), $sourceUrl));
@@ -264,6 +285,60 @@ final class MjFixturesMediaImporter
         return array('status' => 'imported', 'message' => sprintf(__('Importée: %s', 'mj-member'), $sourceUrl));
     }
 
+    private static function importOneLocalFile(array $item, bool $overwrite, string $relativeFile): array
+    {
+        $fixturesPath = MjFixturesManager::getFixturesDir() . $relativeFile;
+        if (!is_readable($fixturesPath)) {
+            return array('status' => 'failed', 'message' => sprintf(__('Fichier fixture introuvable: %s', 'mj-member'), $relativeFile));
+        }
+
+        $filename = sanitize_file_name(basename($fixturesPath));
+        if ($filename === '') {
+            return array('status' => 'failed', 'message' => __('Nom de fichier media invalide.', 'mj-member'));
+        }
+
+        if (!$overwrite && get_page_by_title($filename, OBJECT, 'attachment')) {
+            return array('status' => 'skipped', 'message' => sprintf(__('Déjà présent: %s', 'mj-member'), $filename));
+        }
+
+        $blob = @file_get_contents($fixturesPath);
+        if (!is_string($blob)) {
+            return array('status' => 'failed', 'message' => sprintf(__('Lecture impossible: %s', 'mj-member'), $relativeFile));
+        }
+
+        $bits = wp_upload_bits($filename, null, $blob);
+        if (!empty($bits['error'])) {
+            return array('status' => 'failed', 'message' => sprintf(__('Echec écriture uploads: %s', 'mj-member'), $filename));
+        }
+
+        $post = isset($item['post']) && is_array($item['post']) ? $item['post'] : array();
+        $attachment = array(
+            'post_title' => sanitize_text_field((string) ($post['post_title'] ?? pathinfo($filename, PATHINFO_FILENAME))),
+            'post_excerpt' => sanitize_text_field((string) ($post['post_excerpt'] ?? '')),
+            'post_content' => sanitize_textarea_field((string) ($post['post_content'] ?? '')),
+            'post_mime_type' => sanitize_text_field((string) ($post['post_mime_type'] ?? 'application/octet-stream')),
+            'post_status' => 'inherit',
+            'guid' => $bits['url'],
+        );
+
+        $attachmentId = wp_insert_attachment($attachment, $bits['file']);
+        if (is_wp_error($attachmentId) || (int) $attachmentId <= 0) {
+            return array('status' => 'failed', 'message' => sprintf(__('Echec insertion media: %s', 'mj-member'), $filename));
+        }
+
+        $meta = wp_generate_attachment_metadata((int) $attachmentId, $bits['file']);
+        if (is_array($meta)) {
+            wp_update_attachment_metadata((int) $attachmentId, $meta);
+        }
+
+        $sourceUrl = esc_url_raw((string) ($item['source_url'] ?? ''));
+        if ($sourceUrl !== '') {
+            update_post_meta((int) $attachmentId, '_mj_fixture_source_url', $sourceUrl);
+        }
+
+        return array('status' => 'imported', 'message' => sprintf(__('Importée depuis fixture locale: %s', 'mj-member'), $relativeFile));
+    }
+
     private static function findAttachmentBySourceUrl(string $sourceUrl): int
     {
         $rows = get_posts(array(
@@ -297,6 +372,34 @@ final class MjFixturesMediaImporter
         }
 
         return 'fixture-media-' . time() . '.jpg';
+    }
+
+    private static function resolveSourceUrl(array $item, string $sourceUploadsBaseUrl, string $sourceSiteUrl): string
+    {
+        $sourceUrl = isset($item['source_url']) ? esc_url_raw((string) $item['source_url']) : '';
+        if ($sourceUrl !== '' && preg_match('/^https?:\/\//i', $sourceUrl)) {
+            return $sourceUrl;
+        }
+
+        $meta = isset($item['meta']) && is_array($item['meta']) ? $item['meta'] : array();
+        $attached = '';
+        if (!empty($meta['_wp_attached_file'][0])) {
+            $attached = ltrim((string) $meta['_wp_attached_file'][0], '/\\');
+        }
+
+        if ($attached === '') {
+            return '';
+        }
+
+        if ($sourceUploadsBaseUrl !== '') {
+            return trailingslashit($sourceUploadsBaseUrl) . str_replace('\\', '/', $attached);
+        }
+
+        if ($sourceSiteUrl !== '') {
+            return trailingslashit($sourceSiteUrl) . 'wp-content/uploads/' . str_replace('\\', '/', $attached);
+        }
+
+        return '';
     }
 
     private static function saveState(string $runId, array $state): void

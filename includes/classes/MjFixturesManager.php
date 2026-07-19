@@ -678,6 +678,9 @@ final class MjFixturesManager
                 break;
             case 'wp_media':
                 $payload['items'] = self::collectMedia($dir);
+                $uploads = wp_upload_dir();
+                $payload['source_site_url'] = site_url();
+                $payload['source_uploads_base_url'] = isset($uploads['baseurl']) ? esc_url_raw((string) $uploads['baseurl']) : '';
                 break;
             case 'wp_theme_settings':
                 $payload['items'] = array(
@@ -862,6 +865,8 @@ final class MjFixturesManager
 
         $settings = self::getImageImportSettings();
         $maxBytes = (int) $settings['max_file_size_mb'] * 1024 * 1024;
+        $mediaDir = $fixturesDir . 'media/';
+        wp_mkdir_p($mediaDir);
 
         $items = array();
         foreach ($attachments as $attachment) {
@@ -881,10 +886,19 @@ final class MjFixturesManager
                 continue;
             }
 
+            $storedName = '';
+            if (is_string($path) && $path !== '' && is_readable($path)) {
+                $storedName = sanitize_file_name((string) $attachment->ID . '-' . basename($path));
+                if ($storedName !== '') {
+                    @copy($path, $mediaDir . $storedName);
+                }
+            }
+
             $items[] = array(
                 'source_url' => $sourceUrl,
                 'source_file_name' => is_string($path) && $path !== '' ? basename($path) : basename((string) wp_parse_url($sourceUrl, PHP_URL_PATH)),
                 'source_file_size' => max(0, $size),
+                'file' => $storedName !== '' ? 'media/' . $storedName : '',
                 'post' => array(
                     'post_title' => $attachment->post_title,
                     'post_excerpt' => $attachment->post_excerpt,
