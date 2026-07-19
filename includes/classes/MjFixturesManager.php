@@ -28,6 +28,7 @@ final class MjFixturesManager
         'mj_action_types',
         'mj_event_locations',
         'mj_members',
+        'mj_events',
     );
 
     private const TABLE_LABELS = array(
@@ -37,11 +38,13 @@ final class MjFixturesManager
         'mj_action_types' => 'Actions',
         'mj_event_locations' => 'Lieux',
         'mj_members' => 'Membres',
+        'mj_events' => 'Evenements',
     );
 
     private const EXTRA_SOURCE_LABELS = array(
         'wp_pages' => 'Pages WordPress',
         'wp_posts' => 'Articles WordPress',
+        'wp_users' => 'Utilisateurs WordPress',
         'wp_media' => 'Medias WordPress',
         'wp_theme_settings' => 'Reglages theme',
         'supertool_data' => 'Donnees supertool-elementor',
@@ -52,6 +55,7 @@ final class MjFixturesManager
     private const EXTRA_SOURCE_GROUP = array(
         'wp_pages' => 'wordpress',
         'wp_posts' => 'wordpress',
+        'wp_users' => 'wordpress',
         'wp_media' => 'wordpress',
         'wp_theme_settings' => 'wordpress',
         'supertool_data' => 'supertool',
@@ -794,6 +798,9 @@ final class MjFixturesManager
             case 'wp_posts':
                 $payload['items'] = self::collectPosts('post');
                 break;
+            case 'wp_users':
+                $payload['items'] = self::collectUsers();
+                break;
             case 'wp_media':
                 $payload['items'] = self::collectMedia($dir);
                 break;
@@ -848,6 +855,8 @@ final class MjFixturesManager
                 return self::restorePosts('page', $items, $cleanBefore, $filename);
             case 'wp_posts':
                 return self::restorePosts('post', $items, $cleanBefore, $filename);
+            case 'wp_users':
+                return self::restoreUsers($items, $cleanBefore, $filename);
             case 'wp_media':
                 return self::restoreMedia($dir, $items, $cleanBefore, $filename);
             case 'wp_theme_settings':
@@ -955,6 +964,165 @@ final class MjFixturesManager
         }
 
         return array('file' => $filename, 'rows' => $count);
+    }
+
+    private static function collectUsers(): array
+    {
+        $users = get_users(array(
+            'orderby' => 'ID',
+            'order' => 'ASC',
+            'fields' => 'all_with_meta',
+            'number' => -1,
+        ));
+
+        $items = array();
+        foreach ($users as $user) {
+            if (!($user instanceof \WP_User)) {
+                continue;
+            }
+
+            $meta = get_user_meta((int) $user->ID);
+            if (!is_array($meta)) {
+                $meta = array();
+            }
+
+            foreach (array_keys($meta) as $metaKey) {
+                if (self::isSensitiveUserMetaKey((string) $metaKey)) {
+                    unset($meta[$metaKey]);
+                }
+            }
+
+            $items[] = array(
+                'user' => array(
+                    'user_login' => (string) $user->user_login,
+                    'user_email' => (string) $user->user_email,
+                    'user_nicename' => (string) $user->user_nicename,
+                    'display_name' => (string) $user->display_name,
+                    'first_name' => (string) $user->first_name,
+                    'last_name' => (string) $user->last_name,
+                    'user_url' => (string) $user->user_url,
+                    'description' => (string) $user->description,
+                    'roles' => array_values(array_filter(array_map('sanitize_key', (array) $user->roles))),
+                ),
+                'meta' => $meta,
+            );
+        }
+
+        return $items;
+    }
+
+    private static function restoreUsers($items, bool $cleanBefore, string $filename): array|WP_Error
+    {
+        if (!is_array($items)) {
+            return new WP_Error('fixtures_users_invalid', sprintf(__('%s invalide.', 'mj-member'), $filename));
+        }
+
+        // For safety we never hard-delete WP users during fixtures restore.
+        $count = 0;
+        $skipped = 0;
+        $failed = 0;
+
+        foreach ($items as $item) {
+            if (empty($item['user']) || !is_array($item['user'])) {
+                $skipped++;
+                continue;
+            }
+
+            $user = $item['user'];
+            $login = sanitize_user((string) ($user['user_login'] ?? ''), true);
+            $email = sanitize_email((string) ($user['user_email'] ?? ''));
+
+            if ($login === '' && $email === '') {
+                $skipped++;
+                continue;
+            }
+
+            $existing = null;
+            if ($email !== '') {
+                $existing = get_user_by('email', $email);
+            }
+            if (!$existing && $login !== '') {
+                $existing = get_user_by('login', $login);
+            }
+
+            $userdata = array(
+                'display_name' => sanitize_text_field((string) ($user['display_name'] ?? '')),
+                'first_name' => sanitize_text_field((string) ($user['first_name'] ?? '')),
+                'last_name' => sanitize_text_field((string) ($user['last_name'] ?? '')),
+                'user_email' => $email,
+                'user_url' => esc_url_raw((string) ($user['user_url'] ?? '')),
+                'description' => sanitize_textarea_field((string) ($user['description'] ?? '')),
+                'nickname' => sanitize_text_field((string) ($user['display_name'] ?? $login)),
+            );
+
+            if ($existing instanceof \WP_User) {
+                $userdata['ID'] = (int) $existing->ID;
+                if ($email === '') {
+                    unset($userdata['user_email']);
+                }
+                $userId = wp_update_user($userdata);
+            } else {
+                if ($login === '') {
+                    if ($email === '') {
+                        $skipped++;
+                        continue;
+                    }
+                    $parts = explode('@', $email);
+                    $login = sanitize_user((string) ($parts[0] ?? ''), true);
+                }
+                if ($login === '') {
+                    $skipped++;
+                    continue;
+                }
+                if (username_exists($login)) {
+                    $login = wp_unique_username($login);
+                }
+                if ($email === '') {
+                    $email = $login . '@fixtures.local';
+                }
+
+                $userdata['user_login'] = $login;
+                $userdata['user_email'] = $email;
+                $userdata['user_pass'] = wp_generate_password(32, true, true);
+                $userId = wp_insert_user($userdata);
+            }
+
+            if (is_wp_error($userId) || (int) $userId <= 0) {
+                $failed++;
+                continue;
+            }
+
+            $userId = (int) $userId;
+            $roles = isset($user['roles']) && is_array($user['roles'])
+                ? array_values(array_filter(array_map('sanitize_key', $user['roles'])))
+                : array();
+
+            if (!empty($roles)) {
+                $wpUser = new \WP_User($userId);
+                $wpUser->set_role((string) array_shift($roles));
+                foreach ($roles as $role) {
+                    $wpUser->add_role((string) $role);
+                }
+            }
+
+            if (!empty($item['meta']) && is_array($item['meta'])) {
+                foreach ($item['meta'] as $metaKey => $metaValues) {
+                    $metaKey = (string) $metaKey;
+                    if ($metaKey === '' || self::isSensitiveUserMetaKey($metaKey) || !is_array($metaValues)) {
+                        continue;
+                    }
+
+                    delete_user_meta($userId, $metaKey);
+                    foreach ($metaValues as $metaValue) {
+                        add_user_meta($userId, $metaKey, maybe_unserialize($metaValue));
+                    }
+                }
+            }
+
+            $count++;
+        }
+
+        return array('file' => $filename, 'rows' => $count, 'skipped' => $skipped, 'failed' => $failed);
     }
 
     private static function collectMedia(string $fixturesDir): array
@@ -1384,6 +1552,16 @@ final class MjFixturesManager
             || strpos($needle, 'password') !== false
             || strpos($needle, 'token') !== false
             || strpos($needle, 'api_key') !== false;
+    }
+
+    private static function isSensitiveUserMetaKey(string $metaKey): bool
+    {
+        $key = strtolower($metaKey);
+
+        return $key === 'session_tokens'
+            || substr($key, -13) === '_capabilities'
+            || substr($key, -11) === '_user_level'
+            || self::isSensitiveOption($key);
     }
 
     private static function listFilesRecursive(string $dir): array
