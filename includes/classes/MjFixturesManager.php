@@ -11,9 +11,6 @@ if (!defined('ABSPATH')) {
 
 final class MjFixturesManager
 {
-    public const EXPORT_TOKEN_TRANSIENT_PREFIX = 'mj_fixtures_export_';
-    public const EXPORT_TOKEN_TTL = HOUR_IN_SECONDS;
-    public const OPTION_LAST_EXPORT_TOKEN = 'mj_fixtures_last_export_token';
     public const OPTION_CREATE_SELECTED = 'mj_fixtures_create_selected_sources';
     public const OPTION_RESTORE_SELECTED = 'mj_fixtures_restore_selected_sources';
     public const OPTION_RESTORE_CLEAN = 'mj_fixtures_restore_clean_before_sources';
@@ -207,7 +204,6 @@ final class MjFixturesManager
 
         $saved = array();
         $errors = array();
-        $warnings = array();
         $manifest = array(
             'generated_at' => current_time('mysql'),
             'tables' => array(),
@@ -250,25 +246,15 @@ final class MjFixturesManager
                 continue;
             }
 
-            if (!empty($result['warnings']) && is_array($result['warnings'])) {
-                foreach ((array) $result['warnings'] as $warning) {
-                    if (is_string($warning) && $warning !== '') {
-                        $warnings[] = $warning;
-                    }
-                }
-            }
-
             $file = (string) ($result['file'] ?? ($slug . '.json'));
             $rows = (int) ($result['rows'] ?? 0);
             $manifest['tables'][$slug] = array('table' => $slug, 'file' => $file, 'rows' => $rows, 'kind' => 'source');
             $saved[] = array('slug' => $slug, 'table' => $slug, 'file' => $file, 'rows' => $rows);
         }
 
-        if (!self::writeJsonFileAtomic($dir . 'fixtures.manifest.json', $manifest)) {
-            $errors[] = __('Impossible d\'ecrire fixtures.manifest.json.', 'mj-member');
-        }
+        @file_put_contents($dir . 'fixtures.manifest.json', wp_json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
-        return array('success' => empty($errors), 'saved' => $saved, 'errors' => $errors, 'warnings' => $warnings, 'manifest' => $manifest);
+        return array('success' => empty($errors), 'saved' => $saved, 'errors' => $errors, 'manifest' => $manifest);
     }
 
     public static function restoreFixtures(array $selectedSlugs = array(), array $cleanBeforeSlugs = array()): array
@@ -446,108 +432,12 @@ final class MjFixturesManager
             return new WP_Error('fixtures_upload_extension', __('Le fichier doit etre une archive ZIP.', 'mj-member'));
         }
 
-        return self::importArchiveFromPath((string) $uploadedFile['tmp_name']);
-    }
-
-    public static function importArchiveFromUrl(string $url)
-    {
-        $url = esc_url_raw(trim($url));
-        if ($url === '' || !preg_match('/^https?:\/\//i', $url)) {
-            return new WP_Error('fixtures_import_url_invalid', __('URL ZIP invalide.', 'mj-member'));
-        }
-
-        $tmpFile = download_url($url, 30);
-        if (is_wp_error($tmpFile) || !is_string($tmpFile) || $tmpFile === '') {
-            return new WP_Error('fixtures_import_url_download', __('Impossible de télécharger l\'archive ZIP distante.', 'mj-member'));
-        }
-
-        $result = self::importArchiveFromPath($tmpFile);
-        @unlink($tmpFile);
-
-        return $result;
-    }
-
-    public static function createExportDownloadToken(array $archive): array|WP_Error
-    {
-        $archivePath = isset($archive['path']) ? (string) $archive['path'] : '';
-        $archiveFilename = isset($archive['filename']) ? sanitize_file_name((string) $archive['filename']) : 'mj-member-fixtures.zip';
-        if ($archivePath === '' || !is_readable($archivePath)) {
-            return new WP_Error('fixtures_export_missing', __('Archive d\'export introuvable.', 'mj-member'));
-        }
-
-        $token = wp_generate_password(32, false, false);
-        set_transient(
-            self::EXPORT_TOKEN_TRANSIENT_PREFIX . $token,
-            array(
-                'path' => $archivePath,
-                'filename' => $archiveFilename,
-                'mime' => (string) ($archive['mime'] ?? 'application/zip'),
-                'created_at' => time(),
-                'expires_at' => time() + self::EXPORT_TOKEN_TTL,
-            ),
-            self::EXPORT_TOKEN_TTL
-        );
-
-        update_option(self::OPTION_LAST_EXPORT_TOKEN, $token, false);
-
-        return array(
-            'token' => $token,
-            'url' => self::buildExportDownloadUrl($token),
-            'filename' => $archiveFilename,
-            'expires_at' => time() + self::EXPORT_TOKEN_TTL,
-        );
-    }
-
-    public static function describeExportToken(string $token): array|WP_Error
-    {
-        $token = sanitize_text_field($token);
-        if ($token === '') {
-            return new WP_Error('fixtures_export_token_missing', __('Token de téléchargement manquant.', 'mj-member'));
-        }
-
-        $payload = get_transient(self::EXPORT_TOKEN_TRANSIENT_PREFIX . $token);
-        if (!is_array($payload)) {
-            return new WP_Error('fixtures_export_token_invalid', __('Lien de téléchargement expiré ou invalide.', 'mj-member'));
-        }
-
-        $path = isset($payload['path']) ? (string) $payload['path'] : '';
-        if ($path === '' || !is_readable($path)) {
-            delete_transient(self::EXPORT_TOKEN_TRANSIENT_PREFIX . $token);
-            if (get_option(self::OPTION_LAST_EXPORT_TOKEN, '') === $token) {
-                delete_option(self::OPTION_LAST_EXPORT_TOKEN);
-            }
-            return new WP_Error('fixtures_export_token_missing_file', __('Archive de téléchargement indisponible.', 'mj-member'));
-        }
-
-        return array(
-            'token' => $token,
-            'url' => self::buildExportDownloadUrl($token),
-            'filename' => sanitize_file_name((string) ($payload['filename'] ?? 'mj-member-fixtures.zip')),
-            'mime' => (string) ($payload['mime'] ?? 'application/zip'),
-            'created_at' => (int) ($payload['created_at'] ?? 0),
-            'expires_at' => (int) ($payload['expires_at'] ?? 0),
-            'path' => $path,
-        );
-    }
-
-    public static function getExportArchiveByToken(string $token): array|WP_Error
-    {
-        $described = self::describeExportToken($token);
-        if (is_wp_error($described)) {
-            return $described;
-        }
-
-        return $described;
-    }
-
-    private static function importArchiveFromPath(string $zipPath)
-    {
         if (!class_exists('ZipArchive')) {
             return new WP_Error('fixtures_zip_missing', __('ZipArchive est indisponible sur ce serveur.', 'mj-member'));
         }
 
         $zip = new \ZipArchive();
-        if ($zip->open($zipPath) !== true) {
+        if ($zip->open((string) $uploadedFile['tmp_name']) !== true) {
             return new WP_Error('fixtures_zip_open', __('Impossible d\'ouvrir l\'archive ZIP.', 'mj-member'));
         }
 
@@ -662,7 +552,6 @@ final class MjFixturesManager
     private static function createSimpleSourceFixture(string $slug, string $dir): array|WP_Error
     {
         $filename = $slug . '.json';
-        $warnings = array();
         $payload = array(
             'slug' => $slug,
             'generated_at' => current_time('mysql'),
@@ -678,9 +567,6 @@ final class MjFixturesManager
                 break;
             case 'wp_media':
                 $payload['items'] = self::collectMedia($dir);
-                $uploads = wp_upload_dir();
-                $payload['source_site_url'] = site_url();
-                $payload['source_uploads_base_url'] = isset($uploads['baseurl']) ? esc_url_raw((string) $uploads['baseurl']) : '';
                 break;
             case 'wp_theme_settings':
                 $payload['items'] = array(
@@ -702,20 +588,13 @@ final class MjFixturesManager
                 return new WP_Error('fixtures_source_unknown', __('Source de fixture inconnue.', 'mj-member'));
         }
 
-        if (!array_key_exists('items', $payload)) {
-            $payload['items'] = array();
-        }
-
-        if (!self::writeJsonFileAtomic($dir . $filename, $payload)) {
+        $json = wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false || @file_put_contents($dir . $filename, $json) === false) {
             return new WP_Error('fixtures_source_write', sprintf(__('Impossible d\'ecrire %s.', 'mj-member'), $filename));
         }
 
-        $rows = self::countFixtureItems($payload['items']);
-        if (in_array($slug, array('wp_pages', 'wp_posts', 'wp_media'), true) && $rows === 0) {
-            $warnings[] = sprintf(__('La source %s ne contient aucun élément exporté.', 'mj-member'), $slug);
-        }
-
-        return array('file' => $filename, 'rows' => $rows, 'warnings' => $warnings);
+        $rows = is_array($payload['items']) ? count($payload['items']) : 1;
+        return array('file' => $filename, 'rows' => $rows);
     }
 
     private static function restoreSimpleSourceFixture(string $slug, string $dir, bool $cleanBefore): array|WP_Error
@@ -762,10 +641,6 @@ final class MjFixturesManager
             'posts_per_page' => -1,
             'orderby' => 'ID',
             'order' => 'ASC',
-            'suppress_filters' => false,
-            'no_found_rows' => true,
-            'update_post_meta_cache' => true,
-            'update_post_term_cache' => false,
         ));
 
         $items = array();
@@ -870,35 +745,23 @@ final class MjFixturesManager
 
         $items = array();
         foreach ($attachments as $attachment) {
-            $sourceUrl = wp_get_attachment_url((int) $attachment->ID);
-            if (!is_string($sourceUrl) || $sourceUrl === '') {
-                continue;
-            }
-
-            $sourceUrl = esc_url_raw($sourceUrl);
-            if ($sourceUrl === '' || !preg_match('/^https?:\/\//i', $sourceUrl)) {
-                continue;
-            }
-
             $path = get_attached_file((int) $attachment->ID);
-            $size = (int) @filesize($path);
-            if ($size > 0 && $size > $maxBytes) {
+            if (!is_string($path) || !is_readable($path)) {
                 continue;
             }
 
-            $storedName = '';
-            if (is_string($path) && $path !== '' && is_readable($path)) {
-                $storedName = sanitize_file_name((string) $attachment->ID . '-' . basename($path));
-                if ($storedName !== '') {
-                    @copy($path, $mediaDir . $storedName);
-                }
+            $size = (int) @filesize($path);
+            if ($size <= 0 || $size > $maxBytes) {
+                continue;
+            }
+
+            $storedName = sanitize_file_name((string) $attachment->ID . '-' . basename($path));
+            if (@copy($path, $mediaDir . $storedName) === false) {
+                continue;
             }
 
             $items[] = array(
-                'source_url' => $sourceUrl,
-                'source_file_name' => is_string($path) && $path !== '' ? basename($path) : basename((string) wp_parse_url($sourceUrl, PHP_URL_PATH)),
-                'source_file_size' => max(0, $size),
-                'file' => $storedName !== '' ? 'media/' . $storedName : '',
+                'file' => 'media/' . $storedName,
                 'post' => array(
                     'post_title' => $attachment->post_title,
                     'post_excerpt' => $attachment->post_excerpt,
@@ -933,15 +796,6 @@ final class MjFixturesManager
         $count = 0;
 
         foreach ($items as $item) {
-            $sourceUrl = isset($item['source_url']) ? esc_url_raw((string) $item['source_url']) : '';
-            if ($sourceUrl !== '') {
-                $imported = self::restoreMediaFromSourceUrl($sourceUrl, $item, $overwrite);
-                if ($imported) {
-                    $count++;
-                }
-                continue;
-            }
-
             $rel = isset($item['file']) ? (string) $item['file'] : '';
             if ($rel === '') {
                 continue;
@@ -991,51 +845,6 @@ final class MjFixturesManager
         }
 
         return array('file' => $filename, 'rows' => $count);
-    }
-
-    private static function restoreMediaFromSourceUrl(string $sourceUrl, array $item, bool $overwrite): bool
-    {
-        if (!preg_match('/^https?:\/\//i', $sourceUrl)) {
-            return false;
-        }
-
-        $existingBySource = self::findAttachmentBySourceUrl($sourceUrl);
-        if ($existingBySource > 0 && !$overwrite) {
-            return false;
-        }
-
-        if ($existingBySource > 0 && $overwrite) {
-            wp_delete_attachment($existingBySource, true);
-        }
-
-        $filename = self::filenameFromUrl($sourceUrl, (string) ($item['source_file_name'] ?? 'fixture-media.jpg'));
-        $tmp = download_url($sourceUrl, 20);
-        if (is_wp_error($tmp) || !is_string($tmp) || $tmp === '') {
-            return false;
-        }
-
-        $fileArray = array(
-            'name' => $filename,
-            'tmp_name' => $tmp,
-        );
-
-        $post = is_array($item['post'] ?? null) ? $item['post'] : array();
-        $attachmentArgs = array(
-            'post_title' => sanitize_text_field((string) ($post['post_title'] ?? pathinfo($filename, PATHINFO_FILENAME))),
-            'post_excerpt' => sanitize_text_field((string) ($post['post_excerpt'] ?? '')),
-            'post_content' => sanitize_textarea_field((string) ($post['post_content'] ?? '')),
-            'post_mime_type' => sanitize_text_field((string) ($post['post_mime_type'] ?? 'application/octet-stream')),
-        );
-
-        $attachmentId = media_handle_sideload($fileArray, 0, $attachmentArgs['post_content'], $attachmentArgs);
-        if (is_wp_error($attachmentId) || (int) $attachmentId <= 0) {
-            @unlink($tmp);
-            return false;
-        }
-
-        update_post_meta((int) $attachmentId, '_mj_fixture_source_url', $sourceUrl);
-
-        return true;
     }
 
     private static function collectSupertoolData(): array
@@ -1223,98 +1032,5 @@ final class MjFixturesManager
         }
 
         return $files;
-    }
-
-    private static function buildExportDownloadUrl(string $token): string
-    {
-        return add_query_arg(
-            array(
-                'action' => 'mj_member_download_fixtures',
-                'token' => rawurlencode($token),
-            ),
-            admin_url('admin-post.php')
-        );
-    }
-
-    private static function writeJsonFileAtomic(string $path, array $payload): bool
-    {
-        $json = wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($json === false) {
-            return false;
-        }
-
-        $tmpPath = $path . '.tmp';
-        if (@file_put_contents($tmpPath, $json, LOCK_EX) === false) {
-            return false;
-        }
-
-        $reloaded = @file_get_contents($tmpPath);
-        $decoded = is_string($reloaded) ? json_decode($reloaded, true) : null;
-        if (!is_array($decoded)) {
-            @unlink($tmpPath);
-            return false;
-        }
-
-        if (!@rename($tmpPath, $path)) {
-            @unlink($path);
-            if (!@rename($tmpPath, $path)) {
-                @unlink($tmpPath);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static function countFixtureItems($items): int
-    {
-        if (!is_array($items)) {
-            return 1;
-        }
-
-        if ($items === array()) {
-            return 0;
-        }
-
-        if (function_exists('array_is_list') && array_is_list($items)) {
-            return count($items);
-        }
-
-        return 1;
-    }
-
-    private static function findAttachmentBySourceUrl(string $sourceUrl): int
-    {
-        $query = get_posts(array(
-            'post_type' => 'attachment',
-            'post_status' => 'any',
-            'posts_per_page' => 1,
-            'fields' => 'ids',
-            'meta_key' => '_mj_fixture_source_url',
-            'meta_value' => $sourceUrl,
-            'suppress_filters' => false,
-        ));
-
-        if (!empty($query[0])) {
-            return (int) $query[0];
-        }
-
-        return 0;
-    }
-
-    private static function filenameFromUrl(string $url, string $fallback): string
-    {
-        $path = (string) wp_parse_url($url, PHP_URL_PATH);
-        $basename = sanitize_file_name(basename($path));
-        if ($basename !== '') {
-            return $basename;
-        }
-
-        $cleanFallback = sanitize_file_name($fallback);
-        if ($cleanFallback !== '') {
-            return $cleanFallback;
-        }
-
-        return 'fixture-media-' . time() . '.jpg';
     }
 }

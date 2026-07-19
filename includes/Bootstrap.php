@@ -112,7 +112,6 @@ final class Bootstrap
         'includes/core/ajax/admin/dynamic-fields.php',
         'includes/core/ajax/admin/geocode-cache.php',
         'includes/core/ajax/admin/photo-import.php',
-        'includes/core/ajax/admin/fixtures-media-import.php',
     );
 
     /** @var bool */

@@ -8,8 +8,6 @@ namespace Mj\Member\Module\Admin {
         public function register(): void {
             add_action('wp_ajax_mj_member_run_manual_backup_action', 'mj_member_ajax_run_manual_backup_action');
             add_action('wp_ajax_mj_member_save_media_backup_settings_ajax', 'mj_member_save_media_backup_settings_ajax');
-            add_action('admin_post_mj_member_download_fixtures', 'mj_member_download_fixtures_archive');
-            add_action('admin_post_nopriv_mj_member_download_fixtures', 'mj_member_download_fixtures_archive');
         }
     }
 }
@@ -114,35 +112,6 @@ if (!function_exists('mj_member_sanitize_pdf_rich_html')) {
     }
 }
 
-if (!function_exists('mj_member_download_fixtures_archive')) {
-    function mj_member_download_fixtures_archive(): void {
-        if (!class_exists(MjFixturesManager::class)) {
-            wp_die(esc_html__('Gestionnaire de fixtures indisponible.', 'mj-member'), 500);
-        }
-
-        $token = isset($_GET['token']) ? sanitize_text_field((string) wp_unslash($_GET['token'])) : '';
-        $archive = MjFixturesManager::getExportArchiveByToken($token);
-        if (is_wp_error($archive)) {
-            wp_die(esc_html($archive->get_error_message()), 403);
-        }
-
-        $archivePath = isset($archive['path']) ? (string) $archive['path'] : '';
-        $downloadName = isset($archive['filename']) ? sanitize_file_name((string) $archive['filename']) : 'mj-member-fixtures.zip';
-        $mime = isset($archive['mime']) ? (string) $archive['mime'] : 'application/zip';
-
-        if ($archivePath === '' || !is_readable($archivePath)) {
-            wp_die(esc_html__('Archive de téléchargement indisponible.', 'mj-member'), 404);
-        }
-
-        nocache_headers();
-        header('Content-Type: ' . $mime);
-        header('Content-Disposition: attachment; filename="' . $downloadName . '"');
-        header('Content-Length: ' . (string) filesize($archivePath));
-        readfile($archivePath);
-        exit;
-    }
-}
-
 // Admin settings page for plugin
 function mj_settings_page() {
     if (function_exists('wp_enqueue_media')) {
@@ -170,29 +139,10 @@ function mj_settings_page() {
         ));
     }
 
-    $fixtures_media_script_file = dirname(__DIR__) . '/js/admin-fixtures-media-import.js';
-    if (is_readable($fixtures_media_script_file)) {
-        wp_enqueue_script(
-            'mj-member-admin-fixtures-media-import',
-            plugins_url('../js/admin-fixtures-media-import.js', __FILE__),
-            array('jquery'),
-            (string) filemtime($fixtures_media_script_file),
-            true
-        );
-
-        wp_localize_script('mj-member-admin-fixtures-media-import', 'mjMemberFixturesMediaAdmin', array(
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('mj_member_fixtures_media_admin'),
-        ));
-    }
-
     // -----------------------------------------------------------------------
     // Handle backup profile CRUD and media backup actions (separate forms)
     // -----------------------------------------------------------------------
     $backup_notices = array();
-    $fixtures_export_download_url = '';
-    $fixtures_export_download_filename = '';
-    $fixtures_export_download_expires_at = 0;
 
     $is_main_settings_submit = isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force']) || isset($_POST['mj_backup_run_now']);
 
@@ -342,12 +292,6 @@ function mj_settings_page() {
             $result = MjFixturesManager::createFixtures($selectedSources);
             if (!empty($result['success'])) {
                 $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures créées dans data/fixtures.');
-                if (!empty($result['warnings']) && is_array($result['warnings'])) {
-                    $warnings = implode(' | ', array_map('wp_strip_all_tags', (array) $result['warnings']));
-                    if ($warnings !== '') {
-                        $backup_notices[] = array('type' => 'warning', 'message' => '⚠️ ' . esc_html($warnings));
-                    }
-                }
             } else {
                 $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la création.';
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
@@ -377,33 +321,12 @@ function mj_settings_page() {
             MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_CLEAN, $cleanBeforeSources);
             MjFixturesManager::saveSelection(MjFixturesManager::OPTION_USE_ON_INSTALL, $useOnInstallSources);
 
-            $mediaSelected = in_array('wp_media', $selectedSources, true);
-            $syncSources = array_values(array_filter($selectedSources, static function ($slug) {
-                return $slug !== 'wp_media';
-            }));
-            $syncCleanBefore = array_values(array_filter($cleanBeforeSources, static function ($slug) {
-                return $slug !== 'wp_media';
-            }));
-
-            if (!empty($syncSources)) {
-                $result = MjFixturesManager::restoreFixtures($syncSources, $syncCleanBefore);
-            } else {
-                $result = array('success' => true, 'errors' => array());
-            }
-
+            $result = MjFixturesManager::restoreFixtures($selectedSources, $cleanBeforeSources);
             if (!empty($result['success'])) {
-                if ($mediaSelected && empty($syncSources)) {
-                    $backup_notices[] = array('type' => 'success', 'message' => '✅ Sélection enregistrée. Lancez ensuite l\'import wp_media dans la console de chargement ci-dessous.');
-                } else {
-                    $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures restaurées depuis data/fixtures (hors wp_media).');
-                }
+                $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures restaurées depuis data/fixtures.');
             } else {
                 $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la restauration.';
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
-            }
-
-            if ($mediaSelected) {
-                $backup_notices[] = array('type' => 'warning', 'message' => '⚠️ La source wp_media se restaure via le nouveau worker séquentiel (bouton "Lancer import médias wp_media").');
             }
         } elseif ($fixturesAction === 'save_options' && class_exists(MjFixturesManager::class)) {
             $selectedCreate = isset($_POST['mj_fixtures_tables']) && is_array($_POST['mj_fixtures_tables'])
@@ -444,12 +367,7 @@ function mj_settings_page() {
             $backup_notices[] = array('type' => 'success', 'message' => '✅ Préférences fixtures enregistrées.');
         } elseif ($fixturesAction === 'import' && class_exists(MjFixturesManager::class)) {
             $file = isset($_FILES['mj_fixtures_zip']) && is_array($_FILES['mj_fixtures_zip']) ? $_FILES['mj_fixtures_zip'] : array();
-            $importUrl = isset($_POST['mj_fixtures_zip_url']) ? esc_url_raw((string) wp_unslash($_POST['mj_fixtures_zip_url'])) : '';
-            if ($importUrl !== '') {
-                $importResult = MjFixturesManager::importArchiveFromUrl($importUrl);
-            } else {
-                $importResult = MjFixturesManager::importArchive($file);
-            }
+            $importResult = MjFixturesManager::importArchive($file);
             if (is_wp_error($importResult)) {
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($importResult->get_error_message()));
             } else {
@@ -466,32 +384,18 @@ function mj_settings_page() {
             if (is_wp_error($archive)) {
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($archive->get_error_message()));
             } else {
-                $tokenized = MjFixturesManager::createExportDownloadToken($archive);
-                if (is_wp_error($tokenized)) {
-                    $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($tokenized->get_error_message()));
-                } else {
-                    $fixtures_export_download_url = (string) ($tokenized['url'] ?? '');
-                    $fixtures_export_download_filename = (string) ($tokenized['filename'] ?? 'mj-member-fixtures.zip');
-                    $fixtures_export_download_expires_at = (int) ($tokenized['expires_at'] ?? 0);
-                    $backup_notices[] = array(
-                        'type' => 'success',
-                        'message' => '✅ URL de téléchargement fixtures générée. Utilisez le lien ci-dessous dans la section Exporter.',
-                    );
+                $downloadName = isset($archive['filename']) ? (string) $archive['filename'] : 'mj-member-fixtures.zip';
+                $archivePath = isset($archive['path']) ? (string) $archive['path'] : '';
+                if ($archivePath !== '' && is_readable($archivePath)) {
+                    nocache_headers();
+                    header('Content-Type: application/zip');
+                    header('Content-Disposition: attachment; filename="' . sanitize_file_name($downloadName) . '"');
+                    header('Content-Length: ' . (string) filesize($archivePath));
+                    readfile($archivePath);
+                    @unlink($archivePath);
+                    exit;
                 }
-            }
-        }
-    }
-
-    if ($fixtures_export_download_url === '' && class_exists(MjFixturesManager::class)) {
-        $lastExportToken = (string) get_option(MjFixturesManager::OPTION_LAST_EXPORT_TOKEN, '');
-        if ($lastExportToken !== '') {
-            $lastExportInfo = MjFixturesManager::describeExportToken($lastExportToken);
-            if (is_wp_error($lastExportInfo)) {
-                delete_option(MjFixturesManager::OPTION_LAST_EXPORT_TOKEN);
-            } else {
-                $fixtures_export_download_url = (string) ($lastExportInfo['url'] ?? '');
-                $fixtures_export_download_filename = (string) ($lastExportInfo['filename'] ?? 'mj-member-fixtures.zip');
-                $fixtures_export_download_expires_at = (int) ($lastExportInfo['expires_at'] ?? 0);
+                $backup_notices[] = array('type' => 'error', 'message' => '❌ Archive export introuvable après génération.');
             }
         }
     }
@@ -560,8 +464,6 @@ function mj_settings_page() {
         $default_avatar_id = isset($_POST['mj_login_default_avatar_id']) ? intval($_POST['mj_login_default_avatar_id']) : 0;
         $cards_background_id = isset($_POST['mj_cards_pdf_background_image_id']) ? intval($_POST['mj_cards_pdf_background_image_id']) : 0;
         $cards_background_back_id = isset($_POST['mj_cards_pdf_background_back_image_id']) ? intval($_POST['mj_cards_pdf_background_back_image_id']) : 0;
-        $calendar_print_header_image_id = isset($_POST['mj_calendar_print_header_image_id']) ? intval($_POST['mj_calendar_print_header_image_id']) : 0;
-        $calendar_print_footer_image_id = isset($_POST['mj_calendar_print_footer_image_id']) ? intval($_POST['mj_calendar_print_footer_image_id']) : 0;
         $cards_double_sided = isset($_POST['mj_cards_pdf_double_sided']) ? '1' : '0';
         $registration_page = isset($_POST['mj_login_registration_page']) ? intval($_POST['mj_login_registration_page']) : 0;
         $openai_api_key = isset($_POST['mj_openai_api_key']) ? sanitize_text_field(wp_unslash($_POST['mj_openai_api_key'])) : '';
@@ -615,8 +517,6 @@ function mj_settings_page() {
         update_option('mj_login_default_avatar_id', $default_avatar_id > 0 ? $default_avatar_id : 0);
         update_option('mj_cards_pdf_background_image_id', $cards_background_id > 0 ? $cards_background_id : 0);
         update_option('mj_cards_pdf_background_back_image_id', $cards_background_back_id > 0 ? $cards_background_back_id : 0);
-        update_option('mj_calendar_print_header_image_id', $calendar_print_header_image_id > 0 ? $calendar_print_header_image_id : 0);
-        update_option('mj_calendar_print_footer_image_id', $calendar_print_footer_image_id > 0 ? $calendar_print_footer_image_id : 0);
         update_option('mj_cards_pdf_double_sided', $cards_double_sided);
         update_option('mj_login_registration_page', $registration_page > 0 ? $registration_page : 0);
         update_option('mj_member_openai_api_key', $openai_api_key);
@@ -1114,8 +1014,6 @@ function mj_settings_page() {
 
     $cards_pdf_background_id = (int) get_option('mj_cards_pdf_background_image_id', 0);
     $cards_pdf_background_back_id = (int) get_option('mj_cards_pdf_background_back_image_id', 0);
-    $calendar_print_header_image_id = (int) get_option('mj_calendar_print_header_image_id', 0);
-    $calendar_print_footer_image_id = (int) get_option('mj_calendar_print_footer_image_id', 0);
     $cards_pdf_double_sided = get_option('mj_cards_pdf_double_sided', '0') === '1';
     $cards_pdf_background_src = '';
     if ($cards_pdf_background_id > 0) {
@@ -1139,32 +1037,6 @@ function mj_settings_page() {
             $fallback_background_back_url = wp_get_attachment_url($cards_pdf_background_back_id);
             if ($fallback_background_back_url) {
                 $cards_pdf_background_back_src = $fallback_background_back_url;
-            }
-        }
-    }
-
-    $calendar_print_header_image_src = '';
-    if ($calendar_print_header_image_id > 0) {
-        $calendar_print_header_image = wp_get_attachment_image_src($calendar_print_header_image_id, 'large');
-        if ($calendar_print_header_image) {
-            $calendar_print_header_image_src = $calendar_print_header_image[0];
-        } else {
-            $fallback_calendar_print_header_url = wp_get_attachment_url($calendar_print_header_image_id);
-            if ($fallback_calendar_print_header_url) {
-                $calendar_print_header_image_src = $fallback_calendar_print_header_url;
-            }
-        }
-    }
-
-    $calendar_print_footer_image_src = '';
-    if ($calendar_print_footer_image_id > 0) {
-        $calendar_print_footer_image = wp_get_attachment_image_src($calendar_print_footer_image_id, 'large');
-        if ($calendar_print_footer_image) {
-            $calendar_print_footer_image_src = $calendar_print_footer_image[0];
-        } else {
-            $fallback_calendar_print_footer_url = wp_get_attachment_url($calendar_print_footer_image_id);
-            if ($fallback_calendar_print_footer_url) {
-                $calendar_print_footer_image_src = $fallback_calendar_print_footer_url;
             }
         }
     }
