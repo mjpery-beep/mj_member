@@ -310,6 +310,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'options' => array(
                     'light' => __('Clair (fond blanc)', 'mj-member'),
                     'dark' => __('Sombre (fond noir)', 'mj-member'),
+                    'dark-light-days' => __('Fond sombre + jours clairs', 'mj-member'),
+                    'light-dark-days' => __('Fond clair + jours foncés', 'mj-member'),
                 ),
                 'condition' => array(
                     'show_print_button' => 'yes',
@@ -341,6 +343,21 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'label_off' => __('Non', 'mj-member'),
                 'return_value' => 'yes',
                 'default' => 'yes',
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'print_default_hide_empty_days',
+            array(
+                'label' => __('Impression: retirer les jours vides par défaut', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
                 'condition' => array(
                     'show_print_button' => 'yes',
                 ),
@@ -664,7 +681,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $print_default_mode = isset($settings['print_default_mode']) && in_array($settings['print_default_mode'], array('week', 'month'), true)
             ? (string) $settings['print_default_mode']
             : 'month';
-        $print_default_theme = isset($settings['print_default_theme']) && in_array($settings['print_default_theme'], array('light', 'dark'), true)
+        $print_default_theme = isset($settings['print_default_theme']) && in_array($settings['print_default_theme'], array('light', 'dark', 'dark-light-days', 'light-dark-days'), true)
             ? (string) $settings['print_default_theme']
             : 'light';
         $print_default_details = !isset($settings['print_default_details']) || $settings['print_default_details'] === 'yes';
@@ -678,6 +695,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             ? $settings['print_default_event_color'] === 'yes'
             : $legacy_print_default_event_style;
         $print_default_page_break = !isset($settings['print_default_page_break']) || $settings['print_default_page_break'] === 'yes';
+        $print_default_hide_empty_days = isset($settings['print_default_hide_empty_days']) && $settings['print_default_hide_empty_days'] === 'yes';
         $print_default_span = isset($settings['print_default_span']) ? (int) $settings['print_default_span'] : 1;
         if ($print_default_span < 1) {
             $print_default_span = 1;
@@ -3277,6 +3295,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<select data-print-option="theme">';
             echo '<option value="light"' . selected($print_default_theme, 'light', false) . '>' . esc_html__('Clair', 'mj-member') . '</option>';
             echo '<option value="dark"' . selected($print_default_theme, 'dark', false) . '>' . esc_html__('Sombre', 'mj-member') . '</option>';
+            echo '<option value="dark-light-days"' . selected($print_default_theme, 'dark-light-days', false) . '>' . esc_html__('Fond sombre + jours clairs', 'mj-member') . '</option>';
+            echo '<option value="light-dark-days"' . selected($print_default_theme, 'light-dark-days', false) . '>' . esc_html__('Fond clair + jours foncés', 'mj-member') . '</option>';
             echo '</select>';
             echo '</label>';
             echo '<label class="mj-cal-print__option" data-print-month-picker hidden>';
@@ -3302,6 +3322,10 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<label class="mj-cal-print__option">';
             echo '<input type="checkbox" data-print-option="page-break"' . ($print_default_page_break ? ' checked' : '') . ' />';
             echo '<span data-print-option-page-break-label>' . esc_html__('Une page par semaine', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="hide-empty-days"' . ($print_default_hide_empty_days ? ' checked' : '') . ' />';
+            echo '<span>' . esc_html__('Retirer les jours vides', 'mj-member') . '</span>';
             echo '</label>';
             echo '<fieldset class="mj-cal-print__option mj-cal-print__option--types" data-print-type-filters>'; 
             echo '<legend>' . esc_html__('Types d\'événement', 'mj-member') . '</legend>';
@@ -3358,6 +3382,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'footerImageUrl' => $print_footer_image_url,
                 'defaultSpan' => $print_default_span,
                 'defaultPageBreak' => $print_default_page_break,
+                'defaultHideEmptyDays' => $print_default_hide_empty_days,
                 'labels' => array(
                     'title' => __('Calendrier - impression', 'mj-member'),
                     'subtitle' => __('Aperçu généré en temps réel', 'mj-member'),
@@ -3409,6 +3434,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             'print_default_theme' => 'light',
             'print_default_span' => 1,
             'print_default_page_break' => 'yes',
+            'print_default_hide_empty_days' => '',
             'current_week_only' => '',
             'week_display_mode' => 'current',
             'week_custom_reference' => '',

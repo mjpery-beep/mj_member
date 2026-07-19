@@ -510,6 +510,7 @@
         var printHeaderImageInput = root.querySelector('[data-print-option="header-image"]');
         var printFooterImageInput = root.querySelector('[data-print-option="footer-image"]');
         var printPageBreakInput = root.querySelector('[data-print-option="page-break"]');
+        var printHideEmptyDaysInput = root.querySelector('[data-print-option="hide-empty-days"]');
         var printPageBreakLabel = root.querySelector('[data-print-option-page-break-label]');
         var printTypeFiltersWrap = root.querySelector('[data-print-type-filters]');
         var printTypeFilterInputs = [];
@@ -716,14 +717,24 @@
             return printModeInput.value === 'month' ? 'month' : 'week';
         }
 
-        function getPrintTheme() {
-            if (printThemeInput) {
-                return printThemeInput.value === 'dark' ? 'dark' : 'light';
-            }
-            if (printConfig && printConfig.defaultTheme === 'dark') {
-                return 'dark';
+        function normalizePrintTheme(theme) {
+            var value = String(theme || '').trim();
+            if (
+                value === 'light'
+                || value === 'dark'
+                || value === 'dark-light-days'
+                || value === 'light-dark-days'
+            ) {
+                return value;
             }
             return 'light';
+        }
+
+        function getPrintTheme() {
+            if (printThemeInput) {
+                return normalizePrintTheme(printThemeInput.value);
+            }
+            return normalizePrintTheme(printConfig && printConfig.defaultTheme ? printConfig.defaultTheme : 'light');
         }
 
         function parseMonthKey(monthKey) {
@@ -1062,6 +1073,13 @@
             return !!(printPageBreakInput && printPageBreakInput.checked);
         }
 
+        function isHideEmptyDaysEnabled() {
+            if (printHideEmptyDaysInput) {
+                return !!printHideEmptyDaysInput.checked;
+            }
+            return !!(printConfig && printConfig.defaultHideEmptyDays);
+        }
+
         function isEventEmojiEnabled() {
             if (printEventEmojiInput) {
                 return !!printEventEmojiInput.checked;
@@ -1224,8 +1242,8 @@
             if (printModeInput && (prefs.mode === 'week' || prefs.mode === 'month')) {
                 printModeInput.value = prefs.mode;
             }
-            if (printThemeInput && (prefs.theme === 'light' || prefs.theme === 'dark')) {
-                printThemeInput.value = prefs.theme;
+            if (printThemeInput && typeof prefs.theme !== 'undefined') {
+                printThemeInput.value = normalizePrintTheme(prefs.theme);
             }
             if (printSpanInput && typeof prefs.span !== 'undefined') {
                 printSpanInput.value = String(prefs.span);
@@ -1253,6 +1271,9 @@
             }
             if (printPageBreakInput && typeof prefs.pageBreak !== 'undefined') {
                 printPageBreakInput.checked = !!prefs.pageBreak;
+            }
+            if (printHideEmptyDaysInput && typeof prefs.hideEmptyDays !== 'undefined') {
+                printHideEmptyDaysInput.checked = !!prefs.hideEmptyDays;
             }
             if (printPadPageInput && typeof prefs.padPage !== 'undefined') {
                 printPadPageInput.value = String(prefs.padPage);
@@ -1316,6 +1337,7 @@
                 headerImage: isHeaderImageEnabled(),
                 footerImage: isFooterImageEnabled(),
                 pageBreak: isPageBreakEnabled(),
+                hideEmptyDays: isHideEmptyDaysEnabled(),
                 padPage: getPrintPaddingValue(printPadPageInput, 0, 24, 10),
                 padDay: getPrintPaddingValue(printPadDayInput, 0, 16, 6),
                 padEvent: getPrintPaddingValue(printPadEventInput, 0, 16, 6),
@@ -1453,7 +1475,31 @@
             }
         }
 
-        function collectWeekPeriods(span, withDetails, withCover, selectedTypesMap, weekAnchorDate) {
+        function formatDayHeading(dateObj) {
+            var weekday = '';
+            try {
+                weekday = dateObj.toLocaleDateString('fr-BE', { weekday: 'long' });
+            } catch (error) {
+                weekday = dateObj.toLocaleDateString(undefined, { weekday: 'long' });
+            }
+
+            weekday = String(weekday || '').trim();
+            if (weekday) {
+                weekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+            }
+
+            return (weekday ? weekday + ' ' : '') + String(dateObj.getDate());
+        }
+
+        function uppercaseFirstLetter(text) {
+            var value = String(text || '').trim();
+            if (!value) {
+                return '';
+            }
+            return value.charAt(0).toUpperCase() + value.slice(1);
+        }
+
+        function collectWeekPeriods(span, withDetails, withCover, selectedTypesMap, weekAnchorDate, removeEmptyDays) {
             var periods = [];
             if (!months[activeIndex] && !weekAnchorDate) {
                 return periods;
@@ -1484,12 +1530,20 @@
                     var dayKey = formatDayKey(dayDate);
                     var dayNode = getDayNodeByKey(dayKey);
                     var events = collectEventsFromDay(dayNode, withDetails, withCover, selectedTypesMap);
+                    if (removeEmptyDays && (!events || !events.length)) {
+                        continue;
+                    }
                     cells.push({
                         isPadding: false,
                         dayNumber: String(dayDate.getDate()),
+                        dayHeading: formatDayHeading(dayDate),
                         label: formatDateLabel(dayDate, true),
                         events: events
                     });
+                }
+
+                if (removeEmptyDays && !cells.length) {
+                    continue;
                 }
 
                 periods.push({
@@ -1501,7 +1555,7 @@
             return periods;
         }
 
-        function collectMonthPeriods(span, withDetails, withCover, selectedTypesMap, monthStartIndex) {
+        function collectMonthPeriods(span, withDetails, withCover, selectedTypesMap, monthStartIndex, removeEmptyDays) {
             var periods = [];
             var startIndex = typeof monthStartIndex === 'number' ? monthStartIndex : activeIndex;
             for (var i = 0; i < span; i += 1) {
@@ -1511,7 +1565,7 @@
                 }
 
                 var period = {
-                    title: monthEl.getAttribute('data-calendar-label') || ('Mois ' + (i + 1)),
+                    title: uppercaseFirstLetter(monthEl.getAttribute('data-calendar-label') || ('Mois ' + (i + 1))),
                     weeks: []
                 };
 
@@ -1522,12 +1576,14 @@
                     dayCells.forEach(function(dayCell) {
                         var dayNode = dayCell.querySelector('.mj-member-events-calendar__day[data-calendar-day]');
                         if (!dayNode) {
-                            weekData.cells.push({
-                                isPadding: true,
-                                dayNumber: '',
-                                label: '',
-                                events: []
-                            });
+                            if (!removeEmptyDays) {
+                                weekData.cells.push({
+                                    isPadding: true,
+                                    dayNumber: '',
+                                    label: '',
+                                    events: []
+                                });
+                            }
                             return;
                         }
 
@@ -1536,15 +1592,21 @@
                         var parts = dayKey.split('-');
                         var dayDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
                         var events = collectEventsFromDay(dayNode, withDetails, withCover, selectedTypesMap);
+                        if (removeEmptyDays && (!events || !events.length)) {
+                            return;
+                        }
                         weekData.cells.push({
                             isPadding: false,
                             dayNumber: dayNumberNode ? (dayNumberNode.textContent || '').trim() : String(dayDate.getDate()),
+                            dayHeading: formatDayHeading(dayDate),
                             label: formatDateLabel(dayDate, true),
                             events: events
                         });
                     });
 
-                    period.weeks.push(weekData);
+                    if (!removeEmptyDays || weekData.cells.length) {
+                        period.weeks.push(weekData);
+                    }
                 });
 
                 periods.push(period);
@@ -1574,30 +1636,51 @@
             return false;
         }
 
+        function collectPeriodCompactDays(period) {
+            var compactDays = [];
+            if (!period || !period.weeks || !period.weeks.length) {
+                return compactDays;
+            }
+
+            period.weeks.forEach(function(week) {
+                (week && week.cells ? week.cells : []).forEach(function(cell) {
+                    if (!cell || cell.isPadding || !cell.events || !cell.events.length) {
+                        return;
+                    }
+                    compactDays.push(cell);
+                });
+            });
+
+            return compactDays;
+        }
+
         function buildPrintDocumentHtml(periods, options) {
             var blocks = [];
             var labels = (printConfig && printConfig.labels) ? printConfig.labels : {};
             var weekdayLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
             var headerImageUrl = options.headerImage && options.headerImageUrl ? String(options.headerImageUrl) : '';
             var footerImageUrl = options.footerImage && options.footerImageUrl ? String(options.footerImageUrl) : '';
-            var theme = options.theme === 'dark' ? 'dark' : 'light';
-            var isDarkTheme = theme === 'dark';
-            var pageBg = isDarkTheme ? '#0f1115' : '#ffffff';
-            var pageText = isDarkTheme ? '#f5f7fa' : '#111111';
-            var titleBorder = isDarkTheme ? '#2a2f36' : '#dddddd';
-            var weekdayText = isDarkTheme ? '#aeb6c2' : '#666666';
-            var dayBorder = isDarkTheme ? '#2f3742' : '#e4e4e4';
-            var dayBg = isDarkTheme ? '#171c23' : '#ffffff';
-            var dayPaddingBg = isDarkTheme ? '#141920' : '#fafafa';
-            var dayHead = isDarkTheme ? '#d6dde8' : '#444444';
-            var eventBorder = isDarkTheme ? '#323a46' : '#efefef';
-            var eventBg = isDarkTheme ? '#202733' : '#ffffff';
-            var eventTitle = isDarkTheme ? '#f6f8fc' : '#111111';
-            var eventMeta = isDarkTheme ? '#c2cad7' : '#444444';
-            var typeLabelBorder = isDarkTheme ? '#3c4552' : '#d7d7d7';
-            var typeLabelBg = isDarkTheme ? '#2a3240' : '#f6f6f6';
-            var typeLabelColor = isDarkTheme ? '#e2e7f0' : '#444444';
-            var emptyText = isDarkTheme ? '#aeb6c2' : '#666666';
+            var removeEmptyDays = !!options.removeEmptyDays;
+            var theme = normalizePrintTheme(options.theme);
+            var hasDarkBackground = theme === 'dark' || theme === 'dark-light-days';
+            var hasDarkDayCards = theme === 'dark' || theme === 'light-dark-days';
+            var pageBg = hasDarkBackground ? '#000000' : '#ffffff';
+            var pageText = hasDarkBackground ? '#f5f7fa' : '#111111';
+            var titleColor = hasDarkBackground ? '#d5024b' : pageText;
+            var titleBorder = hasDarkBackground ? '#2a2f36' : '#dddddd';
+            var weekdayText = hasDarkBackground ? '#aeb6c2' : '#666666';
+            var dayBorder = hasDarkDayCards ? '#2f3742' : '#e4e4e4';
+            var dayBg = hasDarkDayCards ? '#171c23' : '#ffffff';
+            var dayPaddingBg = hasDarkDayCards ? '#141920' : '#fafafa';
+            var dayHead = hasDarkDayCards ? '#d6dde8' : '#444444';
+            var eventBorder = hasDarkDayCards ? '#323a46' : '#efefef';
+            var eventBg = hasDarkDayCards ? '#202733' : '#ffffff';
+            var eventTitle = hasDarkDayCards ? '#f6f8fc' : '#111111';
+            var eventMeta = hasDarkDayCards ? '#c2cad7' : '#444444';
+            var typeLabelBorder = hasDarkDayCards ? '#3c4552' : '#d7d7d7';
+            var typeLabelBg = hasDarkDayCards ? '#2a3240' : '#f6f6f6';
+            var typeLabelColor = hasDarkDayCards ? '#e2e7f0' : '#444444';
+            var emptyText = hasDarkBackground ? '#aeb6c2' : '#666666';
 
             if (periods.length) {
                 periods.forEach(function(period, idx) {
@@ -1605,23 +1688,21 @@
                     periodHtml.push('<section class="mj-print-period' + (options.pageBreak && idx < periods.length - 1 ? ' has-break' : '') + '">');
                     periodHtml.push('<h2>' + escapeHtml(period.title) + '</h2>');
 
-                    periodHtml.push('<div class="mj-print-cal">');
-                    periodHtml.push('<div class="mj-print-cal__weekdays">');
-                    weekdayLabels.forEach(function(wd) {
-                        periodHtml.push('<span>' + escapeHtml(wd) + '</span>');
-                    });
-                    periodHtml.push('</div>');
+                    periodHtml.push('<div class="mj-print-cal' + (removeEmptyDays ? ' mj-print-cal--compact' : '') + '">');
+                    if (!removeEmptyDays) {
+                        periodHtml.push('<div class="mj-print-cal__weekdays">');
+                        weekdayLabels.forEach(function(wd) {
+                            periodHtml.push('<span>' + escapeHtml(wd) + '</span>');
+                        });
+                        periodHtml.push('</div>');
+                    }
 
-                    period.weeks.forEach(function(week) {
-                        periodHtml.push('<div class="mj-print-cal__week">');
-                        (week.cells || []).forEach(function(cell) {
-                            if (!cell || cell.isPadding) {
-                                periodHtml.push('<div class="mj-print-cal__day is-padding"></div>');
-                                return;
-                            }
-
+                    if (removeEmptyDays) {
+                        var compactDays = collectPeriodCompactDays(period);
+                        periodHtml.push('<div class="mj-print-cal__days">');
+                        compactDays.forEach(function(cell) {
                             periodHtml.push('<div class="mj-print-cal__day">');
-                            periodHtml.push('<div class="mj-print-cal__day-head" title="' + escapeHtml(cell.label || '') + '">' + escapeHtml(cell.dayNumber || '') + '</div>');
+                            periodHtml.push('<div class="mj-print-cal__day-head" title="' + escapeHtml(cell.label || '') + '">' + escapeHtml(cell.dayHeading || cell.dayNumber || '') + '</div>');
                             periodHtml.push('<div class="mj-print-cal__events">');
                             (cell.events || []).forEach(function(eventItem) {
                                 var eventStyleAttr = '';
@@ -1646,15 +1727,15 @@
                                     periodHtml.push('<div class="mj-print-event-meta">' + escapeHtml(eventItem.meta) + '</div>');
                                 }
                                 if (eventItem.type) {
-                                    var typeLabelStyle = '';
+                                    var compactTypeLabelStyle = '';
                                     if (eventItem.accentColor) {
-                                        var typeBg = hexToRgba(eventItem.accentColor, 0.18);
-                                        var typeBorder = hexToRgba(eventItem.accentColor, 0.42);
-                                        if (typeBg && typeBorder) {
-                                            typeLabelStyle = ' style="background:' + escapeHtml(typeBg) + ';border-color:' + escapeHtml(typeBorder) + ';color:' + escapeHtml(eventItem.accentColor) + ';"';
+                                        var compactTypeBg = hexToRgba(eventItem.accentColor, 0.18);
+                                        var compactTypeBorder = hexToRgba(eventItem.accentColor, 0.42);
+                                        if (compactTypeBg && compactTypeBorder) {
+                                            compactTypeLabelStyle = ' style="background:' + escapeHtml(compactTypeBg) + ';border-color:' + escapeHtml(compactTypeBorder) + ';color:' + escapeHtml(eventItem.accentColor) + ';"';
                                         }
                                     }
-                                    periodHtml.push('<div class="mj-print-event-type-label"' + typeLabelStyle + '>' + escapeHtml(eventItem.type) + '</div>');
+                                    periodHtml.push('<div class="mj-print-event-type-label"' + compactTypeLabelStyle + '>' + escapeHtml(eventItem.type) + '</div>');
                                 }
                                 if (options.details && eventItem.details) {
                                     periodHtml.push('<div class="mj-print-event-details">' + escapeHtml(eventItem.details) + '</div>');
@@ -1665,7 +1746,62 @@
                             periodHtml.push('</div>');
                         });
                         periodHtml.push('</div>');
-                    });
+                    } else {
+                        period.weeks.forEach(function(week) {
+                            periodHtml.push('<div class="mj-print-cal__week">');
+                            (week.cells || []).forEach(function(cell) {
+                                if (!cell || cell.isPadding) {
+                                    periodHtml.push('<div class="mj-print-cal__day is-padding"></div>');
+                                    return;
+                                }
+
+                                periodHtml.push('<div class="mj-print-cal__day">');
+                                periodHtml.push('<div class="mj-print-cal__day-head" title="' + escapeHtml(cell.label || '') + '">' + escapeHtml(cell.dayNumber || '') + '</div>');
+                                periodHtml.push('<div class="mj-print-cal__events">');
+                                (cell.events || []).forEach(function(eventItem) {
+                                    var eventStyleAttr = '';
+                                    if (options.eventColor && eventItem.accentColor) {
+                                        var bgColor = hexToRgba(eventItem.accentColor, 0.16);
+                                        var borderColor = hexToRgba(eventItem.accentColor, 0.45);
+                                        if (bgColor && borderColor) {
+                                            eventStyleAttr = ' style="background:' + escapeHtml(bgColor) + ';border-color:' + escapeHtml(borderColor) + ';"';
+                                        }
+                                    }
+                                    periodHtml.push('<article class="mj-print-event"' + eventStyleAttr + '>');
+                                    if (options.cover && eventItem.cover) {
+                                        periodHtml.push('<img class="mj-print-event-cover" src="' + escapeHtml(eventItem.cover) + '" alt="' + escapeHtml(eventItem.title || '') + '" />');
+                                    }
+                                    periodHtml.push('<div class="mj-print-event-title">');
+                                    if (options.eventEmoji && eventItem.emoji) {
+                                        periodHtml.push('<span class="mj-print-event-emoji">' + escapeHtml(eventItem.emoji) + '</span>');
+                                    }
+                                    periodHtml.push('<span class="mj-print-event-title-text">' + escapeHtml(eventItem.title) + '</span>');
+                                    periodHtml.push('</div>');
+                                    if (options.timeRange && eventItem.meta) {
+                                        periodHtml.push('<div class="mj-print-event-meta">' + escapeHtml(eventItem.meta) + '</div>');
+                                    }
+                                    if (eventItem.type) {
+                                        var typeLabelStyle = '';
+                                        if (eventItem.accentColor) {
+                                            var typeBg = hexToRgba(eventItem.accentColor, 0.18);
+                                            var typeBorder = hexToRgba(eventItem.accentColor, 0.42);
+                                            if (typeBg && typeBorder) {
+                                                typeLabelStyle = ' style="background:' + escapeHtml(typeBg) + ';border-color:' + escapeHtml(typeBorder) + ';color:' + escapeHtml(eventItem.accentColor) + ';"';
+                                            }
+                                        }
+                                        periodHtml.push('<div class="mj-print-event-type-label"' + typeLabelStyle + '>' + escapeHtml(eventItem.type) + '</div>');
+                                    }
+                                    if (options.details && eventItem.details) {
+                                        periodHtml.push('<div class="mj-print-event-details">' + escapeHtml(eventItem.details) + '</div>');
+                                    }
+                                    periodHtml.push('</article>');
+                                });
+                                periodHtml.push('</div>');
+                                periodHtml.push('</div>');
+                            });
+                            periodHtml.push('</div>');
+                        });
+                    }
 
                     periodHtml.push('</div>');
 
@@ -1687,13 +1823,15 @@
                 '<title>' + escapeHtml(title) + '</title>',
                 '<style>',
                 'body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:' + pagePaddingCss + 'px;color:' + pageText + ';background:' + pageBg + ';}',
-                'h2{font-size:18px;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid ' + titleBorder + ';color:' + pageText + ';}',
+                'h2{font-size:26px;margin:0 0 14px;padding-bottom:6px;border-bottom:1px solid ' + titleBorder + ';color:' + titleColor + ';text-align:center;}',
                 '.mj-print-cal{display:grid;gap:8px;}',
                 '.mj-print-cal__weekdays,.mj-print-cal__week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}',
+                '.mj-print-cal--compact .mj-print-cal__weekdays{display:none;}',
+                '.mj-print-cal__days{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;}',
                 '.mj-print-cal__weekdays span{font-size:11px;font-weight:700;text-transform:uppercase;color:' + weekdayText + ';padding:2px 4px;}',
                 '.mj-print-cal__day{border:1px solid ' + dayBorder + ';border-radius:8px;min-height:80px;padding:' + dayPaddingCss + 'px;display:flex;flex-direction:column;gap:6px;background:' + dayBg + ';}',
                 '.mj-print-cal__day.is-padding{background:' + dayPaddingBg + ';border-style:dashed;}',
-                '.mj-print-cal__day-head{font-size:11px;font-weight:700;color:' + dayHead + ';}',
+                '.mj-print-cal__day-head{font-size:13px;font-weight:700;color:' + dayHead + ';}',
                 '.mj-print-cal__events{display:grid;gap:6px;}',
                 '.mj-print-event{border:1px solid ' + eventBorder + ';border-radius:6px;padding:' + eventPaddingCss + 'px;background:' + eventBg + ';display:grid;gap:4px;}',
                 '.mj-print-event-cover{width:100%;aspect-ratio:1 / 1;object-fit:cover;border-radius:4px;display:block;}',
@@ -1704,8 +1842,8 @@
                 '.mj-print-event-type-label{display:inline-flex;align-items:center;align-self:flex-start;border:1px solid ' + typeLabelBorder + ';border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;line-height:1.2;background:' + typeLabelBg + ';color:' + typeLabelColor + ';}',
                 '.mj-print-empty{font-size:13px;color:' + emptyText + ';}',
                 '.mj-print-period + .mj-print-period{margin-top:14px;}',
-                '.mj-print-doc-image{margin:0 0 12px;}',
-                '.mj-print-doc-image img{display:block;width:100%;max-height:130px;object-fit:contain;object-position:center;}',
+                '.mj-print-doc-image{margin:0 0 12px;overflow:hidden;}',
+                '.mj-print-doc-image img{display:block;width:calc(100% + ' + (pagePaddingCss * 2) + 'px);max-width:none;height:auto;margin-left:-' + pagePaddingCss + 'px;}',
                 '.mj-print-doc-image--footer{margin:14px 0 0;}',
                 '@media print{body{padding:' + pagePaddingCss + 'px;} .mj-print-period.has-break{page-break-after:always;break-after:page;}}',
                 '</style>',
@@ -1904,24 +2042,25 @@
             var pagePadding = typeof options.pagePadding === 'number' ? options.pagePadding : 10;
             var dayPadding = typeof options.dayPadding === 'number' ? options.dayPadding : 6;
             var eventPadding = typeof options.eventPadding === 'number' ? options.eventPadding : 6;
-            var theme = options.theme === 'dark' ? 'dark' : 'light';
-            var isDarkTheme = theme === 'dark';
+            var theme = normalizePrintTheme(options.theme);
+            var hasDarkBackground = theme === 'dark' || theme === 'dark-light-days';
+            var hasDarkDayCards = theme === 'dark' || theme === 'light-dark-days';
             var palette = {
-                pageBg: isDarkTheme ? '#0f1115' : '#ffffff',
-                heading: isDarkTheme ? '#f5f7fa' : '#111111',
-                weekday: isDarkTheme ? '#aeb6c2' : '#666666',
-                dayBg: isDarkTheme ? '#171c23' : '#ffffff',
-                dayPaddingBg: isDarkTheme ? '#141920' : '#fafafa',
-                dayBorder: isDarkTheme ? '#2f3742' : '#e4e4e4',
-                dayPaddingBorder: isDarkTheme ? '#3d4653' : '#d8d8d8',
-                dayHead: isDarkTheme ? '#d6dde8' : '#444444',
-                eventBg: isDarkTheme ? '#202733' : '#ffffff',
-                eventBorder: isDarkTheme ? '#323a46' : '#efefef',
-                eventTitle: isDarkTheme ? '#f6f8fc' : '#111111',
-                eventMeta: isDarkTheme ? '#c2cad7' : '#444444',
-                pillBg: isDarkTheme ? '#2a3240' : '#f6f6f6',
-                pillBorder: isDarkTheme ? '#3c4552' : '#d7d7d7',
-                pillText: isDarkTheme ? '#e2e7f0' : '#444444'
+                pageBg: hasDarkBackground ? '#000000' : '#ffffff',
+                heading: hasDarkBackground ? '#d5024b' : '#111111',
+                weekday: hasDarkBackground ? '#aeb6c2' : '#666666',
+                dayBg: hasDarkDayCards ? '#171c23' : '#ffffff',
+                dayPaddingBg: hasDarkDayCards ? '#141920' : '#fafafa',
+                dayBorder: hasDarkDayCards ? '#2f3742' : '#e4e4e4',
+                dayPaddingBorder: hasDarkDayCards ? '#3d4653' : '#d8d8d8',
+                dayHead: hasDarkDayCards ? '#d6dde8' : '#444444',
+                eventBg: hasDarkDayCards ? '#202733' : '#ffffff',
+                eventBorder: hasDarkDayCards ? '#323a46' : '#efefef',
+                eventTitle: hasDarkDayCards ? '#f6f8fc' : '#111111',
+                eventMeta: hasDarkDayCards ? '#c2cad7' : '#444444',
+                pillBg: hasDarkDayCards ? '#2a3240' : '#f6f6f6',
+                pillBorder: hasDarkDayCards ? '#3c4552' : '#d7d7d7',
+                pillText: hasDarkDayCards ? '#e2e7f0' : '#444444'
             };
             var headerImageUrl = options.headerImage && options.headerImageUrl ? String(options.headerImageUrl) : '';
             var footerImageUrl = options.footerImage && options.footerImageUrl ? String(options.footerImageUrl) : '';
@@ -1948,7 +2087,7 @@
                 return imageCache[url];
             }
 
-            function getImageFittedHeight(image, width, maxHeight, fallbackHeight) {
+            function getImageScaledHeight(image, width, fallbackHeight) {
                 if (!image || !image.naturalWidth || !image.naturalHeight || width <= 0) {
                     return fallbackHeight;
                 }
@@ -1956,16 +2095,17 @@
                 if (!isFinite(raw) || raw <= 0) {
                     return fallbackHeight;
                 }
-                return Math.max(30, Math.min(maxHeight, raw));
+                return Math.max(30, raw);
             }
 
             var headerImage = headerImageUrl ? await getImage(headerImageUrl) : null;
             var footerImage = footerImageUrl ? await getImage(footerImageUrl) : null;
-            var headerDrawHeight = headerImage ? getImageFittedHeight(headerImage, canvasWidth - (pagePadding * 2), 130, 56) : 0;
-            var footerDrawHeight = footerImage ? getImageFittedHeight(footerImage, canvasWidth - (pagePadding * 2), 130, 56) : 0;
+            var headerDrawHeight = headerImage ? getImageScaledHeight(headerImage, canvasWidth, 56) : 0;
+            var footerDrawHeight = footerImage ? getImageScaledHeight(footerImage, canvasWidth, 56) : 0;
 
-            function measureEventHeight(eventItem) {
-                var innerWidth = dayWidth - (dayPadding * 2) - (eventPadding * 2);
+            function measureEventHeight(eventItem, cellWidth) {
+                var effectiveCellWidth = typeof cellWidth === 'number' ? cellWidth : dayWidth;
+                var innerWidth = effectiveCellWidth - (dayPadding * 2) - (eventPadding * 2);
                 var height = eventPadding * 2 + 4;
 
                 if (options.cover && eventItem.cover) {
@@ -1995,26 +2135,52 @@
             if (headerImage) {
                 totalHeight += headerDrawHeight + 12;
             }
+            var removeEmptyDays = !!options.removeEmptyDays;
+
             periods.forEach(function(period) {
-                totalHeight += 34;
-                totalHeight += weekdayHeight + blockGap;
-                (period.weeks || []).forEach(function(week) {
-                    var weekHeight = 80;
-                    (week.cells || []).forEach(function(cell) {
-                        if (!cell || cell.isPadding) {
-                            return;
-                        }
-                        var cellHeight = Math.max(80, dayPadding * 2 + 18);
-                        (cell.events || []).forEach(function(eventItem, eventIndex) {
-                            cellHeight += measureEventHeight(eventItem);
-                            if (eventIndex < cell.events.length - 1) {
-                                cellHeight += 6;
+                totalHeight += 44;
+                if (!removeEmptyDays) {
+                    totalHeight += weekdayHeight + blockGap;
+                    (period.weeks || []).forEach(function(week) {
+                        var weekHeight = 80;
+                        (week.cells || []).forEach(function(cell) {
+                            if (!cell || cell.isPadding) {
+                                return;
                             }
+                            var cellHeight = Math.max(80, dayPadding * 2 + 18);
+                            (cell.events || []).forEach(function(eventItem, eventIndex) {
+                                cellHeight += measureEventHeight(eventItem, dayWidth);
+                                if (eventIndex < cell.events.length - 1) {
+                                    cellHeight += 6;
+                                }
+                            });
+                            weekHeight = Math.max(weekHeight, cellHeight);
                         });
-                        weekHeight = Math.max(weekHeight, cellHeight);
+                        totalHeight += weekHeight + blockGap;
                     });
-                    totalHeight += weekHeight + blockGap;
-                });
+                } else {
+                    var compactDays = collectPeriodCompactDays(period);
+                    if (compactDays.length) {
+                        var compactColumns = Math.min(4, Math.max(1, compactDays.length));
+                        var compactGap = 8;
+                        var compactDayWidth = Math.floor((canvasWidth - (pagePadding * 2) - (compactGap * (compactColumns - 1))) / compactColumns);
+                        for (var compactIndex = 0; compactIndex < compactDays.length; compactIndex += compactColumns) {
+                            var rowCells = compactDays.slice(compactIndex, compactIndex + compactColumns);
+                            var rowHeight = 80;
+                            rowCells.forEach(function(cell) {
+                                var cellHeight = Math.max(80, dayPadding * 2 + 18);
+                                (cell.events || []).forEach(function(eventItem, eventIndex) {
+                                    cellHeight += measureEventHeight(eventItem, compactDayWidth);
+                                    if (eventIndex < cell.events.length - 1) {
+                                        cellHeight += 6;
+                                    }
+                                });
+                                rowHeight = Math.max(rowHeight, cellHeight);
+                            });
+                            totalHeight += rowHeight + blockGap;
+                        }
+                    }
+                }
                 totalHeight += periodGap;
             });
             if (footerImage) {
@@ -2038,7 +2204,7 @@
 
             if (headerImage) {
                 try {
-                    ctx.drawImage(headerImage, pagePadding, cursorY, canvasWidth - (pagePadding * 2), headerDrawHeight);
+                    ctx.drawImage(headerImage, 0, cursorY, canvasWidth, headerDrawHeight);
                     cursorY += headerDrawHeight + 12;
                 } catch (error) {
                     // Ignore header drawing errors.
@@ -2047,150 +2213,291 @@
 
             for (var pi = 0; pi < periods.length; pi += 1) {
                 var period = periods[pi];
-                ctx.font = '700 18px Arial, sans-serif';
+                ctx.font = '700 26px Arial, sans-serif';
                 ctx.fillStyle = palette.heading;
-                ctx.fillText(String(period.title || ''), pagePadding, cursorY + 18);
-                cursorY += 30;
+                ctx.textAlign = 'center';
+                ctx.fillText(String(period.title || ''), canvasWidth / 2, cursorY + 26);
+                ctx.textAlign = 'left';
+                cursorY += 40;
 
                 ctx.font = '700 11px Arial, sans-serif';
                 ctx.fillStyle = palette.weekday;
-                for (var wdi = 0; wdi < weekdayLabels.length; wdi += 1) {
-                    var weekdayX = pagePadding + (wdi * (dayWidth + weekdayGap));
-                    ctx.fillText(weekdayLabels[wdi], weekdayX + 4, cursorY + 11);
+                if (!removeEmptyDays) {
+                    for (var wdi = 0; wdi < weekdayLabels.length; wdi += 1) {
+                        var weekdayX = pagePadding + (wdi * (dayWidth + weekdayGap));
+                        ctx.fillText(weekdayLabels[wdi], weekdayX + 4, cursorY + 11);
+                    }
+                    cursorY += weekdayHeight + blockGap;
                 }
-                cursorY += weekdayHeight + blockGap;
 
-                for (var wi = 0; wi < (period.weeks || []).length; wi += 1) {
-                    var week = period.weeks[wi];
-                    var computedWeekHeight = 80;
-                    (week.cells || []).forEach(function(cell) {
-                        if (!cell || cell.isPadding) {
-                            return;
-                        }
-                        var cellHeight = Math.max(80, dayPadding * 2 + 18);
-                        (cell.events || []).forEach(function(eventItem, eventIndex) {
-                            cellHeight += measureEventHeight(eventItem);
-                            if (eventIndex < cell.events.length - 1) {
-                                cellHeight += 6;
-                            }
-                        });
-                        computedWeekHeight = Math.max(computedWeekHeight, cellHeight);
-                    });
+                if (removeEmptyDays) {
+                    var compactDaysToDraw = collectPeriodCompactDays(period);
+                    if (compactDaysToDraw.length) {
+                        var compactColumnsToDraw = Math.min(4, Math.max(1, compactDaysToDraw.length));
+                        var compactGapToDraw = 8;
+                        var compactDayWidthToDraw = Math.floor((canvasWidth - (pagePadding * 2) - (compactGapToDraw * (compactColumnsToDraw - 1))) / compactColumnsToDraw);
 
-                    for (var ci = 0; ci < (week.cells || []).length; ci += 1) {
-                        var cell = week.cells[ci];
-                        var cellX = pagePadding + (ci * (dayWidth + weekdayGap));
-                        var cellY = cursorY;
+                        for (var compactStart = 0; compactStart < compactDaysToDraw.length; compactStart += compactColumnsToDraw) {
+                            var rowToDraw = compactDaysToDraw.slice(compactStart, compactStart + compactColumnsToDraw);
+                            var rowHeightToDraw = 80;
 
-                        ctx.save();
-                        drawRoundedRect(ctx, cellX, cellY, dayWidth, computedWeekHeight, 8);
-                        ctx.fillStyle = cell && cell.isPadding ? palette.dayPaddingBg : palette.dayBg;
-                        ctx.fill();
-                        ctx.lineWidth = 1;
-                        ctx.strokeStyle = cell && cell.isPadding ? palette.dayPaddingBorder : palette.dayBorder;
-                        ctx.stroke();
-                        ctx.restore();
-
-                        if (!cell || cell.isPadding) {
-                            continue;
-                        }
-
-                        var innerX = cellX + dayPadding;
-                        var innerY = cellY + dayPadding;
-                        var innerWidth = dayWidth - (dayPadding * 2);
-
-                        ctx.font = '700 11px Arial, sans-serif';
-                        ctx.fillStyle = palette.dayHead;
-                        ctx.fillText(String(cell.dayNumber || ''), innerX, innerY + 11);
-                        innerY += 18;
-
-                        for (var ei = 0; ei < (cell.events || []).length; ei += 1) {
-                            var eventItem = cell.events[ei];
-                            var eventHeight = measureEventHeight(eventItem);
-                            var eventX = innerX;
-                            var eventY = innerY;
-                            var eventWidth = innerWidth;
-
-                            ctx.save();
-                            drawRoundedRect(ctx, eventX, eventY, eventWidth, eventHeight, 6);
-                            ctx.fillStyle = (options.eventColor && eventItem.accentColor)
-                                ? (hexToRgba(eventItem.accentColor, isDarkTheme ? 0.2 : 0.16) || palette.eventBg)
-                                : palette.eventBg;
-                            ctx.fill();
-                            ctx.lineWidth = 1;
-                            ctx.strokeStyle = (options.eventColor && eventItem.accentColor)
-                                ? (hexToRgba(eventItem.accentColor, isDarkTheme ? 0.5 : 0.45) || palette.eventBorder)
-                                : palette.eventBorder;
-                            ctx.stroke();
-                            ctx.restore();
-
-                            var contentX = eventX + eventPadding;
-                            var contentY = eventY + eventPadding;
-                            var contentWidth = eventWidth - (eventPadding * 2);
-
-                            if (options.cover && eventItem.cover) {
-                                var coverImage = await getImage(eventItem.cover);
-                                if (coverImage) {
-                                    try {
-                                        drawImageCover(ctx, coverImage, contentX, contentY, contentWidth, contentWidth, 4);
-                                        contentY += contentWidth + 4;
-                                    } catch (error) {
-                                        // Ignore cover drawing failures, keep export working.
+                            rowToDraw.forEach(function(cell) {
+                                var cellHeight = Math.max(80, dayPadding * 2 + 18);
+                                (cell.events || []).forEach(function(eventItem, eventIndex) {
+                                    cellHeight += measureEventHeight(eventItem, compactDayWidthToDraw);
+                                    if (eventIndex < cell.events.length - 1) {
+                                        cellHeight += 6;
                                     }
+                                });
+                                rowHeightToDraw = Math.max(rowHeightToDraw, cellHeight);
+                            });
+
+                            for (var compactCellIndex = 0; compactCellIndex < rowToDraw.length; compactCellIndex += 1) {
+                                var compactCell = rowToDraw[compactCellIndex];
+                                var compactCellX = pagePadding + (compactCellIndex * (compactDayWidthToDraw + compactGapToDraw));
+                                var compactCellY = cursorY;
+
+                                ctx.save();
+                                drawRoundedRect(ctx, compactCellX, compactCellY, compactDayWidthToDraw, rowHeightToDraw, 8);
+                                ctx.fillStyle = palette.dayBg;
+                                ctx.fill();
+                                ctx.lineWidth = 1;
+                                ctx.strokeStyle = palette.dayBorder;
+                                ctx.stroke();
+                                ctx.restore();
+
+                                var compactInnerX = compactCellX + dayPadding;
+                                var compactInnerY = compactCellY + dayPadding;
+                                var compactInnerWidth = compactDayWidthToDraw - (dayPadding * 2);
+
+                                ctx.font = '700 13px Arial, sans-serif';
+                                ctx.fillStyle = palette.dayHead;
+                                ctx.fillText(String(compactCell.dayHeading || compactCell.dayNumber || ''), compactInnerX, compactInnerY + 13);
+                                compactInnerY += 22;
+
+                                for (var compactEventIndex = 0; compactEventIndex < (compactCell.events || []).length; compactEventIndex += 1) {
+                                    var compactEventItem = compactCell.events[compactEventIndex];
+                                    var compactEventHeight = measureEventHeight(compactEventItem, compactDayWidthToDraw);
+                                    var compactEventX = compactInnerX;
+                                    var compactEventY = compactInnerY;
+                                    var compactEventWidth = compactInnerWidth;
+
+                                    ctx.save();
+                                    drawRoundedRect(ctx, compactEventX, compactEventY, compactEventWidth, compactEventHeight, 6);
+                                    ctx.fillStyle = (options.eventColor && compactEventItem.accentColor)
+                                        ? (hexToRgba(compactEventItem.accentColor, hasDarkDayCards ? 0.2 : 0.16) || palette.eventBg)
+                                        : palette.eventBg;
+                                    ctx.fill();
+                                    ctx.lineWidth = 1;
+                                    ctx.strokeStyle = (options.eventColor && compactEventItem.accentColor)
+                                        ? (hexToRgba(compactEventItem.accentColor, hasDarkDayCards ? 0.5 : 0.45) || palette.eventBorder)
+                                        : palette.eventBorder;
+                                    ctx.stroke();
+                                    ctx.restore();
+
+                                    var compactContentX = compactEventX + eventPadding;
+                                    var compactContentY = compactEventY + eventPadding;
+                                    var compactContentWidth = compactEventWidth - (eventPadding * 2);
+
+                                    if (options.cover && compactEventItem.cover) {
+                                        var compactCoverImage = await getImage(compactEventItem.cover);
+                                        if (compactCoverImage) {
+                                            try {
+                                                drawImageCover(ctx, compactCoverImage, compactContentX, compactContentY, compactContentWidth, compactContentWidth, 4);
+                                                compactContentY += compactContentWidth + 4;
+                                            } catch (error) {
+                                                // Ignore cover drawing failures, keep export working.
+                                            }
+                                        }
+                                    }
+
+                                    var compactTitleOffsetX = compactContentX;
+                                    ctx.font = '700 12px Arial, sans-serif';
+                                    ctx.fillStyle = palette.eventTitle;
+                                    if (options.eventEmoji && compactEventItem.emoji) {
+                                        ctx.fillText(String(compactEventItem.emoji), compactContentX, compactContentY + 12);
+                                        compactTitleOffsetX += 18;
+                                    }
+                                    var compactTitleLines = wrapCanvasText(ctx, compactEventItem.title || '', Math.max(60, compactContentWidth - (compactTitleOffsetX - compactContentX)));
+                                    drawCanvasTextBlock(ctx, compactTitleLines, compactTitleOffsetX, compactContentY + 11, 14, 3);
+                                    compactContentY += Math.max(16, Math.min(compactTitleLines.length, 3) * 14);
+
+                                    ctx.font = '400 10px Arial, sans-serif';
+                                    ctx.fillStyle = palette.eventMeta;
+                                    if (options.timeRange && compactEventItem.meta) {
+                                        ctx.fillText(String(compactEventItem.meta), compactContentX, compactContentY + 10);
+                                        compactContentY += 14;
+                                    }
+
+                                    if (compactEventItem.type) {
+                                        var compactPillText = String(compactEventItem.type);
+                                        ctx.font = '600 10px Arial, sans-serif';
+                                        var compactPillWidth = Math.min(compactContentWidth, ctx.measureText(compactPillText).width + 16);
+                                        ctx.save();
+                                        drawRoundedRect(ctx, compactContentX, compactContentY, compactPillWidth, 16, 999);
+                                        ctx.fillStyle = compactEventItem.accentColor
+                                            ? (hexToRgba(compactEventItem.accentColor, hasDarkDayCards ? 0.22 : 0.18) || palette.pillBg)
+                                            : palette.pillBg;
+                                        ctx.fill();
+                                        ctx.lineWidth = 1;
+                                        ctx.strokeStyle = compactEventItem.accentColor
+                                            ? (hexToRgba(compactEventItem.accentColor, hasDarkDayCards ? 0.5 : 0.42) || palette.pillBorder)
+                                            : palette.pillBorder;
+                                        ctx.stroke();
+                                        ctx.restore();
+                                        ctx.fillStyle = compactEventItem.accentColor || palette.pillText;
+                                        ctx.fillText(compactPillText, compactContentX + 8, compactContentY + 11);
+                                        compactContentY += 20;
+                                    }
+
+                                    if (options.details && compactEventItem.details) {
+                                        ctx.font = '400 10px Arial, sans-serif';
+                                        ctx.fillStyle = palette.eventMeta;
+                                        var compactDetailLines = wrapCanvasText(ctx, compactEventItem.details, Math.max(60, compactContentWidth));
+                                        drawCanvasTextBlock(ctx, compactDetailLines, compactContentX, compactContentY + 10, 12, 4);
+                                    }
+
+                                    compactInnerY += compactEventHeight + 6;
                                 }
                             }
 
-                            var titleOffsetX = contentX;
-                            ctx.font = '700 12px Arial, sans-serif';
-                            ctx.fillStyle = palette.eventTitle;
-                            if (options.eventEmoji && eventItem.emoji) {
-                                ctx.fillText(String(eventItem.emoji), contentX, contentY + 12);
-                                titleOffsetX += 18;
-                            }
-                            var titleLines = wrapCanvasText(ctx, eventItem.title || '', Math.max(60, contentWidth - (titleOffsetX - contentX)));
-                            drawCanvasTextBlock(ctx, titleLines, titleOffsetX, contentY + 11, 14, 3);
-                            contentY += Math.max(16, Math.min(titleLines.length, 3) * 14);
-
-                            ctx.font = '400 10px Arial, sans-serif';
-                            ctx.fillStyle = palette.eventMeta;
-                            if (options.timeRange && eventItem.meta) {
-                                ctx.fillText(String(eventItem.meta), contentX, contentY + 10);
-                                contentY += 14;
-                            }
-
-                            if (eventItem.type) {
-                                var pillText = String(eventItem.type);
-                                ctx.font = '600 10px Arial, sans-serif';
-                                var pillWidth = Math.min(contentWidth, ctx.measureText(pillText).width + 16);
-                                ctx.save();
-                                drawRoundedRect(ctx, contentX, contentY, pillWidth, 16, 999);
-                                ctx.fillStyle = eventItem.accentColor
-                                    ? (hexToRgba(eventItem.accentColor, isDarkTheme ? 0.22 : 0.18) || palette.pillBg)
-                                    : palette.pillBg;
-                                ctx.fill();
-                                ctx.lineWidth = 1;
-                                ctx.strokeStyle = eventItem.accentColor
-                                    ? (hexToRgba(eventItem.accentColor, isDarkTheme ? 0.5 : 0.42) || palette.pillBorder)
-                                    : palette.pillBorder;
-                                ctx.stroke();
-                                ctx.restore();
-                                ctx.fillStyle = eventItem.accentColor || palette.pillText;
-                                ctx.fillText(pillText, contentX + 8, contentY + 11);
-                                contentY += 20;
-                            }
-
-                            if (options.details && eventItem.details) {
-                                ctx.font = '400 10px Arial, sans-serif';
-                                ctx.fillStyle = palette.eventMeta;
-                                var detailLines = wrapCanvasText(ctx, eventItem.details, Math.max(60, contentWidth));
-                                drawCanvasTextBlock(ctx, detailLines, contentX, contentY + 10, 12, 4);
-                            }
-
-                            innerY += eventHeight + 6;
+                            cursorY += rowHeightToDraw + blockGap;
                         }
                     }
+                } else {
+                    for (var wi = 0; wi < (period.weeks || []).length; wi += 1) {
+                        var week = period.weeks[wi];
 
-                    cursorY += computedWeekHeight + blockGap;
+                        var computedWeekHeight = 80;
+                        (week.cells || []).forEach(function(cell) {
+                            if (!cell || cell.isPadding) {
+                                return;
+                            }
+                            var cellHeight = Math.max(80, dayPadding * 2 + 18);
+                            (cell.events || []).forEach(function(eventItem, eventIndex) {
+                                cellHeight += measureEventHeight(eventItem, dayWidth);
+                                if (eventIndex < cell.events.length - 1) {
+                                    cellHeight += 6;
+                                }
+                            });
+                            computedWeekHeight = Math.max(computedWeekHeight, cellHeight);
+                        });
+
+                        for (var ci = 0; ci < (week.cells || []).length; ci += 1) {
+                            var cell = week.cells[ci];
+                            var cellX = pagePadding + (ci * (dayWidth + weekdayGap));
+                            var cellY = cursorY;
+
+                            ctx.save();
+                            drawRoundedRect(ctx, cellX, cellY, dayWidth, computedWeekHeight, 8);
+                            ctx.fillStyle = cell && cell.isPadding ? palette.dayPaddingBg : palette.dayBg;
+                            ctx.fill();
+                            ctx.lineWidth = 1;
+                            ctx.strokeStyle = cell && cell.isPadding ? palette.dayPaddingBorder : palette.dayBorder;
+                            ctx.stroke();
+                            ctx.restore();
+
+                            if (!cell || cell.isPadding) {
+                                continue;
+                            }
+
+                            var innerX = cellX + dayPadding;
+                            var innerY = cellY + dayPadding;
+                            var innerWidth = dayWidth - (dayPadding * 2);
+
+                            ctx.font = '700 13px Arial, sans-serif';
+                            ctx.fillStyle = palette.dayHead;
+                            ctx.fillText(String(cell.dayNumber || ''), innerX, innerY + 13);
+                            innerY += 22;
+
+                            for (var ei = 0; ei < (cell.events || []).length; ei += 1) {
+                                var eventItem = cell.events[ei];
+                                var eventHeight = measureEventHeight(eventItem, dayWidth);
+                                var eventX = innerX;
+                                var eventY = innerY;
+                                var eventWidth = innerWidth;
+
+                                ctx.save();
+                                drawRoundedRect(ctx, eventX, eventY, eventWidth, eventHeight, 6);
+                                ctx.fillStyle = (options.eventColor && eventItem.accentColor)
+                                    ? (hexToRgba(eventItem.accentColor, hasDarkDayCards ? 0.2 : 0.16) || palette.eventBg)
+                                    : palette.eventBg;
+                                ctx.fill();
+                                ctx.lineWidth = 1;
+                                ctx.strokeStyle = (options.eventColor && eventItem.accentColor)
+                                    ? (hexToRgba(eventItem.accentColor, hasDarkDayCards ? 0.5 : 0.45) || palette.eventBorder)
+                                    : palette.eventBorder;
+                                ctx.stroke();
+                                ctx.restore();
+
+                                var contentX = eventX + eventPadding;
+                                var contentY = eventY + eventPadding;
+                                var contentWidth = eventWidth - (eventPadding * 2);
+
+                                if (options.cover && eventItem.cover) {
+                                    var coverImage = await getImage(eventItem.cover);
+                                    if (coverImage) {
+                                        try {
+                                            drawImageCover(ctx, coverImage, contentX, contentY, contentWidth, contentWidth, 4);
+                                            contentY += contentWidth + 4;
+                                        } catch (error) {
+                                            // Ignore cover drawing failures, keep export working.
+                                        }
+                                    }
+                                }
+
+                                var titleOffsetX = contentX;
+                                ctx.font = '700 12px Arial, sans-serif';
+                                ctx.fillStyle = palette.eventTitle;
+                                if (options.eventEmoji && eventItem.emoji) {
+                                    ctx.fillText(String(eventItem.emoji), contentX, contentY + 12);
+                                    titleOffsetX += 18;
+                                }
+                                var titleLines = wrapCanvasText(ctx, eventItem.title || '', Math.max(60, contentWidth - (titleOffsetX - contentX)));
+                                drawCanvasTextBlock(ctx, titleLines, titleOffsetX, contentY + 11, 14, 3);
+                                contentY += Math.max(16, Math.min(titleLines.length, 3) * 14);
+
+                                ctx.font = '400 10px Arial, sans-serif';
+                                ctx.fillStyle = palette.eventMeta;
+                                if (options.timeRange && eventItem.meta) {
+                                    ctx.fillText(String(eventItem.meta), contentX, contentY + 10);
+                                    contentY += 14;
+                                }
+
+                                if (eventItem.type) {
+                                    var pillText = String(eventItem.type);
+                                    ctx.font = '600 10px Arial, sans-serif';
+                                    var pillWidth = Math.min(contentWidth, ctx.measureText(pillText).width + 16);
+                                    ctx.save();
+                                    drawRoundedRect(ctx, contentX, contentY, pillWidth, 16, 999);
+                                    ctx.fillStyle = eventItem.accentColor
+                                        ? (hexToRgba(eventItem.accentColor, hasDarkDayCards ? 0.22 : 0.18) || palette.pillBg)
+                                        : palette.pillBg;
+                                    ctx.fill();
+                                    ctx.lineWidth = 1;
+                                    ctx.strokeStyle = eventItem.accentColor
+                                        ? (hexToRgba(eventItem.accentColor, hasDarkDayCards ? 0.5 : 0.42) || palette.pillBorder)
+                                        : palette.pillBorder;
+                                    ctx.stroke();
+                                    ctx.restore();
+                                    ctx.fillStyle = eventItem.accentColor || palette.pillText;
+                                    ctx.fillText(pillText, contentX + 8, contentY + 11);
+                                    contentY += 20;
+                                }
+
+                                if (options.details && eventItem.details) {
+                                    ctx.font = '400 10px Arial, sans-serif';
+                                    ctx.fillStyle = palette.eventMeta;
+                                    var detailLines = wrapCanvasText(ctx, eventItem.details, Math.max(60, contentWidth));
+                                    drawCanvasTextBlock(ctx, detailLines, contentX, contentY + 10, 12, 4);
+                                }
+
+                                innerY += eventHeight + 6;
+                            }
+                        }
+
+                        cursorY += computedWeekHeight + blockGap;
+                    }
                 }
 
                 cursorY += periodGap;
@@ -2199,7 +2506,7 @@
             if (footerImage) {
                 cursorY += 14;
                 try {
-                    ctx.drawImage(footerImage, pagePadding, cursorY, canvasWidth - (pagePadding * 2), footerDrawHeight);
+                    ctx.drawImage(footerImage, 0, cursorY, canvasWidth, footerDrawHeight);
                 } catch (error) {
                     // Ignore footer drawing errors.
                 }
@@ -2241,6 +2548,7 @@
             var eventColor = isEventColorEnabled();
             var headerImage = isHeaderImageEnabled();
             var footerImage = isFooterImageEnabled();
+            var hideEmptyDays = isHideEmptyDaysEnabled();
             var pagePadding = getPrintPaddingValue(printPadPageInput, 0, 24, 10);
             var dayPadding = getPrintPaddingValue(printPadDayInput, 0, 16, 6);
             var eventPadding = getPrintPaddingValue(printPadEventInput, 0, 16, 6);
@@ -2249,8 +2557,8 @@
             var selectedMonthStartIndex = getSelectedMonthStartIndex();
             var selectedWeekAnchorDate = getSelectedWeekAnchorDate();
             var periods = mode === 'month'
-                ? collectMonthPeriods(span, details, cover, selectedTypesMap, selectedMonthStartIndex)
-                : collectWeekPeriods(span, details, cover, selectedTypesMap, selectedWeekAnchorDate);
+                ? collectMonthPeriods(span, details, cover, selectedTypesMap, selectedMonthStartIndex, hideEmptyDays)
+                : collectWeekPeriods(span, details, cover, selectedTypesMap, selectedWeekAnchorDate, hideEmptyDays);
 
             var printRenderOptions = {
                 mode: mode,
@@ -2265,6 +2573,7 @@
                 footerImage: footerImage,
                 headerImageUrl: (printConfig && printConfig.headerImageUrl) ? String(printConfig.headerImageUrl) : '',
                 footerImageUrl: (printConfig && printConfig.footerImageUrl) ? String(printConfig.footerImageUrl) : '',
+                removeEmptyDays: hideEmptyDays,
                 pagePadding: pagePadding,
                 dayPadding: dayPadding,
                 eventPadding: eventPadding,
@@ -2556,6 +2865,13 @@
 
         if (printPageBreakInput) {
             printPageBreakInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+
+        if (printHideEmptyDaysInput) {
+            printHideEmptyDaysInput.addEventListener('change', function() {
                 refreshPrintPreview();
                 queueSavePrintPrefs();
             });

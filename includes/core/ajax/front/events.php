@@ -74,6 +74,7 @@ final class EventsController implements AjaxHandlerInterface {
             'headerImage',
             'footerImage',
             'pageBreak',
+            'hideEmptyDays',
         );
         foreach ($bool_fields as $field) {
             if (array_key_exists($field, $prefs)) {
@@ -90,7 +91,7 @@ final class EventsController implements AjaxHandlerInterface {
 
         if (isset($prefs['theme'])) {
             $theme = sanitize_key((string) $prefs['theme']);
-            if (in_array($theme, array('light', 'dark'), true)) {
+            if (in_array($theme, array('light', 'dark', 'dark-light-days', 'light-dark-days'), true)) {
                 $out['theme'] = $theme;
             }
         }
