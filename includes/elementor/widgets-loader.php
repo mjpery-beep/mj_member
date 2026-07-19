@@ -45,6 +45,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj\Member\Elementor\EventsManager' => 'includes/elementor/EventsManager.php',
             'Mj_Member_Elementor_Registration_Manager_Widget' => 'includes/elementor/class-mj-member-registration-manager-widget.php',
             'Mj_Member_Elementor_Event_Attendance_Widget' => 'includes/elementor/class-mj-member-event-attendance-widget.php',
+            'Mj_Member_Elementor_Attendance_Summary_Widget' => 'includes/elementor/class-mj-member-attendance-summary-widget.php',
             'Mj_Member_Elementor_Event_Schedule_Widget' => 'includes/elementor/class-mj-member-event-schedule-widget.php',
             'Mj_Member_Elementor_Notification_Bell_Widget' => 'includes/elementor/class-mj-member-notification-bell-widget.php',
             'Mj_Member_Elementor_Notification_List_Widget' => 'includes/elementor/class-mj-member-notification-list-widget.php',

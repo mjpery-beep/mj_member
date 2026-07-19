@@ -461,7 +461,7 @@ function mj_header_svg_icon(string $name): string {
                         </div>
                         <div class="mj-header-login-form__options">
                             <label class="mj-header-login-form__remember">
-                                <input type="checkbox" name="rememberme" value="1" />
+                                <input type="checkbox" name="rememberme" value="1" checked="checked" />
                                 <span><?php esc_html_e('Rester connecté', 'mj-member'); ?></span>
                             </label>
                             <a href="<?php echo esc_url(wp_lostpassword_url()); ?>" class="mj-header-login-form__forgot-link"><?php esc_html_e('mot de passe oublié ?', 'mj-member'); ?></a>

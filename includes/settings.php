@@ -139,6 +139,22 @@ function mj_settings_page() {
         ));
     }
 
+    $fixtures_media_script_file = dirname(__DIR__) . '/js/admin-fixtures-media-import.js';
+    if (is_readable($fixtures_media_script_file)) {
+        wp_enqueue_script(
+            'mj-member-admin-fixtures-media-import',
+            plugins_url('../js/admin-fixtures-media-import.js', __FILE__),
+            array('jquery'),
+            (string) filemtime($fixtures_media_script_file),
+            true
+        );
+
+        wp_localize_script('mj-member-admin-fixtures-media-import', 'mjMemberFixturesMediaAdmin', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('mj_member_fixtures_media_admin'),
+        ));
+    }
+
     // -----------------------------------------------------------------------
     // Handle backup profile CRUD and media backup actions (separate forms)
     // -----------------------------------------------------------------------
@@ -292,6 +308,12 @@ function mj_settings_page() {
             $result = MjFixturesManager::createFixtures($selectedSources);
             if (!empty($result['success'])) {
                 $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures créées dans data/fixtures.');
+                if (!empty($result['warnings']) && is_array($result['warnings'])) {
+                    $warnings = implode(' | ', array_map('wp_strip_all_tags', (array) $result['warnings']));
+                    if ($warnings !== '') {
+                        $backup_notices[] = array('type' => 'warning', 'message' => '⚠️ ' . esc_html($warnings));
+                    }
+                }
             } else {
                 $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la création.';
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
@@ -321,12 +343,33 @@ function mj_settings_page() {
             MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_CLEAN, $cleanBeforeSources);
             MjFixturesManager::saveSelection(MjFixturesManager::OPTION_USE_ON_INSTALL, $useOnInstallSources);
 
-            $result = MjFixturesManager::restoreFixtures($selectedSources, $cleanBeforeSources);
+            $mediaSelected = in_array('wp_media', $selectedSources, true);
+            $syncSources = array_values(array_filter($selectedSources, static function ($slug) {
+                return $slug !== 'wp_media';
+            }));
+            $syncCleanBefore = array_values(array_filter($cleanBeforeSources, static function ($slug) {
+                return $slug !== 'wp_media';
+            }));
+
+            if (!empty($syncSources)) {
+                $result = MjFixturesManager::restoreFixtures($syncSources, $syncCleanBefore);
+            } else {
+                $result = array('success' => true, 'errors' => array());
+            }
+
             if (!empty($result['success'])) {
-                $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures restaurées depuis data/fixtures.');
+                if ($mediaSelected && empty($syncSources)) {
+                    $backup_notices[] = array('type' => 'success', 'message' => '✅ Sélection enregistrée. Lancez ensuite l\'import wp_media dans la console de chargement ci-dessous.');
+                } else {
+                    $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures restaurées depuis data/fixtures (hors wp_media).');
+                }
             } else {
                 $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la restauration.';
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
+            }
+
+            if ($mediaSelected) {
+                $backup_notices[] = array('type' => 'warning', 'message' => '⚠️ La source wp_media se restaure via le nouveau worker séquentiel (bouton "Lancer import médias wp_media").');
             }
         } elseif ($fixturesAction === 'save_options' && class_exists(MjFixturesManager::class)) {
             $selectedCreate = isset($_POST['mj_fixtures_tables']) && is_array($_POST['mj_fixtures_tables'])

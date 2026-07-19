@@ -1165,9 +1165,216 @@ if (!defined('ABSPATH')) {
                     </div>
 
                     <div id="mj-tab-account-links" class="mj-settings-tabs__panel" data-tab="account-links" role="tabpanel" aria-labelledby="mj-tab-button-account-links" aria-hidden="true">
+                        <?php
+                        $account_members = array();
+                        if (class_exists('\\Mj\\Member\\Classes\\Crud\\MjMembers')) {
+                            $account_members = \Mj\Member\Classes\Crud\MjMembers::get_all(array(
+                                'orderby' => 'last_name',
+                                'order' => 'ASC',
+                            ));
+                        }
+
+                        $visibility_member_groups = array(
+                            'all' => array(),
+                            'animateur' => array(),
+                            'coordinateur' => array(),
+                            'benevole' => array(),
+                            'hours_team' => array(),
+                            'staff' => array(),
+                        );
+
+                        foreach ($account_members as $member) {
+                            $member_role = isset($member->role) ? sanitize_key((string) $member->role) : '';
+                            $is_volunteer = !empty($member->is_volunteer);
+                            $member_id = isset($member->id) ? (int) $member->id : 0;
+                            $member_name = trim((string) ($member->first_name ?? '') . ' ' . (string) ($member->last_name ?? ''));
+                            if ($member_name === '') {
+                                $member_name = isset($member->nickname) && trim((string) $member->nickname) !== ''
+                                    ? trim((string) $member->nickname)
+                                    : __('Membre', 'mj-member');
+                            }
+
+                            $avatar_url = '';
+                            $photo_id = max((int) $member->get('photo_id', 0), (int) $member->get('avatar_id', 0));
+                            if ($photo_id > 0) {
+                                if (function_exists('wp_get_attachment_image_url')) {
+                                    $avatar_candidate = wp_get_attachment_image_url($photo_id, 'thumbnail');
+                                    if (!is_string($avatar_candidate) || $avatar_candidate === '') {
+                                        $avatar_candidate = wp_get_attachment_image_url($photo_id, 'medium');
+                                    }
+                                    if (!is_string($avatar_candidate) || $avatar_candidate === '') {
+                                        $avatar_candidate = wp_get_attachment_url($photo_id);
+                                    }
+                                    if (is_string($avatar_candidate) && $avatar_candidate !== '') {
+                                        $avatar_url = $avatar_candidate;
+                                    }
+                                } elseif (function_exists('wp_get_attachment_url')) {
+                                    $avatar_candidate = wp_get_attachment_url($photo_id);
+                                    if (is_string($avatar_candidate) && $avatar_candidate !== '') {
+                                        $avatar_url = $avatar_candidate;
+                                    }
+                                }
+                            }
+
+                            $member_entry = array(
+                                'id' => $member_id,
+                                'name' => $member_name,
+                                'avatar_url' => $avatar_url,
+                                'edit_url' => $member_id > 0 ? admin_url('admin.php?page=mj_members&action=edit&id=' . $member_id) : '',
+                            );
+
+                            $visibility_member_groups['all'][] = $member_entry;
+
+                            if ($member_role === \Mj\Member\Classes\MjRoles::ANIMATEUR) {
+                                $visibility_member_groups['animateur'][] = $member_entry;
+                                $visibility_member_groups['hours_team'][] = $member_entry;
+                                $visibility_member_groups['staff'][] = $member_entry;
+                            } elseif ($member_role === \Mj\Member\Classes\MjRoles::COORDINATEUR) {
+                                $visibility_member_groups['coordinateur'][] = $member_entry;
+                                $visibility_member_groups['hours_team'][] = $member_entry;
+                                $visibility_member_groups['staff'][] = $member_entry;
+                            } elseif ($is_volunteer) {
+                                $visibility_member_groups['benevole'][] = $member_entry;
+                                $visibility_member_groups['hours_team'][] = $member_entry;
+                            }
+                        }
+
+                        $visibility_member_counts = array(
+                            'all' => count($visibility_member_groups['all']),
+                            'animateur' => count($visibility_member_groups['animateur']),
+                            'coordinateur' => count($visibility_member_groups['coordinateur']),
+                            'benevole' => count($visibility_member_groups['benevole']),
+                            'hours_team' => count($visibility_member_groups['hours_team']),
+                            'staff' => count($visibility_member_groups['staff']),
+                        );
+
+                        $members_base_url = admin_url('admin.php?page=mj_members');
+                        $visibility_member_urls = array(
+                            'all' => $members_base_url,
+                            'animateur' => add_query_arg('filter_role', \Mj\Member\Classes\MjRoles::ANIMATEUR, $members_base_url),
+                            'coordinateur' => add_query_arg('filter_role', \Mj\Member\Classes\MjRoles::COORDINATEUR, $members_base_url),
+                            'benevole' => add_query_arg('filter_role', \Mj\Member\Classes\MjRoles::BENEVOLE, $members_base_url),
+                            'hours_team' => add_query_arg('filter_roles', implode(',', array(\Mj\Member\Classes\MjRoles::ANIMATEUR, \Mj\Member\Classes\MjRoles::COORDINATEUR, \Mj\Member\Classes\MjRoles::BENEVOLE)), $members_base_url),
+                            'staff' => add_query_arg('filter_roles', implode(',', array(\Mj\Member\Classes\MjRoles::ANIMATEUR, \Mj\Member\Classes\MjRoles::COORDINATEUR)), $members_base_url),
+                        );
+
+                        $account_visibility_legend = array(
+                            'all' => array(
+                                'icon' => '👥',
+                                'label' => __('Tous les utilisateurs', 'mj-member'),
+                                'description' => __('Visible pour tous les membres connectés.', 'mj-member'),
+                                'count' => $visibility_member_counts['all'],
+                                'url' => $visibility_member_urls['all'],
+                                'members' => $visibility_member_groups['all'],
+                            ),
+                            'animateur' => array(
+                                'icon' => '🎭',
+                                'label' => __('Animateurs', 'mj-member'),
+                                'description' => __('Réservé aux animateurs.', 'mj-member'),
+                                'count' => $visibility_member_counts['animateur'],
+                                'url' => $visibility_member_urls['animateur'],
+                                'members' => $visibility_member_groups['animateur'],
+                            ),
+                            'coordinateur' => array(
+                                'icon' => '👔',
+                                'label' => __('Coordinateurs', 'mj-member'),
+                                'description' => __('Réservé aux coordinateurs.', 'mj-member'),
+                                'count' => $visibility_member_counts['coordinateur'],
+                                'url' => $visibility_member_urls['coordinateur'],
+                                'members' => $visibility_member_groups['coordinateur'],
+                            ),
+                            'benevole' => array(
+                                'icon' => '🤝',
+                                'label' => __('Bénévoles', 'mj-member'),
+                                'description' => __('Réservé aux bénévoles.', 'mj-member'),
+                                'count' => $visibility_member_counts['benevole'],
+                                'url' => $visibility_member_urls['benevole'],
+                                'members' => $visibility_member_groups['benevole'],
+                            ),
+                            'hours_team' => array(
+                                'icon' => '⏰',
+                                'label' => __('Équipe heures', 'mj-member'),
+                                'description' => __('Réservé à l’équipe heures.', 'mj-member'),
+                                'count' => $visibility_member_counts['hours_team'],
+                                'url' => $visibility_member_urls['hours_team'],
+                                'members' => $visibility_member_groups['hours_team'],
+                            ),
+                            'staff' => array(
+                                'icon' => '🏢',
+                                'label' => __('Staff', 'mj-member'),
+                                'description' => __('Visible pour les animateurs et coordinateurs.', 'mj-member'),
+                                'count' => $visibility_member_counts['staff'],
+                                'url' => $visibility_member_urls['staff'],
+                                'members' => $visibility_member_groups['staff'],
+                            ),
+                        );
+
+                        $member_avatar_initials = static function (array $member) : string {
+                            $source = trim((string) ($member['name'] ?? ''));
+                            if ($source === '') {
+                                return '?';
+                            }
+
+                            $parts = preg_split('/\s+/', $source, -1, PREG_SPLIT_NO_EMPTY);
+                            $initials = '';
+                            if (is_array($parts)) {
+                                foreach (array_slice($parts, 0, 2) as $part) {
+                                    $initials .= function_exists('mb_strtoupper')
+                                        ? mb_strtoupper(function_exists('mb_substr') ? mb_substr($part, 0, 1) : substr($part, 0, 1))
+                                        : strtoupper(substr($part, 0, 1));
+                                }
+                            }
+
+                            if ($initials !== '') {
+                                return $initials;
+                            }
+
+                            return function_exists('mb_strtoupper')
+                                ? mb_strtoupper(function_exists('mb_substr') ? mb_substr($source, 0, 1) : substr($source, 0, 1))
+                                : strtoupper(substr($source, 0, 1));
+                        };
+                        ?>
                         <div style="padding:20px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;">
                             <h2 style="margin:0 0 12px 0;">🔗 Liens &laquo;&nbsp;Mon compte&nbsp;&raquo;</h2>
                             <p style="margin:0 0 16px 0; color:#4b5563; font-size:14px;">Configurez ici l'ordre, les libellés et les pages cibles des actions proposées dans l'espace membre. Les boutons mis en avant sur Elementor utilisent automatiquement ces paramètres.</p>
+
+                            <div style="margin:0 0 16px 0; padding:14px; background:#fff; border:1px solid #dbe4f0; border-radius:8px;">
+                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-weight:600; color:#0f172a;">
+                                    <span class="dashicons dashicons-info-outline" style="font-size:18px;"></span>
+                                    <span><?php esc_html_e('Types de visibilité', 'mj-member'); ?></span>
+                                </div>
+                                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px;">
+                                    <?php foreach ($account_visibility_legend as $visibility_meta) : ?>
+                                        <div style="padding:12px; border:1px solid #e5e7eb; border-radius:8px; background:linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);">
+                                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                                                <span aria-hidden="true" style="font-size:18px;"><?php echo esc_html($visibility_meta['icon']); ?></span>
+                                                <strong style="color:#111827; font-size:14px;"><?php echo esc_html($visibility_meta['label']); ?></strong>
+                                                <span style="margin-left:auto; display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; background:#e0f2fe; color:#075985; font-size:12px; font-weight:700;">
+                                                    <?php echo esc_html(number_format_i18n((int) $visibility_meta['count'])); ?>
+                                                </span>
+                                            </div>
+                                            <p style="margin:0; color:#4b5563; font-size:13px; line-height:1.45;"><?php echo esc_html($visibility_meta['description']); ?></p>
+                                            <details class="mj-account-visibility-members">
+                                                <summary class="mj-account-visibility-members__toggle" aria-label="<?php esc_attr_e('Afficher les membres', 'mj-member'); ?>">
+                                                    <span class="dashicons dashicons-admin-users" aria-hidden="true"></span>
+                                                    <span class="screen-reader-text"><?php esc_html_e('Afficher les membres', 'mj-member'); ?></span>
+                                                </summary>
+                                                <div class="mj-account-visibility-members__list">
+                                                    <?php foreach ($visibility_meta['members'] as $visibility_member) : ?>
+                                                        <a class="mj-account-visibility-members__avatar" href="<?php echo esc_url($visibility_member['edit_url']); ?>" title="<?php echo esc_attr($visibility_member['name']); ?>" aria-label="<?php echo esc_attr($visibility_member['name']); ?>">
+                                                            <?php if (!empty($visibility_member['avatar_url'])) : ?>
+                                                                <img src="<?php echo esc_url($visibility_member['avatar_url']); ?>" alt="<?php echo esc_attr($visibility_member['name']); ?>" />
+                                                            <?php else : ?>
+                                                                <span class="mj-account-visibility-members__initials"><?php echo esc_html($member_avatar_initials($visibility_member)); ?></span>
+                                                            <?php endif; ?>
+                                                        </a>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            </details>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
                             
                             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; padding:12px; background:#fff; border:1px solid #e5e7eb; border-radius:6px;">
                                 <button type="button" id="mj-export-pages-btn" class="button button-secondary" style="display:inline-flex; align-items:center; gap:6px;">
@@ -1417,6 +1624,68 @@ if (!defined('ABSPATH')) {
                                 .mj-account-link-item--section .mj-account-link-details-grid {
                                     display: grid;
                                     grid-template-columns: 1fr;
+                                }
+
+                                .mj-account-visibility-members {
+                                    margin-top: 10px;
+                                }
+
+                                .mj-account-visibility-members__toggle {
+                                    width: 28px;
+                                    height: 28px;
+                                    display: inline-flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    border: 1px solid #cbd5e1;
+                                    border-radius: 999px;
+                                    background: #ffffff;
+                                    color: #334155;
+                                    cursor: pointer;
+                                    list-style: none;
+                                }
+
+                                .mj-account-visibility-members__toggle::-webkit-details-marker {
+                                    display: none;
+                                }
+
+                                .mj-account-visibility-members[open] .mj-account-visibility-members__toggle {
+                                    background: #e0f2fe;
+                                    border-color: #7dd3fc;
+                                    color: #075985;
+                                }
+
+                                .mj-account-visibility-members__list {
+                                    display: flex;
+                                    flex-wrap: wrap;
+                                    gap: 4px;
+                                    margin-top: 10px;
+                                }
+
+                                .mj-account-visibility-members__avatar {
+                                    width: 24px;
+                                    height: 24px;
+                                    display: inline-flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    overflow: hidden;
+                                    border-radius: 999px;
+                                    border: 1px solid #d1d5db;
+                                    background: #fff;
+                                    text-decoration: none;
+                                    flex: 0 0 auto;
+                                }
+
+                                .mj-account-visibility-members__avatar img {
+                                    width: 100%;
+                                    height: 100%;
+                                    object-fit: cover;
+                                    display: block;
+                                }
+
+                                .mj-account-visibility-members__initials {
+                                    font-size: 10px;
+                                    font-weight: 700;
+                                    color: #0f172a;
                                 }
                             </style>
                         </div>
@@ -2452,16 +2721,31 @@ if (!defined('ABSPATH')) {
 
                             <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
                                 <h3 style="margin:0 0 8px 0;">4) Restaurer</h3>
-                                <p style="margin:0 0 10px 0; color:#64748b;">Recharge les donnees en base depuis les fichiers fixtures.</p>
+                                <p style="margin:0 0 10px 0; color:#64748b;">Recharge les donnees en base depuis les fichiers fixtures (hors wp_media, traité via console ci-dessous).</p>
                                 <button
                                     type="submit"
                                     form="mj-fixtures-restore-form"
                                     class="button button-secondary"
                                     onclick="return confirm('Restaurer va remplacer les donnees actuelles des sources ciblees. Continuer ?');"
                                 >
-                                    Restaurer depuis data/fixtures
+                                    Restaurer (hors wp_media)
                                 </button>
                             </div>
+                        </div>
+
+                        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:14px;">
+                            <h3 style="margin:0 0 10px 0;">5) Import medias wp_media (URL source)</h3>
+                            <p style="margin:0 0 10px 0; color:#64748b;">
+                                Telecharge les images de wp_media une par une depuis leurs URL source et affiche la progression en direct.
+                            </p>
+                            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+                                <button type="button" id="mj-fixtures-media-start" class="button button-primary">Lancer import medias wp_media</button>
+                                <span id="mj-fixtures-media-progress-meta" style="color:#64748b; font-size:12px;"></span>
+                            </div>
+                            <div id="mj-fixtures-media-status" class="mj-photo-import-status" style="margin-bottom:10px;">
+                                Pret. Cochez wp_media dans la colonne Restaurer, puis lancez l'import.
+                            </div>
+                            <textarea id="mj-fixtures-media-live" rows="12" class="large-text code" readonly style="width:100%; resize:vertical;">Aucun import en cours.</textarea>
                         </div>
 
                         <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:14px;">

@@ -616,7 +616,7 @@ class MjMembers_List_Table extends WP_List_Table {
         $filters = $this->activeFilters;
         $role_labels = MjMembers::getRoleLabels();
         $page_slug = isset($_REQUEST['page']) ? sanitize_key(wp_unslash($_REQUEST['page'])) : 'mj_members';
-        $reset_url = remove_query_arg(array('filter_last_name','filter_first_name','filter_email','filter_age_min','filter_age_max','filter_payment','filter_date_start','filter_date_end','filter_role','paged'));
+        $reset_url = remove_query_arg(array('filter_last_name','filter_first_name','filter_email','filter_age_min','filter_age_max','filter_payment','filter_date_start','filter_date_end','filter_role','filter_roles','paged'));
         ?>
         <div class="mj-filter-bar" style="margin:10px 0 15px;padding:12px;background:#eef5fb;border-radius:6px;">
             <form method="get" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
@@ -767,7 +767,24 @@ class MjMembers_List_Table extends WP_List_Table {
             }
         }
 
-        if (!empty($_REQUEST['filter_role'])) {
+        if (!empty($_REQUEST['filter_roles'])) {
+            $raw_roles = sanitize_text_field(wp_unslash($_REQUEST['filter_roles']));
+            $requested_roles = preg_split('/[\s,|]+/', $raw_roles, -1, PREG_SPLIT_NO_EMPTY);
+            $valid_roles = array();
+
+            if (is_array($requested_roles)) {
+                foreach ($requested_roles as $requested_role) {
+                    $role = sanitize_key($requested_role);
+                    if ($role !== '' && in_array($role, array_keys(MjMembers::getRoleLabels()), true)) {
+                        $valid_roles[] = $role;
+                    }
+                }
+            }
+
+            if (!empty($valid_roles)) {
+                $filters['roles'] = array_values(array_unique($valid_roles));
+            }
+        } elseif (!empty($_REQUEST['filter_role'])) {
             $role = sanitize_key(wp_unslash($_REQUEST['filter_role']));
             if (in_array($role, array_keys(MjMembers::getRoleLabels()), true)) {
                 $filters['role'] = $role;

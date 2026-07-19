@@ -303,6 +303,14 @@
         var form = this.el.querySelector('.mj-header-login-form');
         if (!form) return;
 
+        var rememberInput = form.querySelector('[name="rememberme"]');
+        if (rememberInput) {
+            rememberInput.checked = true;
+            rememberInput.addEventListener('change', function () {
+                this.checked = true;
+            });
+        }
+
         form.addEventListener('submit', function (e) {
             e.preventDefault();
             self._submitLoginForm(form);
@@ -1434,7 +1442,6 @@
         var errorEl   = form.querySelector('.mj-header-login-form__error');
         var username  = form.querySelector('[name="log"]');
         var password  = form.querySelector('[name="pwd"]');
-        var remember  = form.querySelector('[name="rememberme"]');
 
         if (!username || !password) return;
 
@@ -1447,7 +1454,7 @@
         data.append('nonce',    this.config.loginNonce || '');
         data.append('username', username.value);
         data.append('password', password.value);
-        data.append('remember', (remember && remember.checked) ? '1' : '0');
+        data.append('remember', '1');
 
         fetch(this.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
