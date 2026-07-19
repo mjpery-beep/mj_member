@@ -1087,11 +1087,12 @@ final class MjFixturesManager
                     continue;
                 }
 
+                $sideloadFile = array(
+                    'name' => $filenameOnly,
+                    'tmp_name' => $tmp,
+                );
                 $sideload = wp_handle_sideload(
-                    array(
-                        'name' => $filenameOnly,
-                        'tmp_name' => $tmp,
-                    ),
+                    $sideloadFile,
                     array('test_form' => false)
                 );
 
