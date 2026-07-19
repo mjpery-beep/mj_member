@@ -8,6 +8,7 @@ namespace Mj\Member\Module\Admin {
         public function register(): void {
             add_action('wp_ajax_mj_member_run_manual_backup_action', 'mj_member_ajax_run_manual_backup_action');
             add_action('wp_ajax_mj_member_save_media_backup_settings_ajax', 'mj_member_save_media_backup_settings_ajax');
+            add_action('wp_ajax_mj_member_restore_fixtures_step', 'mj_member_ajax_restore_fixtures_step');
             add_action('admin_post_mj_member_download_fixtures', 'mj_member_handle_fixtures_export_download');
             add_action('admin_post_nopriv_mj_member_download_fixtures', 'mj_member_handle_fixtures_export_download');
         }
@@ -1630,6 +1631,99 @@ function mj_member_save_media_backup_settings_ajax(): void
     update_option('mj_media_backup_pause_ms', $media_backup_pause_ms);
 
     wp_send_json_success(array('message' => 'Options médias enregistrées.'));
+}
+
+/**
+ * AJAX: restore fixtures in chunks with progress feedback.
+ */
+function mj_member_ajax_restore_fixtures_step(): void
+{
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => 'Permissions insuffisantes.'), 403);
+    }
+
+    if (!check_ajax_referer('mj_fixtures_restore_ajax', 'nonce', false)) {
+        wp_send_json_error(array('message' => 'Nonce invalide, rechargez la page.'));
+    }
+
+    if (!class_exists(MjFixturesManager::class)) {
+        wp_send_json_error(array('message' => 'Gestionnaire de fixtures indisponible.'));
+    }
+
+    $selectedSources = isset($_POST['selectedSources']) && is_array($_POST['selectedSources'])
+        ? array_values(array_unique(array_map('sanitize_key', array_map('wp_unslash', $_POST['selectedSources']))))
+        : array();
+
+    $cleanSources = isset($_POST['cleanSources']) && is_array($_POST['cleanSources'])
+        ? array_values(array_unique(array_map('sanitize_key', array_map('wp_unslash', $_POST['cleanSources']))))
+        : array();
+
+    if (empty($selectedSources)) {
+        $selectedSources = MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_RESTORE_SELECTED, array());
+    }
+
+    if (empty($cleanSources)) {
+        $cleanSources = MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_RESTORE_CLEAN, array());
+    }
+
+    if (empty($selectedSources)) {
+        wp_send_json_error(array('message' => 'Aucune source sélectionnée pour la restauration.'));
+    }
+
+    MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_SELECTED, $selectedSources);
+    MjFixturesManager::saveSelection(MjFixturesManager::OPTION_RESTORE_CLEAN, $cleanSources);
+
+    $sourceIndex = isset($_POST['sourceIndex']) ? max(0, (int) $_POST['sourceIndex']) : 0;
+    $mediaOffset = isset($_POST['mediaOffset']) ? max(0, (int) $_POST['mediaOffset']) : 0;
+    $mediaLimit = isset($_POST['mediaLimit']) ? max(1, min(50, (int) $_POST['mediaLimit'])) : 15;
+
+    $totalSources = count($selectedSources);
+    if ($sourceIndex >= $totalSources) {
+        wp_send_json_success(array(
+            'done' => true,
+            'sourceIndex' => $sourceIndex,
+            'mediaOffset' => 0,
+            'totalSources' => $totalSources,
+            'selectedSources' => $selectedSources,
+            'cleanSources' => $cleanSources,
+        ));
+    }
+
+    $slug = sanitize_key((string) $selectedSources[$sourceIndex]);
+    $cleanBefore = in_array($slug, $cleanSources, true);
+
+    try {
+        $step = MjFixturesManager::restoreSourceChunk($slug, $cleanBefore, $mediaOffset, $mediaLimit);
+    } catch (\Throwable $e) {
+        wp_send_json_error(array('message' => 'Erreur critique durant la restauration: ' . $e->getMessage()));
+    }
+
+    if (is_wp_error($step)) {
+        wp_send_json_error(array(
+            'message' => $step->get_error_message(),
+            'slug' => $slug,
+            'sourceIndex' => $sourceIndex,
+            'mediaOffset' => $mediaOffset,
+            'totalSources' => $totalSources,
+        ));
+    }
+
+    $doneForSource = !empty($step['done']);
+    $nextSourceIndex = $doneForSource ? $sourceIndex + 1 : $sourceIndex;
+    $nextMediaOffset = $doneForSource ? 0 : (int) ($step['next_offset'] ?? 0);
+    $allDone = $nextSourceIndex >= $totalSources;
+
+    wp_send_json_success(array(
+        'done' => $allDone,
+        'sourceDone' => $doneForSource,
+        'slug' => $slug,
+        'step' => $step,
+        'sourceIndex' => $nextSourceIndex,
+        'mediaOffset' => $nextMediaOffset,
+        'totalSources' => $totalSources,
+        'selectedSources' => $selectedSources,
+        'cleanSources' => $cleanSources,
+    ));
 }
 
 } // end namespace {

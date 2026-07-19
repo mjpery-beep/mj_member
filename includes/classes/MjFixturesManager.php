@@ -17,7 +17,7 @@ final class MjFixturesManager
     public const OPTION_USE_ON_INSTALL = 'mj_fixtures_use_on_install_sources';
     public const OPTION_IMAGE_IMPORT_SETTINGS = 'mj_fixtures_image_import_settings';
     public const OPTION_CONFIG_SELECTION = 'mj_fixtures_config_selection';
-    public const EXPORT_TOKEN_TTL_SECONDS = 900;
+    public const EXPORT_TOKEN_TTL_SECONDS = 3600;
 
     private const EXPORT_TOKEN_TRANSIENT_PREFIX = 'mj_fixtures_export_token_';
 
@@ -399,6 +399,146 @@ final class MjFixturesManager
         return self::restoreFixtures($selected, $clean);
     }
 
+    public static function restoreSourceChunk(string $slug, bool $cleanBefore, int $offset = 0, int $limit = 15): array|WP_Error
+    {
+        global $wpdb;
+
+        $slug = sanitize_key($slug);
+        if ($slug === '' || !in_array($slug, self::allSourceSlugs(), true)) {
+            return new WP_Error('fixtures_source_unknown', __('Source de fixture inconnue.', 'mj-member'));
+        }
+
+        $offset = max(0, $offset);
+        $limit = max(1, min(50, $limit));
+        $dir = self::getFixturesDir();
+
+        if (!is_dir($dir)) {
+            return new WP_Error('fixtures_source_missing', __('Le dossier data/fixtures est introuvable.', 'mj-member'));
+        }
+
+        if ($slug === 'wp_media') {
+            $filename = 'wp_media.json';
+            $path = $dir . $filename;
+            if (!is_readable($path)) {
+                return new WP_Error('fixtures_source_missing', sprintf(__('Fixture introuvable ou illisible: %s.', 'mj-member'), $filename));
+            }
+
+            $raw = @file_get_contents($path);
+            $decoded = is_string($raw) ? json_decode($raw, true) : null;
+            if (!is_array($decoded)) {
+                return new WP_Error('fixtures_source_invalid', sprintf(__('%s invalide.', 'mj-member'), $filename));
+            }
+
+            $items = isset($decoded['items']) && is_array($decoded['items']) ? $decoded['items'] : array();
+            return self::restoreMediaBatch($dir, $items, $cleanBefore, $filename, $offset, $limit);
+        }
+
+        if ($offset > 0) {
+            return array(
+                'slug' => $slug,
+                'file' => $slug . '.json',
+                'rows' => 0,
+                'skipped' => 0,
+                'failed' => 0,
+                'offset' => $offset,
+                'next_offset' => $offset,
+                'total' => $offset,
+                'done' => true,
+            );
+        }
+
+        if (in_array($slug, self::TABLE_SLUGS, true)) {
+            $table = $wpdb->prefix . $slug;
+            $file = $dir . $slug . '.jsonl';
+            if (!self::tableExists($table)) {
+                return new WP_Error('fixtures_table_missing', sprintf(__('Table introuvable pour la source %s.', 'mj-member'), $slug));
+            }
+            if (!is_readable($file)) {
+                return new WP_Error('fixtures_source_missing', sprintf(__('Fixture introuvable ou illisible: %s.', 'mj-member'), basename($file)));
+            }
+
+            $columns = self::getTableColumns($table);
+            if (empty($columns)) {
+                return new WP_Error('fixtures_columns_missing', sprintf(__('Colonnes introuvables pour %s.', 'mj-member'), $table));
+            }
+
+            $wpdb->query('SET FOREIGN_KEY_CHECKS = 0');
+            if ($cleanBefore) {
+                $truncated = $wpdb->query("TRUNCATE TABLE `{$table}`");
+                if ($truncated === false) {
+                    $wpdb->query("DELETE FROM `{$table}`");
+                }
+            }
+
+            $handle = @fopen($file, 'rb');
+            if ($handle === false) {
+                $wpdb->query('SET FOREIGN_KEY_CHECKS = 1');
+                return new WP_Error('fixtures_read_failed', sprintf(__('Impossible de lire %s.', 'mj-member'), basename($file)));
+            }
+
+            $count = 0;
+            while (($line = fgets($handle)) !== false) {
+                $line = trim($line);
+                if ($line === '') {
+                    continue;
+                }
+
+                $row = json_decode($line, true);
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                $insertData = array();
+                foreach ($columns as $column) {
+                    if (array_key_exists($column, $row)) {
+                        $insertData[$column] = $row[$column];
+                    }
+                }
+
+                if (empty($insertData)) {
+                    continue;
+                }
+
+                $ok = $cleanBefore ? $wpdb->insert($table, $insertData) : $wpdb->replace($table, $insertData);
+                if ($ok !== false) {
+                    $count++;
+                }
+            }
+
+            fclose($handle);
+            $wpdb->query('SET FOREIGN_KEY_CHECKS = 1');
+
+            return array(
+                'slug' => $slug,
+                'file' => basename($file),
+                'rows' => $count,
+                'skipped' => 0,
+                'failed' => 0,
+                'offset' => 0,
+                'next_offset' => $count,
+                'total' => $count,
+                'done' => true,
+            );
+        }
+
+        $result = self::restoreSimpleSourceFixture($slug, $dir, $cleanBefore);
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return array(
+            'slug' => $slug,
+            'file' => (string) ($result['file'] ?? ($slug . '.json')),
+            'rows' => (int) ($result['rows'] ?? 0),
+            'skipped' => (int) ($result['skipped'] ?? 0),
+            'failed' => (int) ($result['failed'] ?? 0),
+            'offset' => 0,
+            'next_offset' => (int) ($result['rows'] ?? 0),
+            'total' => (int) ($result['rows'] ?? 0),
+            'done' => true,
+        );
+    }
+
     public static function listFixtureFiles(): array
     {
         $dir = self::getFixturesDir();
@@ -465,8 +605,9 @@ final class MjFixturesManager
             return new WP_Error('fixtures_url_download', __('Impossible de telecharger l\'archive ZIP distante.', 'mj-member'));
         }
 
-        $name = basename((string) parse_url($url, PHP_URL_PATH));
-        $result = self::importArchiveFromFilePath($tmp, $name !== '' ? $name : 'fixtures.zip');
+        // The source URL can be a signed endpoint (e.g. admin-post.php?token=...)
+        // without a .zip suffix, so we always validate by archive content instead of URL name.
+        $result = self::importArchiveFromFilePath($tmp, 'fixtures.zip');
         @unlink($tmp);
 
         return $result;
@@ -474,10 +615,6 @@ final class MjFixturesManager
 
     private static function importArchiveFromFilePath(string $zipPath, string $name)
     {
-        if ($name === '' || strtolower((string) pathinfo($name, PATHINFO_EXTENSION)) !== 'zip') {
-            return new WP_Error('fixtures_upload_extension', __('Le fichier doit etre une archive ZIP.', 'mj-member'));
-        }
-
         if (!is_readable($zipPath)) {
             return new WP_Error('fixtures_zip_unreadable', __('Archive ZIP illisible.', 'mj-member'));
         }
@@ -632,10 +769,9 @@ final class MjFixturesManager
             return new WP_Error('fixtures_token_invalid', __('Token d\'export invalide ou expire.', 'mj-member'));
         }
 
-        delete_transient($key);
-
         $expiresAt = isset($payload['expires_at']) ? (int) $payload['expires_at'] : 0;
         if ($expiresAt > 0 && time() > $expiresAt) {
+            delete_transient($key);
             return new WP_Error('fixtures_token_expired', __('Token d\'export expire.', 'mj-member'));
         }
 
@@ -876,11 +1012,31 @@ final class MjFixturesManager
 
     private static function restoreMedia(string $fixturesDir, $items, bool $cleanBefore, string $filename): array|WP_Error
     {
+        $total = is_array($items) ? count($items) : 0;
+        $batch = self::restoreMediaBatch($fixturesDir, $items, $cleanBefore, $filename, 0, max(1, $total));
+        if (is_wp_error($batch)) {
+            return $batch;
+        }
+
+        return array(
+            'file' => (string) ($batch['file'] ?? $filename),
+            'rows' => (int) ($batch['rows'] ?? 0),
+            'skipped' => (int) ($batch['skipped'] ?? 0),
+            'failed' => (int) ($batch['failed'] ?? 0),
+        );
+    }
+
+    private static function restoreMediaBatch(string $fixturesDir, $items, bool $cleanBefore, string $filename, int $offset, int $limit): array|WP_Error
+    {
         if (!is_array($items)) {
             return new WP_Error('fixtures_media_invalid', sprintf(__('%s invalide.', 'mj-member'), $filename));
         }
 
-        if ($cleanBefore) {
+        $offset = max(0, $offset);
+        $limit = max(1, min(50, $limit));
+        $total = count($items);
+
+        if ($cleanBefore && $offset === 0) {
             $ids = get_posts(array('post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids'));
             foreach ($ids as $id) {
                 wp_delete_attachment((int) $id, true);
@@ -896,7 +1052,8 @@ final class MjFixturesManager
         $skipped = 0;
         $failed = 0;
 
-        foreach ($items as $item) {
+        $chunk = array_slice($items, $offset, $limit);
+        foreach ($chunk as $item) {
             $sourceUrl = isset($item['source_url']) ? esc_url_raw((string) $item['source_url']) : '';
             $legacyRel = isset($item['file']) ? (string) $item['file'] : '';
 
@@ -1021,7 +1178,19 @@ final class MjFixturesManager
             $count++;
         }
 
-        return array('file' => $filename, 'rows' => $count, 'skipped' => $skipped, 'failed' => $failed);
+        $nextOffset = min($total, $offset + count($chunk));
+
+        return array(
+            'slug' => 'wp_media',
+            'file' => $filename,
+            'rows' => $count,
+            'skipped' => $skipped,
+            'failed' => $failed,
+            'offset' => $offset,
+            'next_offset' => $nextOffset,
+            'total' => $total,
+            'done' => $nextOffset >= $total,
+        );
     }
 
     private static function collectSupertoolData(): array

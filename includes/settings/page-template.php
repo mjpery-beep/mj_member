@@ -2457,14 +2457,25 @@ if (!defined('ABSPATH')) {
                                 <h3 style="margin:0 0 8px 0;">4) Restaurer</h3>
                                 <p style="margin:0 0 10px 0; color:#64748b;">Recharge les donnees en base depuis les fichiers fixtures.</p>
                                 <button
-                                    type="submit"
-                                    form="mj-fixtures-restore-form"
+                                    type="button"
+                                    id="mj-fixtures-restore-run"
                                     class="button button-secondary"
-                                    onclick="return confirm('Restaurer va remplacer les donnees actuelles des sources ciblees. Continuer ?');"
                                 >
-                                    Restaurer depuis data/fixtures
+                                    Restaurer depuis data/fixtures (console)
                                 </button>
+                                <p style="margin:8px 0 0 0; color:#64748b; font-size:12px;">La restauration s'exécute par lots pour éviter les erreurs critiques.</p>
                             </div>
+                        </div>
+
+                        <div id="mj-fixtures-restore-console" style="display:none; background:#0f172a; color:#e2e8f0; border-radius:10px; padding:14px; margin-bottom:14px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+                                <strong style="color:#f8fafc;">Console restauration fixtures</strong>
+                                <span id="mj-fixtures-restore-status" style="font-size:12px; color:#93c5fd;">Prête</span>
+                            </div>
+                            <div style="height:10px; background:#1e293b; border-radius:999px; overflow:hidden; margin-bottom:8px;">
+                                <div id="mj-fixtures-restore-progress" style="height:100%; width:0%; background:linear-gradient(90deg,#22c55e,#38bdf8);"></div>
+                            </div>
+                            <div id="mj-fixtures-restore-logs" style="font-family:monospace; font-size:12px; line-height:1.45; max-height:260px; overflow:auto; background:#020617; border:1px solid #1e293b; border-radius:8px; padding:10px;"></div>
                         </div>
 
                         <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:14px;">
@@ -3223,6 +3234,13 @@ if (!defined('ABSPATH')) {
             var fixturesOptionsForm = document.getElementById('mj-fixtures-options-form');
             var fixturesCreateForm = document.getElementById('mj-fixtures-create-form');
             var fixturesRestoreForm = document.getElementById('mj-fixtures-restore-form');
+            var fixturesRestoreRun = document.getElementById('mj-fixtures-restore-run');
+            var fixturesRestoreConsole = document.getElementById('mj-fixtures-restore-console');
+            var fixturesRestoreStatus = document.getElementById('mj-fixtures-restore-status');
+            var fixturesRestoreProgress = document.getElementById('mj-fixtures-restore-progress');
+            var fixturesRestoreLogs = document.getElementById('mj-fixtures-restore-logs');
+            var fixturesAjaxUrl = <?php echo json_encode(admin_url('admin-ajax.php')); ?>;
+            var fixturesAjaxNonce = <?php echo json_encode(wp_create_nonce('mj_fixtures_restore_ajax')); ?>;
 
             if (!navButtons.length || !panels.length) {
                 return;
@@ -3284,6 +3302,179 @@ if (!defined('ABSPATH')) {
                 });
             }
 
+            function collectCheckedValues(selector) {
+                var nodes = document.querySelectorAll(selector + ':checked');
+                var values = [];
+                Array.prototype.forEach.call(nodes, function (node) {
+                    if (node && node.value) {
+                        values.push(node.value);
+                    }
+                });
+                return values;
+            }
+
+            function appendRestoreLog(message) {
+                if (!fixturesRestoreLogs) {
+                    return;
+                }
+                var line = document.createElement('div');
+                var stamp = new Date().toLocaleTimeString();
+                line.textContent = '[' + stamp + '] ' + message;
+                fixturesRestoreLogs.appendChild(line);
+                fixturesRestoreLogs.scrollTop = fixturesRestoreLogs.scrollHeight;
+            }
+
+            function setRestoreProgress(percent) {
+                if (!fixturesRestoreProgress) {
+                    return;
+                }
+                var safePercent = Math.max(0, Math.min(100, percent));
+                fixturesRestoreProgress.style.width = safePercent.toFixed(1) + '%';
+            }
+
+            function postFixturesRestoreStep(payload) {
+                var body = new URLSearchParams();
+                body.set('action', 'mj_member_restore_fixtures_step');
+                body.set('nonce', fixturesAjaxNonce);
+                body.set('sourceIndex', String(payload.sourceIndex || 0));
+                body.set('mediaOffset', String(payload.mediaOffset || 0));
+                body.set('mediaLimit', String(payload.mediaLimit || 15));
+
+                (payload.selectedSources || []).forEach(function (slug) {
+                    body.append('selectedSources[]', slug);
+                });
+                (payload.cleanSources || []).forEach(function (slug) {
+                    body.append('cleanSources[]', slug);
+                });
+
+                return fetch(fixturesAjaxUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    body: body
+                }).then(function (response) {
+                    return response.json();
+                });
+            }
+
+            function runFixturesRestoreWithConsole() {
+                var selectedSources = collectCheckedValues('input[name="mj_fixtures_restore_tables[]"]');
+                var cleanSources = collectCheckedValues('input[name="mj_fixtures_clean_before_tables[]"]');
+
+                if (!selectedSources.length) {
+                    window.alert('Aucune source sélectionnée pour la restauration.');
+                    return;
+                }
+
+                if (!window.confirm('Restaurer va remplacer les données actuelles des sources ciblées. Continuer ?')) {
+                    return;
+                }
+
+                if (fixturesRestoreRun) {
+                    fixturesRestoreRun.disabled = true;
+                }
+                if (fixturesRestoreConsole) {
+                    fixturesRestoreConsole.style.display = '';
+                }
+                if (fixturesRestoreLogs) {
+                    fixturesRestoreLogs.innerHTML = '';
+                }
+                if (fixturesRestoreStatus) {
+                    fixturesRestoreStatus.textContent = 'Démarrage...';
+                    fixturesRestoreStatus.style.color = '#93c5fd';
+                }
+                setRestoreProgress(0);
+
+                appendRestoreLog('Démarrage de la restauration des fixtures (' + selectedSources.length + ' source(s)).');
+
+                var state = {
+                    selectedSources: selectedSources,
+                    cleanSources: cleanSources,
+                    sourceIndex: 0,
+                    mediaOffset: 0,
+                    mediaLimit: 12
+                };
+
+                function tick() {
+                    postFixturesRestoreStep(state).then(function (res) {
+                        if (!res || !res.success) {
+                            var errorMessage = (res && res.data && res.data.message) ? res.data.message : 'Erreur inconnue durant la restauration.';
+                            appendRestoreLog('ERREUR: ' + errorMessage);
+                            if (fixturesRestoreStatus) {
+                                fixturesRestoreStatus.textContent = 'Erreur';
+                                fixturesRestoreStatus.style.color = '#fca5a5';
+                            }
+                            if (fixturesRestoreRun) {
+                                fixturesRestoreRun.disabled = false;
+                            }
+                            return;
+                        }
+
+                        var data = res.data || {};
+                        var step = data.step || {};
+                        var slug = data.slug || step.slug || '';
+                        var totalSources = Number(data.totalSources || state.selectedSources.length || 1);
+                        var sourceIndex = Number(data.sourceIndex || 0);
+                        var mediaOffset = Number(data.mediaOffset || 0);
+                        var done = !!data.done;
+                        var sourceDone = !!data.sourceDone;
+
+                        state.sourceIndex = sourceIndex;
+                        state.mediaOffset = mediaOffset;
+
+                        var baseCompleted = sourceIndex;
+                        var partial = 0;
+                        if (!sourceDone && slug === 'wp_media') {
+                            var mediaTotal = Number(step.total || 0);
+                            var mediaNext = Number(step.next_offset || mediaOffset || 0);
+                            if (mediaTotal > 0) {
+                                partial = Math.max(0, Math.min(1, mediaNext / mediaTotal));
+                            }
+                        }
+                        setRestoreProgress(((baseCompleted + partial) / Math.max(1, totalSources)) * 100);
+
+                        if (slug) {
+                            if (slug === 'wp_media') {
+                                var nextOffset = Number(step.next_offset || mediaOffset || 0);
+                                var total = Number(step.total || 0);
+                                appendRestoreLog('wp_media: +' + Number(step.rows || 0) + ' importés, ' + Number(step.skipped || 0) + ' ignorés, ' + Number(step.failed || 0) + ' échecs (lot ' + nextOffset + '/' + total + ').');
+                            } else if (sourceDone) {
+                                appendRestoreLog(slug + ': terminé (' + Number(step.rows || 0) + ' ligne(s)).');
+                            }
+                        }
+
+                        if (done) {
+                            setRestoreProgress(100);
+                            appendRestoreLog('Restauration terminée.');
+                            if (fixturesRestoreStatus) {
+                                fixturesRestoreStatus.textContent = 'Terminé';
+                                fixturesRestoreStatus.style.color = '#86efac';
+                            }
+                            if (fixturesRestoreRun) {
+                                fixturesRestoreRun.disabled = false;
+                            }
+                            return;
+                        }
+
+                        if (fixturesRestoreStatus) {
+                            fixturesRestoreStatus.textContent = 'En cours... source ' + (Math.min(totalSources, sourceIndex + 1)) + '/' + totalSources;
+                        }
+
+                        window.setTimeout(tick, 80);
+                    }).catch(function (error) {
+                        appendRestoreLog('ERREUR AJAX: ' + (error && error.message ? error.message : 'Erreur réseau'));
+                        if (fixturesRestoreStatus) {
+                            fixturesRestoreStatus.textContent = 'Erreur';
+                            fixturesRestoreStatus.style.color = '#fca5a5';
+                        }
+                        if (fixturesRestoreRun) {
+                            fixturesRestoreRun.disabled = false;
+                        }
+                    });
+                }
+
+                tick();
+            }
+
             if (fixturesOptionsForm) {
                 fixturesOptionsForm.addEventListener('submit', function () {
                     appendCheckedValuesToForm(fixturesOptionsForm, 'input[name="mj_fixtures_tables[]"]', 'mj_fixtures_tables[]');
@@ -3304,6 +3495,12 @@ if (!defined('ABSPATH')) {
                     appendCheckedValuesToForm(fixturesRestoreForm, 'input[name="mj_fixtures_restore_tables[]"]', 'mj_fixtures_restore_tables[]');
                     appendCheckedValuesToForm(fixturesRestoreForm, 'input[name="mj_fixtures_clean_before_tables[]"]', 'mj_fixtures_clean_before_tables[]');
                     appendCheckedValuesToForm(fixturesRestoreForm, 'input[name="mj_fixtures_use_on_install_tables[]"]', 'mj_fixtures_use_on_install_tables[]');
+                });
+            }
+
+            if (fixturesRestoreRun) {
+                fixturesRestoreRun.addEventListener('click', function () {
+                    runFixturesRestoreWithConsole();
                 });
             }
 
