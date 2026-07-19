@@ -8,6 +8,8 @@ namespace Mj\Member\Module\Admin {
         public function register(): void {
             add_action('wp_ajax_mj_member_run_manual_backup_action', 'mj_member_ajax_run_manual_backup_action');
             add_action('wp_ajax_mj_member_save_media_backup_settings_ajax', 'mj_member_save_media_backup_settings_ajax');
+            add_action('admin_post_mj_member_download_fixtures', 'mj_member_handle_fixtures_export_download');
+            add_action('admin_post_nopriv_mj_member_download_fixtures', 'mj_member_handle_fixtures_export_download');
         }
     }
 }
@@ -112,6 +114,39 @@ if (!function_exists('mj_member_sanitize_pdf_rich_html')) {
     }
 }
 
+if (!function_exists('mj_member_handle_fixtures_export_download')) {
+    function mj_member_handle_fixtures_export_download(): void {
+        if (!class_exists(MjFixturesManager::class)) {
+            wp_die('Gestionnaire de fixtures indisponible.', 'Export fixtures', array('response' => 500));
+        }
+
+        $downloadToken = isset($_GET['token']) ? sanitize_text_field(wp_unslash($_GET['token'])) : '';
+        $tokenResult = MjFixturesManager::consumeExportToken($downloadToken);
+        if (is_wp_error($tokenResult)) {
+            wp_die(esc_html($tokenResult->get_error_message()), 'Export fixtures', array('response' => 403));
+        }
+
+        $archive = MjFixturesManager::buildExportArchive();
+        if (is_wp_error($archive)) {
+            wp_die(esc_html($archive->get_error_message()), 'Export fixtures', array('response' => 500));
+        }
+
+        $downloadName = isset($archive['filename']) ? (string) $archive['filename'] : 'mj-member-fixtures.zip';
+        $archivePath = isset($archive['path']) ? (string) $archive['path'] : '';
+        if ($archivePath === '' || !is_readable($archivePath)) {
+            wp_die('Archive export introuvable après génération.', 'Export fixtures', array('response' => 500));
+        }
+
+        nocache_headers();
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . sanitize_file_name($downloadName) . '"');
+        header('Content-Length: ' . (string) filesize($archivePath));
+        readfile($archivePath);
+        @unlink($archivePath);
+        exit;
+    }
+}
+
 // Admin settings page for plugin
 function mj_settings_page() {
     if (function_exists('wp_enqueue_media')) {
@@ -143,6 +178,8 @@ function mj_settings_page() {
     // Handle backup profile CRUD and media backup actions (separate forms)
     // -----------------------------------------------------------------------
     $backup_notices = array();
+    $fixtures_export_token_url = '';
+    $fixtures_export_token_ttl = (int) MjFixturesManager::EXPORT_TOKEN_TTL_SECONDS;
 
     $is_main_settings_submit = isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force']) || isset($_POST['mj_backup_run_now']);
 
@@ -278,7 +315,7 @@ function mj_settings_page() {
     if (!$is_main_settings_submit && isset($_POST['mj_fixtures_action']) && current_user_can('manage_options')) {
         $fixturesAction = sanitize_key((string) wp_unslash($_POST['mj_fixtures_action']));
 
-        if (in_array($fixturesAction, array('create', 'restore', 'import', 'export', 'save_options'), true)
+        if (in_array($fixturesAction, array('create', 'restore', 'import', 'import_url', 'export', 'save_options'), true)
             && !check_admin_referer('mj_fixtures_action', 'mj_fixtures_nonce')) {
             $backup_notices[] = array(
                 'type' => 'error',
@@ -288,13 +325,35 @@ function mj_settings_page() {
             $selectedSources = isset($_POST['mj_fixtures_tables']) && is_array($_POST['mj_fixtures_tables'])
                 ? array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_fixtures_tables']))
                 : array();
-            MjFixturesManager::saveSelection(MjFixturesManager::OPTION_CREATE_SELECTED, $selectedSources);
-            $result = MjFixturesManager::createFixtures($selectedSources);
-            if (!empty($result['success'])) {
-                $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures créées dans data/fixtures.');
+
+            if (empty($selectedSources)) {
+                $selectedSources = MjFixturesManager::getSavedSelection(MjFixturesManager::OPTION_CREATE_SELECTED, array());
+            }
+
+            if (empty($selectedSources)) {
+                $backup_notices[] = array('type' => 'error', 'message' => '❌ Aucune source sélectionnée pour créer les fixtures.');
             } else {
-                $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la création.';
-                $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
+                MjFixturesManager::saveSelection(MjFixturesManager::OPTION_CREATE_SELECTED, $selectedSources);
+                try {
+                    $result = MjFixturesManager::createFixtures($selectedSources);
+                    if (!empty($result['success'])) {
+                        $saved = isset($result['saved']) && is_array($result['saved']) ? $result['saved'] : array();
+                        $totalRows = 0;
+                        foreach ($saved as $savedEntry) {
+                            $totalRows += (int) ($savedEntry['rows'] ?? 0);
+                        }
+
+                        $backup_notices[] = array(
+                            'type' => 'success',
+                            'message' => sprintf('✅ Fixtures créées (%d source(s), %d élément(s)).', count($saved), $totalRows),
+                        );
+                    } else {
+                        $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la création.';
+                        $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
+                    }
+                } catch (\Throwable $e) {
+                    $backup_notices[] = array('type' => 'error', 'message' => '❌ Erreur pendant la création des fixtures: ' . esc_html($e->getMessage()));
+                }
             }
         } elseif ($fixturesAction === 'restore' && class_exists(MjFixturesManager::class)) {
             $selectedSources = isset($_POST['mj_fixtures_restore_tables']) && is_array($_POST['mj_fixtures_restore_tables'])
@@ -323,7 +382,32 @@ function mj_settings_page() {
 
             $result = MjFixturesManager::restoreFixtures($selectedSources, $cleanBeforeSources);
             if (!empty($result['success'])) {
-                $backup_notices[] = array('type' => 'success', 'message' => '✅ Fixtures restaurées depuis data/fixtures.');
+                $restored = isset($result['restored']) && is_array($result['restored']) ? $result['restored'] : array();
+                $totalRows = 0;
+                foreach ($restored as $restoredEntry) {
+                    $totalRows += (int) ($restoredEntry['rows'] ?? 0);
+                }
+
+                $message = sprintf(
+                    '✅ Fixtures restaurées (%d source(s), %d élément(s)).',
+                    count($restored),
+                    $totalRows
+                );
+
+                foreach ($restored as $restoredEntry) {
+                    if (($restoredEntry['slug'] ?? '') !== 'wp_media') {
+                        continue;
+                    }
+                    $message .= sprintf(
+                        ' Médias: %d importé(s), %d ignoré(s), %d échec(s).',
+                        (int) ($restoredEntry['rows'] ?? 0),
+                        (int) ($restoredEntry['skipped'] ?? 0),
+                        (int) ($restoredEntry['failed'] ?? 0)
+                    );
+                    break;
+                }
+
+                $backup_notices[] = array('type' => 'success', 'message' => $message);
             } else {
                 $msg = !empty($result['errors']) ? implode(' | ', array_map('wp_strip_all_tags', (array) $result['errors'])) : 'Erreur inconnue lors de la restauration.';
                 $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($msg));
@@ -379,23 +463,35 @@ function mj_settings_page() {
                         : '⚠️ Import terminé sans fichier exploitable.',
                 );
             }
-        } elseif ($fixturesAction === 'export' && class_exists(MjFixturesManager::class)) {
-            $archive = MjFixturesManager::buildExportArchive();
-            if (is_wp_error($archive)) {
-                $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($archive->get_error_message()));
+        } elseif ($fixturesAction === 'import_url' && class_exists(MjFixturesManager::class)) {
+            $zipUrl = isset($_POST['mj_fixtures_zip_url']) ? esc_url_raw((string) wp_unslash($_POST['mj_fixtures_zip_url'])) : '';
+            $importResult = MjFixturesManager::importArchiveFromUrl($zipUrl);
+            if (is_wp_error($importResult)) {
+                $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($importResult->get_error_message()));
             } else {
-                $downloadName = isset($archive['filename']) ? (string) $archive['filename'] : 'mj-member-fixtures.zip';
-                $archivePath = isset($archive['path']) ? (string) $archive['path'] : '';
-                if ($archivePath !== '' && is_readable($archivePath)) {
-                    nocache_headers();
-                    header('Content-Type: application/zip');
-                    header('Content-Disposition: attachment; filename="' . sanitize_file_name($downloadName) . '"');
-                    header('Content-Length: ' . (string) filesize($archivePath));
-                    readfile($archivePath);
-                    @unlink($archivePath);
-                    exit;
-                }
-                $backup_notices[] = array('type' => 'error', 'message' => '❌ Archive export introuvable après génération.');
+                $filesCount = !empty($importResult['files']) ? count((array) $importResult['files']) : 0;
+                $backup_notices[] = array(
+                    'type' => !empty($importResult['success']) ? 'success' : 'warning',
+                    'message' => !empty($importResult['success'])
+                        ? sprintf('✅ Import fixtures via URL terminé (%d fichier(s) copié(s)).', $filesCount)
+                        : '⚠️ Import via URL terminé sans fichier exploitable.',
+                );
+            }
+        } elseif ($fixturesAction === 'export' && class_exists(MjFixturesManager::class)) {
+            $tokenUrl = MjFixturesManager::createExportDownloadUrl($fixtures_export_token_ttl);
+            if (is_wp_error($tokenUrl)) {
+                $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($tokenUrl->get_error_message()));
+            } else {
+                $fixtures_export_token_url = (string) $tokenUrl;
+                $ttlMinutes = max(1, (int) floor($fixtures_export_token_ttl / 60));
+                $backup_notices[] = array(
+                    'type' => 'success',
+                    'message' => sprintf(
+                        '✅ URL d\'export générée (valide %d minute(s)) : <a href="%s" target="_blank" rel="noopener">Télécharger le ZIP</a>',
+                        $ttlMinutes,
+                        esc_url($fixtures_export_token_url)
+                    ),
+                );
             }
         }
     }
@@ -1241,6 +1337,9 @@ function mj_settings_page() {
     $fixtures_config_selection = class_exists(MjFixturesManager::class)
         ? MjFixturesManager::getConfigSelection()
         : array('mj_member' => array('mj_*'), 'supertool' => array('mjet_*', 'elementor_cpt_support'));
+    if (!isset($fixtures_export_token_url) || !is_string($fixtures_export_token_url)) {
+        $fixtures_export_token_url = '';
+    }
 
     $google_sync_enabled_flag = get_option('mj_events_google_sync_enabled', '0') === '1';
     $google_sync_token_display = '';

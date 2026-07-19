@@ -2409,8 +2409,27 @@ if (!defined('ABSPATH')) {
 
                             <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
                                 <h3 style="margin:0 0 8px 0;">2) Exporter</h3>
-                                <p style="margin:0 0 10px 0; color:#64748b;">Telecharge une archive ZIP complete.</p>
-                                <button type="submit" class="button" form="mj-fixtures-export-form">Exporter les fixtures</button>
+                                <p style="margin:0 0 10px 0; color:#64748b;">Genere une URL temporaire securisee pour telecharger une archive ZIP complete.</p>
+                                <button type="submit" class="button" form="mj-fixtures-export-form">Générer une URL d'export</button>
+                                <?php if (!empty($fixtures_export_token_url)) : ?>
+                                    <p style="margin:10px 0 6px 0; color:#64748b;">URL tokenisée:</p>
+                                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                        <input
+                                            type="text"
+                                            value="<?php echo esc_attr((string) $fixtures_export_token_url); ?>"
+                                            readonly
+                                            style="flex:1; min-width:220px;"
+                                            onclick="this.select();"
+                                        />
+                                        <button
+                                            type="button"
+                                            class="button"
+                                            onclick="var input=this.parentNode.querySelector('input'); if(input){ input.select(); document.execCommand('copy'); }"
+                                        >
+                                            Copier
+                                        </button>
+                                    </div>
+                                <?php endif; ?>
                             </div>
 
                             <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
@@ -2419,6 +2438,18 @@ if (!defined('ABSPATH')) {
                                 <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                                     <input type="file" form="mj-fixtures-import-form" name="mj_fixtures_zip" accept=".zip" required />
                                     <button type="submit" form="mj-fixtures-import-form" class="button">Importer</button>
+                                </div>
+                                <p style="margin:10px 0 6px 0; color:#64748b;">Ou importer directement depuis une URL ZIP:</p>
+                                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                    <input
+                                        type="url"
+                                        form="mj-fixtures-import-url-form"
+                                        name="mj_fixtures_zip_url"
+                                        placeholder="https://.../mj-member-fixtures.zip"
+                                        style="flex:1; min-width:220px;"
+                                        required
+                                    />
+                                    <button type="submit" form="mj-fixtures-import-url-form" class="button">Importer via URL</button>
                                 </div>
                             </div>
 
@@ -2848,6 +2879,10 @@ if (!defined('ABSPATH')) {
         <form method="post" id="mj-fixtures-import-form" enctype="multipart/form-data" style="display:none;">
             <?php wp_nonce_field('mj_fixtures_action', 'mj_fixtures_nonce'); ?>
             <input type="hidden" name="mj_fixtures_action" value="import" />
+        </form>
+        <form method="post" id="mj-fixtures-import-url-form" style="display:none;">
+            <?php wp_nonce_field('mj_fixtures_action', 'mj_fixtures_nonce'); ?>
+            <input type="hidden" name="mj_fixtures_action" value="import_url" />
         </form>
         <form method="post" id="mj-fixtures-options-form" style="display:none;">
             <?php wp_nonce_field('mj_fixtures_action', 'mj_fixtures_nonce'); ?>
