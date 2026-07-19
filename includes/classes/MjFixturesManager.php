@@ -1079,6 +1079,7 @@ final class MjFixturesManager
 
             $uploadedFilePath = '';
             $uploadedUrl = '';
+            $attachmentId = 0;
 
             if ($sourceUrl !== '') {
                 $tmp = download_url($sourceUrl, 30);
@@ -1090,20 +1091,35 @@ final class MjFixturesManager
                 $sideloadFile = array(
                     'name' => $filenameOnly,
                     'tmp_name' => $tmp,
+                    'error' => 0,
+                    'size' => (int) @filesize($tmp),
                 );
-                $sideload = wp_handle_sideload(
-                    $sideloadFile,
-                    array('test_form' => false)
+                $post = is_array($item['post'] ?? null) ? $item['post'] : array();
+                $postData = array(
+                    'post_title' => sanitize_text_field((string) ($post['post_title'] ?? $filenameOnly)),
+                    'post_excerpt' => sanitize_text_field((string) ($post['post_excerpt'] ?? '')),
+                    'post_content' => sanitize_textarea_field((string) ($post['post_content'] ?? '')),
+                    'post_mime_type' => sanitize_text_field((string) ($post['post_mime_type'] ?? 'application/octet-stream')),
+                    'post_status' => 'inherit',
                 );
 
-                if (!is_array($sideload) || !empty($sideload['error']) || empty($sideload['file'])) {
+                $attachmentId = media_handle_sideload(
+                    $sideloadFile,
+                    0,
+                    (string) ($postData['post_title'] ?? $filenameOnly),
+                    $postData
+                );
+
+                if (is_wp_error($attachmentId) || (int) $attachmentId <= 0) {
                     @unlink($tmp);
+                    $attachmentId = 0;
                     $failed++;
                     continue;
                 }
 
-                $uploadedFilePath = (string) $sideload['file'];
-                $uploadedUrl = isset($sideload['url']) ? (string) $sideload['url'] : '';
+                $attachmentId = (int) $attachmentId;
+                $uploadedFilePath = (string) get_attached_file($attachmentId);
+                $uploadedUrl = (string) wp_get_attachment_url($attachmentId);
             } elseif ($legacyRel !== '') {
                 // Backward compatibility for old fixtures with media files embedded.
                 $source = $fixturesDir . ltrim(str_replace('..', '', $legacyRel), '/\\');
@@ -1136,25 +1152,28 @@ final class MjFixturesManager
                 continue;
             }
 
-            $post = is_array($item['post'] ?? null) ? $item['post'] : array();
-            $attachment = array(
-                'post_title' => sanitize_text_field((string) ($post['post_title'] ?? $filenameOnly)),
-                'post_excerpt' => sanitize_text_field((string) ($post['post_excerpt'] ?? '')),
-                'post_content' => sanitize_textarea_field((string) ($post['post_content'] ?? '')),
-                'post_mime_type' => sanitize_text_field((string) ($post['post_mime_type'] ?? 'application/octet-stream')),
-                'post_status' => 'inherit',
-                'guid' => $uploadedUrl,
-            );
+            if ($attachmentId <= 0) {
+                $post = is_array($item['post'] ?? null) ? $item['post'] : array();
+                $attachment = array(
+                    'post_title' => sanitize_text_field((string) ($post['post_title'] ?? $filenameOnly)),
+                    'post_excerpt' => sanitize_text_field((string) ($post['post_excerpt'] ?? '')),
+                    'post_content' => sanitize_textarea_field((string) ($post['post_content'] ?? '')),
+                    'post_mime_type' => sanitize_text_field((string) ($post['post_mime_type'] ?? 'application/octet-stream')),
+                    'post_status' => 'inherit',
+                    'guid' => $uploadedUrl,
+                );
 
-            $attachmentId = wp_insert_attachment($attachment, $uploadedFilePath);
-            if (is_wp_error($attachmentId) || (int) $attachmentId <= 0) {
-                $failed++;
-                continue;
-            }
+                $attachmentId = wp_insert_attachment($attachment, $uploadedFilePath);
+                if (is_wp_error($attachmentId) || (int) $attachmentId <= 0) {
+                    $failed++;
+                    continue;
+                }
 
-            $meta = wp_generate_attachment_metadata((int) $attachmentId, $uploadedFilePath);
-            if (is_array($meta)) {
-                wp_update_attachment_metadata((int) $attachmentId, $meta);
+                $attachmentId = (int) $attachmentId;
+                $meta = wp_generate_attachment_metadata($attachmentId, $uploadedFilePath);
+                if (is_array($meta)) {
+                    wp_update_attachment_metadata($attachmentId, $meta);
+                }
             }
 
             if (!empty($item['meta']) && is_array($item['meta'])) {
