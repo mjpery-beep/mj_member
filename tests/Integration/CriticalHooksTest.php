@@ -81,6 +81,27 @@ final class CriticalHooksTest extends TestCase
         $this->assertSame('?mj_payment_status=error', $GLOBALS['__mj_last_redirect']);
     }
 
+    public function testPaymentConfirmationDoesNothingWhenTokenIsMissing(): void
+    {
+        require_once $this->pluginPath('includes/payment_confirmation.php');
+
+        mj_handle_payment_confirmation();
+
+        $this->assertSame('', MjPayments::$lastToken);
+        $this->assertNull($GLOBALS['__mj_last_redirect']);
+    }
+
+    public function testPaymentConfirmationDoesNothingWhenSanitizedTokenIsEmpty(): void
+    {
+        require_once $this->pluginPath('includes/payment_confirmation.php');
+
+        $_GET['mj_payment_confirm'] = '   ';
+        mj_handle_payment_confirmation();
+
+        $this->assertSame('', MjPayments::$lastToken);
+        $this->assertNull($GLOBALS['__mj_last_redirect']);
+    }
+
     private function resetHooks(): void
     {
         $GLOBALS['__mj_test_actions'] = $GLOBALS['__mj_test_filters'] = $GLOBALS['__mj_test_shortcodes'] = array();

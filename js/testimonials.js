@@ -1332,6 +1332,10 @@
         }
 
         createCard(t) {
+            const baseUrl = (typeof config.baseUrl === 'string' && config.baseUrl) ? config.baseUrl : window.location.href;
+            const postUrl = t.postUrl || this.buildPostUrl(baseUrl, t.id);
+            const shareUrl = t.shareUrl || this.buildShareUrl(t.id, postUrl);
+
             // Avatar
             const avatarInner = t.memberAvatarUrl
                 ? `<img src="${this.escapeHtml(t.memberAvatarUrl)}" alt="${this.escapeHtml(t.memberName)}" class="mj-feed-post__avatar-img">`
@@ -1344,7 +1348,7 @@
 
             // Content
             const contentHtml = t.content
-                ? `<div class="mj-feed-post__content">${this.formatContent(t.content)}</div>`
+                ? `<div class="mj-feed-post__content" data-raw-content="${this.escapeHtml(this.stripHtml(t.content))}">${this.formatContent(t.content)}</div>`
                 : '';
 
             // Photos
@@ -1410,7 +1414,7 @@
             }
 
             return `
-                <article class="mj-feed-post-wrapper" data-post-id="${t.id}" data-post-status="approved">
+                <article class="mj-feed-post-wrapper" data-post-id="${t.id}" data-post-url="${this.escapeHtml(postUrl)}" data-share-url="${this.escapeHtml(shareUrl)}" data-post-status="approved">
                     <div class="mj-feed-post" data-id="${t.id}">
                         <div class="mj-feed-post__header">
                             <div class="mj-feed-post__avatar">${avatarInner}</div>
@@ -1453,6 +1457,40 @@
             // Content already contains HTML from server-side linkify, wrap in <p> tags similar to wpautop
             const escaped = content.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
             return '<p>' + escaped + '</p>';
+        }
+
+        stripHtml(content) {
+            if (!content) return '';
+            const div = document.createElement('div');
+            div.innerHTML = content;
+            return (div.textContent || '').trim();
+        }
+
+        buildPostUrl(baseUrl, postId) {
+            try {
+                const url = new URL(baseUrl, window.location.origin);
+                url.searchParams.set('post', String(postId));
+                return url.toString();
+            } catch (err) {
+                const separator = baseUrl.indexOf('?') === -1 ? '?' : '&';
+                return baseUrl + separator + 'post=' + encodeURIComponent(String(postId));
+            }
+        }
+
+        buildShareUrl(postId, postUrl) {
+            const bridgeBase = (typeof config.shareBridgeBaseUrl === 'string' && config.shareBridgeBaseUrl)
+                ? config.shareBridgeBaseUrl
+                : window.location.origin + '/';
+
+            try {
+                const bridgeUrl = new URL(bridgeBase, window.location.origin);
+                bridgeUrl.searchParams.set('mj_testimonial_share', String(postId));
+                bridgeUrl.searchParams.set('target', postUrl);
+                return bridgeUrl.toString();
+            } catch (err) {
+                const separator = bridgeBase.indexOf('?') === -1 ? '?' : '&';
+                return bridgeBase + separator + 'mj_testimonial_share=' + encodeURIComponent(String(postId)) + '&target=' + encodeURIComponent(postUrl);
+            }
         }
 
         escapeHtml(text) {
@@ -2367,8 +2405,10 @@
             const platform = $(this).data('share');
             const $wrapper = getWrapper(this);
             const relativeUrl = $wrapper.data('post-url') || window.location.href;
+            const relativeShareUrl = $wrapper.data('share-url') || relativeUrl;
             // Ensure absolute URL with domain
             const postUrl = relativeUrl.startsWith('http') ? relativeUrl : window.location.origin + (relativeUrl.startsWith('/') ? '' : window.location.pathname) + relativeUrl;
+            const shareTargetUrl = relativeShareUrl.startsWith('http') ? relativeShareUrl : window.location.origin + (relativeShareUrl.startsWith('/') ? '' : window.location.pathname) + relativeShareUrl;
             const $post = $wrapper.find('.mj-feed-post');
             const rawContent = $post.find('.mj-feed-post__content').data('raw-content') || '';
             const author = $post.find('.mj-feed-post__author').text().trim();
@@ -2384,7 +2424,7 @@
                     shareUrl = 'https://api.whatsapp.com/send?text=' + encodedText + '%20' + encodedUrl;
                     break;
                 case 'facebook':
-                    shareUrl = 'https://www.facebook.com/sharer/sharer.php?u=' + encodedUrl + '&quote=' + encodedText;
+                    shareUrl = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(shareTargetUrl) + '&quote=' + encodedText;
                     break;
                 case 'instagram':
                     // Instagram n'a pas d'API de partage web, on copie le lien
@@ -2453,6 +2493,137 @@
                 setTimeout(function() { $toast.remove(); }, 300);
             }, 2500);
         }
+
+        // Testimonials lightbox with gallery navigation (left/right)
+        const testimonialLightbox = {
+            items: [],
+            index: 0,
+            $overlay: null,
+            $image: null,
+            $counter: null,
+            init: function() {
+                if (this.$overlay) return;
+
+                this.$overlay = $(
+                    '<div class="mj-testimonials-lightbox" aria-hidden="true" style="display:none;">' +
+                        '<button type="button" class="mj-testimonials-lightbox__close" aria-label="Fermer">&times;</button>' +
+                        '<button type="button" class="mj-testimonials-lightbox__nav mj-testimonials-lightbox__nav--prev" aria-label="Image précédente">&#8249;</button>' +
+                        '<div class="mj-testimonials-lightbox__stage">' +
+                            '<img class="mj-testimonials-lightbox__image" alt="">' +
+                            '<div class="mj-testimonials-lightbox__counter" aria-live="polite"></div>' +
+                        '</div>' +
+                        '<button type="button" class="mj-testimonials-lightbox__nav mj-testimonials-lightbox__nav--next" aria-label="Image suivante">&#8250;</button>' +
+                    '</div>'
+                );
+
+                this.$image = this.$overlay.find('.mj-testimonials-lightbox__image');
+                this.$counter = this.$overlay.find('.mj-testimonials-lightbox__counter');
+                $('body').append(this.$overlay);
+
+                const self = this;
+                this.$overlay.on('click', '.mj-testimonials-lightbox__close', function() {
+                    self.close();
+                });
+                this.$overlay.on('click', '.mj-testimonials-lightbox__nav--prev', function() {
+                    self.prev();
+                });
+                this.$overlay.on('click', '.mj-testimonials-lightbox__nav--next', function() {
+                    self.next();
+                });
+                this.$overlay.on('click', function(e) {
+                    if ($(e.target).is('.mj-testimonials-lightbox')) {
+                        self.close();
+                    }
+                });
+
+                $(document).on('keydown.mjTestimonialLightbox', function(e) {
+                    if (!self.isOpen()) return;
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        self.close();
+                    } else if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        self.prev();
+                    } else if (e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        self.next();
+                    }
+                });
+            },
+            isOpen: function() {
+                return this.$overlay && this.$overlay.hasClass('is-open');
+            },
+            openFromLink: function($link) {
+                const group = String($link.data('lightbox') || '');
+                if (!group) {
+                    return;
+                }
+
+                const $groupLinks = $('.mj-testimonials a[data-lightbox]').filter(function() {
+                    return String($(this).data('lightbox') || '') === group;
+                });
+
+                if (!$groupLinks.length) {
+                    return;
+                }
+
+                this.items = $groupLinks.map(function() {
+                    const $a = $(this);
+                    const $img = $a.find('img').first();
+                    return {
+                        href: $a.attr('href') || '',
+                        alt: ($img.attr('alt') || '').trim()
+                    };
+                }).get().filter(function(item) {
+                    return !!item.href;
+                });
+
+                const clickedHref = $link.attr('href') || '';
+                let foundIndex = this.items.findIndex(function(item) {
+                    return item.href === clickedHref;
+                });
+                if (foundIndex < 0) {
+                    foundIndex = 0;
+                }
+                this.index = foundIndex;
+
+                this.render();
+                this.$overlay.css('display', 'flex').attr('aria-hidden', 'false').addClass('is-open');
+                $('body').addClass('mj-testimonials-lightbox-open');
+            },
+            close: function() {
+                if (!this.$overlay) return;
+                this.$overlay.removeClass('is-open').attr('aria-hidden', 'true').hide();
+                $('body').removeClass('mj-testimonials-lightbox-open');
+            },
+            render: function() {
+                if (!this.items.length || !this.$image) return;
+                const current = this.items[this.index];
+                this.$image.attr('src', current.href);
+                this.$image.attr('alt', current.alt || 'Photo du témoignage');
+                if (this.$counter) {
+                    this.$counter.text((this.index + 1) + ' / ' + this.items.length);
+                }
+            },
+            prev: function() {
+                if (!this.items.length) return;
+                this.index = (this.index - 1 + this.items.length) % this.items.length;
+                this.render();
+            },
+            next: function() {
+                if (!this.items.length) return;
+                this.index = (this.index + 1) % this.items.length;
+                this.render();
+            }
+        };
+
+        testimonialLightbox.init();
+
+        $(document).on('click.mjFeed', '.mj-testimonials a[data-lightbox]', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            testimonialLightbox.openFromLink($(this));
+        });
 
         // Click on post to navigate to single view (only in list mode)
         $(document).on('click', '.mj-feed-post-wrapper:not(.mj-feed-post-wrapper--single)', function(e) {

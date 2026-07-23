@@ -542,6 +542,7 @@ function mj_settings_page() {
         $sms_twilio_from = isset($_POST['mj_sms_twilio_from']) ? sanitize_text_field($_POST['mj_sms_twilio_from']) : '';
         $whatsapp_twilio_from = isset($_POST['mj_whatsapp_twilio_from']) ? sanitize_text_field($_POST['mj_whatsapp_twilio_from']) : '';
         $social_facebook_page_url = isset($_POST['mj_social_facebook_page_url']) ? esc_url_raw(wp_unslash($_POST['mj_social_facebook_page_url'])) : '';
+        $social_facebook_app_id = isset($_POST['mj_social_facebook_app_id']) ? sanitize_text_field($_POST['mj_social_facebook_app_id']) : '';
         $social_facebook_page_id = isset($_POST['mj_social_facebook_page_id']) ? sanitize_text_field($_POST['mj_social_facebook_page_id']) : '';
         $social_facebook_page_token = isset($_POST['mj_social_facebook_page_token']) ? sanitize_text_field($_POST['mj_social_facebook_page_token']) : '';
         $social_instagram_page_url = isset($_POST['mj_social_instagram_page_url']) ? esc_url_raw(wp_unslash($_POST['mj_social_instagram_page_url'])) : '';
@@ -595,6 +596,7 @@ function mj_settings_page() {
         update_option('mj_sms_twilio_from', $sms_twilio_from);
         update_option('mj_whatsapp_twilio_from', $whatsapp_twilio_from);
         update_option('mj_social_facebook_page_url', $social_facebook_page_url);
+        update_option('mj_social_facebook_app_id', $social_facebook_app_id);
         update_option('mj_social_facebook_page_id', $social_facebook_page_id);
         update_option('mj_social_facebook_page_token', $social_facebook_page_token);
         update_option('mj_social_instagram_page_url', $social_instagram_page_url);
@@ -1068,6 +1070,7 @@ function mj_settings_page() {
     $sms_twilio_from = get_option('mj_sms_twilio_from', '');
     $whatsapp_twilio_from = get_option('mj_whatsapp_twilio_from', '');
     $social_facebook_page_url = get_option('mj_social_facebook_page_url', '');
+    $social_facebook_app_id = get_option('mj_social_facebook_app_id', '');
     $social_facebook_page_id = get_option('mj_social_facebook_page_id', '');
     $social_facebook_page_token = get_option('mj_social_facebook_page_token', '');
     $social_instagram_page_url = get_option('mj_social_instagram_page_url', '');

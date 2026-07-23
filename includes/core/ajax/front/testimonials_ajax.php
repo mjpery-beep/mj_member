@@ -44,6 +44,254 @@ final class TestimonialsController implements AjaxHandlerInterface {
         add_action('wp_ajax_mj_front_testimonial_delete', [$this, 'delete']);
         add_action('wp_ajax_mj_front_testimonial_edit', [$this, 'edit']);
         add_action('wp_ajax_mj_front_testimonial_toggle_featured', [$this, 'toggleFeatured']);
+        add_action('template_redirect', [$this, 'renderShareBridgePage']);
+    }
+
+    /**
+     * Render a lightweight public page used for social sharing previews.
+     *
+     * Facebook reads OG tags from this URL, which are generated from the
+     * selected testimonial media instead of from the full listing page.
+     */
+    public function renderShareBridgePage(): void {
+        $testimonial_id = isset($_GET['mj_testimonial_share']) ? (int) $_GET['mj_testimonial_share'] : 0;
+        if ($testimonial_id <= 0 || is_admin()) {
+            $this->renderCrawlerSingleTestimonialPage();
+            return;
+        }
+
+        $testimonial = MjTestimonials::get_by_id($testimonial_id);
+        if (!$testimonial || !isset($testimonial->status) || $testimonial->status !== MjTestimonials::STATUS_APPROVED) {
+            status_header(404);
+            nocache_headers();
+            echo '<!doctype html><html><head><meta charset="utf-8"><title>Not found</title></head><body></body></html>';
+            exit;
+        }
+
+        $target_url = isset($_GET['target']) ? esc_url_raw(wp_unslash($_GET['target'])) : '';
+        $home_host = wp_parse_url(home_url('/'), PHP_URL_HOST);
+        $target_host = $target_url ? wp_parse_url($target_url, PHP_URL_HOST) : '';
+        if (!$target_url || !wp_http_validate_url($target_url) || !$target_host || !is_string($home_host) || !is_string($target_host) || strtolower($target_host) !== strtolower($home_host)) {
+            $target_url = home_url('/');
+        }
+
+        $og_data = $this->buildShareOgData($testimonial);
+
+        $share_url = add_query_arg(
+            array(
+                'mj_testimonial_share' => $testimonial_id,
+                'target' => $target_url,
+            ),
+            home_url('/')
+        );
+
+        $this->renderOgHtmlDocument(
+            array(
+                'title' => $og_data['title'],
+                'description' => $og_data['description'],
+                'image' => $og_data['image'],
+                'og_url' => $share_url,
+                'canonical_url' => $share_url,
+                'redirect_url' => $this->isSocialCrawlerRequest() ? '' : $target_url,
+                'fb_app_id' => $this->getFacebookAppId(),
+            )
+        );
+    }
+
+    /**
+     * For Facebook/Facebot requests on direct ?post=<id> testimonial URLs,
+     * output dedicated OG tags so crawler previews use testimonial media.
+     */
+    private function renderCrawlerSingleTestimonialPage(): void {
+        if (!$this->isSocialCrawlerRequest()) {
+            return;
+        }
+
+        if (!$this->isLikelyTestimonialsRequest()) {
+            return;
+        }
+
+        $testimonial_id = isset($_GET['post']) ? (int) $_GET['post'] : 0;
+        if ($testimonial_id <= 0) {
+            return;
+        }
+
+        $testimonial = MjTestimonials::get_by_id($testimonial_id);
+        if (!$testimonial || !isset($testimonial->status) || $testimonial->status !== MjTestimonials::STATUS_APPROVED) {
+            return;
+        }
+
+        $current_url = $this->getCurrentRequestUrl();
+        $og_data = $this->buildShareOgData($testimonial);
+
+        $this->renderOgHtmlDocument(
+            array(
+                'title' => $og_data['title'],
+                'description' => $og_data['description'],
+                'image' => $og_data['image'],
+                'og_url' => $current_url,
+                'canonical_url' => $current_url,
+                'fb_app_id' => $this->getFacebookAppId(),
+            )
+        );
+    }
+
+    /**
+     * Build OG title/description/image from a testimonial.
+     *
+     * @param object $testimonial
+     * @return array<string,string>
+     */
+    private function buildShareOgData($testimonial): array {
+        $author_name = '';
+        if (isset($testimonial->first_name) && $testimonial->first_name) {
+            $author_name = (string) $testimonial->first_name;
+            if (isset($testimonial->last_name) && $testimonial->last_name) {
+                $author_name .= ' ' . mb_substr((string) $testimonial->last_name, 0, 1) . '.';
+            }
+        }
+
+        $content_text = isset($testimonial->content) ? trim(wp_strip_all_tags((string) $testimonial->content)) : '';
+        $og_title = $author_name
+            ? sprintf(__('Témoignage de %s', 'mj-member'), $author_name)
+            : __('Témoignage', 'mj-member');
+        $og_description = $content_text !== ''
+            ? wp_html_excerpt($content_text, 220, '...')
+            : __('Découvrez ce témoignage partagé sur MJ Pery.', 'mj-member');
+
+        $og_image = '';
+        $photos = MjTestimonials::get_photo_urls($testimonial, 'large');
+        if (!empty($photos) && isset($photos[0]['full']) && is_string($photos[0]['full'])) {
+            $og_image = $photos[0]['full'];
+        }
+
+        if ($og_image === '') {
+            $video = MjTestimonials::get_video_data($testimonial);
+            if (is_array($video) && !empty($video['poster']) && is_string($video['poster'])) {
+                $og_image = $video['poster'];
+            }
+        }
+
+        if ($og_image === '' && isset($testimonial->member_photo_id) && (int) $testimonial->member_photo_id > 0) {
+            $avatar_src = wp_get_attachment_image_src((int) $testimonial->member_photo_id, 'large');
+            if ($avatar_src && isset($avatar_src[0])) {
+                $og_image = (string) $avatar_src[0];
+            }
+        }
+
+        if ($og_image === '') {
+            $og_image = (string) wp_get_site_icon_url(512);
+        }
+
+        return array(
+            'title' => $og_title,
+            'description' => $og_description,
+            'image' => $og_image,
+        );
+    }
+
+    /**
+     * @return array<string,mixed> $data
+     */
+    private function renderOgHtmlDocument(array $data): void {
+        $title = isset($data['title']) ? (string) $data['title'] : __('Témoignage', 'mj-member');
+        $description = isset($data['description']) ? (string) $data['description'] : '';
+        $image = isset($data['image']) ? (string) $data['image'] : '';
+        $og_url = isset($data['og_url']) ? (string) $data['og_url'] : home_url('/');
+        $canonical_url = isset($data['canonical_url']) ? (string) $data['canonical_url'] : $og_url;
+        $redirect_url = isset($data['redirect_url']) ? (string) $data['redirect_url'] : '';
+        $fb_app_id = isset($data['fb_app_id']) ? preg_replace('/[^0-9]/', '', (string) $data['fb_app_id']) : '';
+
+        nocache_headers();
+        ?>
+<!doctype html>
+<html <?php language_attributes(); ?>>
+<head>
+    <meta charset="<?php bloginfo('charset'); ?>">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><?php echo esc_html($title); ?></title>
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="<?php echo esc_attr($title); ?>">
+    <meta property="og:description" content="<?php echo esc_attr($description); ?>">
+    <meta property="og:url" content="<?php echo esc_url($og_url); ?>">
+    <?php if ($fb_app_id !== '') : ?>
+    <meta property="fb:app_id" content="<?php echo esc_attr($fb_app_id); ?>">
+    <?php endif; ?>
+    <?php if ($image !== '') : ?>
+    <meta property="og:image" content="<?php echo esc_url($image); ?>">
+    <?php endif; ?>
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<?php echo esc_attr($title); ?>">
+    <meta name="twitter:description" content="<?php echo esc_attr($description); ?>">
+    <?php if ($image !== '') : ?>
+    <meta name="twitter:image" content="<?php echo esc_url($image); ?>">
+    <?php endif; ?>
+    <?php if ($redirect_url !== '') : ?>
+    <meta http-equiv="refresh" content="0;url=<?php echo esc_url($redirect_url); ?>">
+    <?php endif; ?>
+    <link rel="canonical" href="<?php echo esc_url($canonical_url); ?>">
+</head>
+<body>
+    <?php if ($redirect_url !== '') : ?>
+    <p><a href="<?php echo esc_url($redirect_url); ?>"><?php echo esc_html__('Continuer vers le témoignage', 'mj-member'); ?></a></p>
+    <?php endif; ?>
+</body>
+</html>
+        <?php
+        exit;
+    }
+
+    private function isSocialCrawlerRequest(): bool {
+        $ua = isset($_SERVER['HTTP_USER_AGENT']) ? strtolower((string) $_SERVER['HTTP_USER_AGENT']) : '';
+        if ($ua === '') {
+            return false;
+        }
+
+        $needles = array('facebookexternalhit', 'facebot', 'twitterbot', 'linkedinbot', 'slackbot');
+        foreach ($needles as $needle) {
+            if (strpos($ua, $needle) !== false) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function isLikelyTestimonialsRequest(): bool {
+        $section = isset($_GET['section']) ? sanitize_key((string) $_GET['section']) : '';
+        if ($section === 'testimonials') {
+            return true;
+        }
+
+        $uri = isset($_SERVER['REQUEST_URI']) ? strtolower((string) $_SERVER['REQUEST_URI']) : '';
+        return strpos($uri, 'temoignage') !== false;
+    }
+
+    private function getCurrentRequestUrl(): string {
+        $request_uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/';
+        if ($request_uri === '') {
+            $request_uri = '/';
+        }
+        return home_url($request_uri);
+    }
+
+    private function getFacebookAppId(): string {
+        $candidates = array(
+            (string) get_option('mj_social_facebook_app_id', ''),
+            (string) get_option('facebook_app_id', ''),
+        );
+
+        if (defined('MJ_FACEBOOK_APP_ID')) {
+            $candidates[] = (string) MJ_FACEBOOK_APP_ID;
+        }
+
+        foreach ($candidates as $candidate) {
+            $normalized = preg_replace('/[^0-9]/', '', $candidate);
+            if (is_string($normalized) && $normalized !== '') {
+                return $normalized;
+            }
+        }
+
+        return '';
     }
 
     /**

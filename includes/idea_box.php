@@ -10,6 +10,7 @@ namespace Mj\Member\Module {
             add_action('wp_ajax_mj_member_idea_box_create', 'mj_member_ajax_idea_box_create');
             add_action('wp_ajax_mj_member_idea_box_vote', 'mj_member_ajax_idea_box_vote');
             add_action('wp_ajax_mj_member_idea_box_delete', 'mj_member_ajax_idea_box_delete');
+            add_action('wp_ajax_mj_member_idea_box_mark_done', 'mj_member_ajax_idea_box_mark_done');
         }
     }
 }
@@ -103,6 +104,7 @@ if (!function_exists('mj_member_idea_box_localize')) {
                 'create' => 'mj_member_idea_box_create',
                 'vote' => 'mj_member_idea_box_vote',
                 'delete' => 'mj_member_idea_box_delete',
+                'markDone' => 'mj_member_idea_box_mark_done',
             ),
             'memberId' => $memberId,
             'member' => $memberPayload,
@@ -123,6 +125,7 @@ if (!function_exists('mj_member_idea_box_localize')) {
                 'createError' => __('Impossible d’enregistrer votre idée.', 'mj-member'),
                 'voteError' => __('Impossible de mettre à jour le vote.', 'mj-member'),
                 'voteOwnIdea' => __('Vous ne pouvez pas voter pour votre propre idée.', 'mj-member'),
+                'voteArchivedIdea' => __('Cette idée est réalisée et ne peut plus recevoir de soutien.', 'mj-member'),
                 'accessDenied' => __('Vous devez être connecté pour participer.', 'mj-member'),
                 'voteLabel' => __('+1', 'mj-member'),
                 'votesOne' => __('%d soutien', 'mj-member'),
@@ -132,6 +135,10 @@ if (!function_exists('mj_member_idea_box_localize')) {
                 'deleteLabel' => __('Supprimer', 'mj-member'),
                 'deleteConfirm' => __('Confirmer la suppression de cette idée ?', 'mj-member'),
                 'deleteError' => __('Impossible de supprimer l’idée.', 'mj-member'),
+                'markDoneLabel' => __('Marquer comme réalisée', 'mj-member'),
+                'markDoneConfirm' => __('Marquer cette idée comme réalisée ?', 'mj-member'),
+                'markDoneError' => __('Impossible de marquer l’idée comme réalisée.', 'mj-member'),
+                'archivedBadge' => __('Réalisée', 'mj-member'),
             ),
         );
 
@@ -153,7 +160,7 @@ if (!function_exists('mj_member_ajax_idea_box_fetch')) {
         $memberId = (int) $member->get('id', 0);
         $memberRole = sanitize_key((string) $member->get('role', ''));
         $ideas = MjIdeas::get_with_votes(array(
-            'status' => MjIdeas::STATUS_PUBLISHED,
+            'statuses' => array(MjIdeas::STATUS_PUBLISHED, MjIdeas::STATUS_ARCHIVED),
             'orderby' => 'vote_count',
             'order' => 'DESC',
         ), $memberId, array('viewer_role' => $memberRole));
@@ -255,6 +262,10 @@ if (!function_exists('mj_member_ajax_idea_box_vote')) {
             wp_send_json_error(array('message' => __('Idée introuvable.', 'mj-member')));
         }
 
+        if (($idea['status'] ?? '') === MjIdeas::STATUS_ARCHIVED) {
+            wp_send_json_error(array('message' => __('Cette idée est réalisée et ne peut plus recevoir de soutien.', 'mj-member')));
+        }
+
         $ownerId = isset($idea['member_id']) ? (int) $idea['member_id'] : 0;
         if ($ownerId === $memberId) {
             wp_send_json_error(array('message' => __('Vous ne pouvez pas voter pour votre propre idée.', 'mj-member')));
@@ -285,7 +296,7 @@ if (!function_exists('mj_member_ajax_idea_box_vote')) {
 
         $ideas = MjIdeas::get_with_votes(array(
             'include_ids' => array($ideaId),
-            'status' => MjIdeas::STATUS_PUBLISHED,
+            'statuses' => array(MjIdeas::STATUS_PUBLISHED, MjIdeas::STATUS_ARCHIVED),
         ), $memberId, array('viewer_role' => sanitize_key((string) $member->get('role', ''))));
 
         $payload = !empty($ideas) ? $ideas[0] : null;
@@ -333,6 +344,61 @@ if (!function_exists('mj_member_ajax_idea_box_delete')) {
         }
 
         $result = MjIdeas::delete($ideaId);
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+        }
+
+        $ideas = MjIdeas::get_with_votes(array(
+            'include_ids' => array($ideaId),
+            'statuses' => array(MjIdeas::STATUS_PUBLISHED, MjIdeas::STATUS_ARCHIVED),
+        ), $memberId, array('viewer_role' => $role));
+
+        $payload = !empty($ideas) ? $ideas[0] : null;
+        if (!is_array($payload)) {
+            wp_send_json_error(array('message' => __('Impossible de récupérer l’idée mise à jour.', 'mj-member')));
+        }
+
+        wp_send_json_success(array(
+            'idea_id' => $ideaId,
+            'idea' => $payload,
+        ));
+    }
+}
+
+if (!function_exists('mj_member_ajax_idea_box_mark_done')) {
+    function mj_member_ajax_idea_box_mark_done(): void
+    {
+        check_ajax_referer('mj_member_idea_box', 'nonce');
+
+        $member = mj_member_idea_box_resolve_member();
+        if (!($member instanceof MemberData)) {
+            wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+        }
+
+        $memberId = (int) $member->get('id', 0);
+        if ($memberId <= 0) {
+            wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+        }
+
+        $role = sanitize_key((string) $member->get('role', ''));
+        $animateurRole = sanitize_key((string) MjRoles::ANIMATEUR);
+        if ($role !== $animateurRole) {
+            wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+        }
+
+        $ideaId = isset($_POST['idea_id']) ? (int) $_POST['idea_id'] : 0;
+        if ($ideaId <= 0) {
+            wp_send_json_error(array('message' => __('Idée introuvable.', 'mj-member')));
+        }
+
+        $idea = MjIdeas::get($ideaId);
+        if (!is_array($idea) || (int) ($idea['id'] ?? 0) !== $ideaId) {
+            wp_send_json_error(array('message' => __('Idée introuvable.', 'mj-member')));
+        }
+
+        $result = MjIdeas::update($ideaId, array(
+            'status' => MjIdeas::STATUS_ARCHIVED,
+        ));
         if (is_wp_error($result)) {
             wp_send_json_error(array('message' => $result->get_error_message()));
         }

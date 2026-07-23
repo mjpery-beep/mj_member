@@ -102,6 +102,7 @@
 
         this.pendingVotes = new Set();
         this.pendingDeletes = new Set();
+        this.pendingMarkDone = new Set();
 
         this.dom = {
             inner: null,
@@ -210,6 +211,15 @@
         return role === animateur || role === coordinateur;
     };
 
+    IdeaBox.prototype.canViewerMarkDone = function () {
+        if (!this.viewer || typeof this.viewer.role !== 'string') {
+            return false;
+        }
+        var role = normalizeRole(this.viewer.role);
+        var animateur = this.roles && this.roles.ANIMATEUR ? normalizeRole(this.roles.ANIMATEUR) : 'animateur';
+        return role === animateur;
+    };
+
     IdeaBox.prototype.formatCounter = function (current, max) {
         var template = getString(this.i18n, 'characterCount', '%1$s / %2$s caractères');
         var currentValue = String(Math.max(0, current || 0));
@@ -243,6 +253,36 @@
         }
         this.state.ideas = this.state.ideas.filter(function (idea) {
             return idea.id !== id;
+        });
+    };
+
+    IdeaBox.prototype.playDeleteAnimation = function (ideaId) {
+        var self = this;
+        return new Promise(function (resolve) {
+            if (!self.dom || !self.dom.list) {
+                resolve();
+                return;
+            }
+
+            var selector = '.mj-idea-box__item[data-idea-id="' + String(ideaId) + '"]';
+            var item = self.dom.list.querySelector(selector);
+            if (!item) {
+                resolve();
+                return;
+            }
+
+            var done = false;
+            var finish = function () {
+                if (done) {
+                    return;
+                }
+                done = true;
+                resolve();
+            };
+
+            item.classList.add('is-removing');
+            item.addEventListener('animationend', finish, { once: true });
+            setTimeout(finish, 520);
         });
     };
 
@@ -435,6 +475,8 @@
         var votesOne = getString(this.i18n, 'votesOne', '%d soutien');
         var votesMany = getString(this.i18n, 'votesMany', '%d soutiens');
         var deleteLabel = getString(this.i18n, 'deleteLabel', 'Supprimer');
+        var markDoneLabel = getString(this.i18n, 'markDoneLabel', 'Marquer comme réalisée');
+        var archivedBadge = getString(this.i18n, 'archivedBadge', 'Réalisée');
 
         var markup = ideas.map(function (idea) {
             var titleHtml = idea.title ? '<h2 class="mj-idea-box__item-title">' + escapeHtml(idea.title) + '</h2>' : '';
@@ -471,8 +513,9 @@
             var countLabel = count === 1 ? votesOne.replace('%d', '1') : votesMany.replace('%d', String(count));
             var isActive = !!idea.viewerHasVoted;
             var isOwn = !!idea.isOwner;
+            var isArchived = idea.status === 'archived';
             var votePending = this.pendingVotes && typeof this.pendingVotes.has === 'function' ? this.pendingVotes.has(idea.id) : false;
-            var disabled = !canVote || isOwn || votePending;
+            var disabled = !canVote || isOwn || votePending || isArchived;
 
             var buttonClasses = ['mj-idea-box__vote-button'];
             if (isActive) {
@@ -503,18 +546,46 @@
                 deleteButtonHtml += '>' + escapeHtml(deleteLabel) + '</button>';
             }
 
+            var canMarkDone = this.canViewerMarkDone();
+            var isMarkingDone = this.pendingMarkDone && typeof this.pendingMarkDone.has === 'function' ? this.pendingMarkDone.has(idea.id) : false;
+            var markDoneButtonHtml = '';
+            if (canMarkDone && !isArchived) {
+                var markDoneClasses = ['mj-idea-box__done-button'];
+                if (isMarkingDone) {
+                    markDoneClasses.push('is-disabled');
+                }
+                markDoneButtonHtml = '<button type="button" class="' + markDoneClasses.join(' ') + '" data-idea-id="' + idea.id + '"';
+                if (isMarkingDone) {
+                    markDoneButtonHtml += ' disabled';
+                }
+                markDoneButtonHtml += '>' + escapeHtml(markDoneLabel) + '</button>';
+            }
+
+            var archivedBannerHtml = '';
+            if (isArchived) {
+                archivedBannerHtml = '<p class="mj-idea-box__item-archived" role="status">' + escapeHtml(archivedBadge) + '</p>';
+            }
+
+            var voteSectionHtml = '';
+            if (!isArchived) {
+                voteSectionHtml =
+                    '<div class="mj-idea-box__item-vote">' +
+                        '<button ' + buttonAttrs + '>' + escapeHtml(voteLabel) + '</button>' +
+                        '<span class="mj-idea-box__vote-count" aria-live="polite">' + escapeHtml(countLabel) + '</span>' +
+                    '</div>';
+            }
+
             return (
-                '<article class="mj-idea-box__item" role="listitem" data-idea-id="' + idea.id + '">' +
+                '<article class="mj-idea-box__item' + (isArchived ? ' mj-idea-box__item--archived' : '') + '" role="listitem" data-idea-id="' + idea.id + '">' +
                     '<div class="mj-idea-box__item-header">' +
                         titleHtml +
                         metaInfo +
                     '</div>' +
+                    archivedBannerHtml +
                     contentHtml +
                     '<div class="mj-idea-box__item-actions">' +
-                        '<div class="mj-idea-box__item-vote">' +
-                            '<button ' + buttonAttrs + '>' + escapeHtml(voteLabel) + '</button>' +
-                            '<span class="mj-idea-box__vote-count" aria-live="polite">' + escapeHtml(countLabel) + '</span>' +
-                        '</div>' +
+                        voteSectionHtml +
+                        markDoneButtonHtml +
                         deleteButtonHtml +
                     '</div>' +
                 '</article>'
@@ -592,6 +663,14 @@
                         return;
                     }
                     self.handleDelete(deleteId, target);
+                    return;
+                }
+                if (target.matches('.mj-idea-box__done-button')) {
+                    var doneId = toInt(target.getAttribute('data-idea-id'), 0);
+                    if (!doneId) {
+                        return;
+                    }
+                    self.handleMarkDone(doneId, target);
                 }
             });
         }
@@ -713,6 +792,12 @@
             return;
         }
 
+        if (idea.status === 'archived') {
+            this.state.error = getString(this.i18n, 'voteArchivedIdea', 'Cette idée est réalisée et ne peut plus recevoir de soutien.');
+            this.render();
+            return;
+        }
+
         if (!this.ajaxUrl || !this.actions.vote) {
             this.state.error = getString(this.i18n, 'voteError', 'Impossible de mettre à jour le vote.');
             this.render();
@@ -812,6 +897,90 @@
             body: params.toString(),
         })
             .then(function (response) {
+                return response.text();
+            })
+            .then(function (rawPayload) {
+                var payload = null;
+                if (typeof rawPayload === 'string' && rawPayload.trim() !== '') {
+                    try {
+                        payload = JSON.parse(rawPayload);
+                    } catch (error) {
+                        payload = null;
+                    }
+                }
+
+                // Certains sites WP injectent des notices PHP dans la réponse AJAX
+                // (voire cassent le status HTTP) alors que la suppression a déjà été faite.
+                // On ne bloque donc que sur un success=false explicite.
+                if (payload && payload.success === false) {
+                    throw new Error('api_error');
+                }
+
+                self.state.error = '';
+                return self.playDeleteAnimation(ideaId);
+            })
+            .then(function () {
+                self.removeIdea(ideaId);
+            })
+            .catch(function () {
+                self.state.error = getString(self.i18n, 'deleteError', 'Impossible de supprimer l’idée.');
+            })
+            .finally(function () {
+                self.pendingDeletes.delete(ideaId);
+                self.render();
+            });
+    };
+
+    IdeaBox.prototype.handleMarkDone = function (ideaId, button) {
+        if (!this.hasAccess || this.isPreview || this.pendingMarkDone.has(ideaId)) {
+            return;
+        }
+
+        if (!this.canViewerMarkDone()) {
+            this.state.error = getString(this.i18n, 'markDoneError', 'Impossible de marquer l’idée comme réalisée.');
+            this.render();
+            return;
+        }
+
+        var idea = this.state.ideas.find(function (entry) {
+            return entry.id === ideaId;
+        });
+        if (!idea) {
+            return;
+        }
+
+        var confirmMessage = getString(this.i18n, 'markDoneConfirm', 'Marquer cette idée comme réalisée ?');
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+            if (!window.confirm(confirmMessage)) {
+                return;
+            }
+        }
+
+        if (!this.ajaxUrl || !this.actions.markDone) {
+            this.state.error = getString(this.i18n, 'markDoneError', 'Impossible de marquer l’idée comme réalisée.');
+            this.render();
+            return;
+        }
+
+        this.state.error = '';
+        this.pendingMarkDone.add(ideaId);
+        button.disabled = true;
+
+        var params = new URLSearchParams();
+        params.append('action', this.actions.markDone);
+        params.append('nonce', this.nonce);
+        params.append('idea_id', String(ideaId));
+
+        var self = this;
+        fetch(this.ajaxUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            },
+            body: params.toString(),
+        })
+            .then(function (response) {
                 if (!response.ok) {
                     throw new Error('http_error');
                 }
@@ -825,10 +994,10 @@
                 self.removeIdea(ideaId);
             })
             .catch(function () {
-                self.state.error = getString(self.i18n, 'deleteError', 'Impossible de supprimer l’idée.');
+                self.state.error = getString(self.i18n, 'markDoneError', 'Impossible de marquer l’idée comme réalisée.');
             })
             .finally(function () {
-                self.pendingDeletes.delete(ideaId);
+                self.pendingMarkDone.delete(ideaId);
                 self.render();
             });
     };

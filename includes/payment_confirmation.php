@@ -1,19 +1,10 @@
 <?php
 
-namespace Mj\Member\Module {
-    use Mj\Member\Core\Contracts\ModuleInterface;
-    if (!defined('ABSPATH')) { exit; }
+use Mj\Member\Classes\MjPayments;
 
-    final class PaymentConfirmationModule implements ModuleInterface {
-        public function register(): void {
-            add_action('init', 'mj_handle_payment_confirmation');
-        }
-    }
+if (!defined('ABSPATH')) {
+    exit;
 }
-
-namespace {
-    use Mj\Member\Classes\MjPayments;
-    if (!defined('ABSPATH')) { exit; }
 
 if (!function_exists('mj_handle_payment_confirmation')) {
     function mj_handle_payment_confirmation(): void
@@ -47,4 +38,3 @@ if (!function_exists('mj_handle_payment_confirmation')) {
 
     add_action('init', 'mj_handle_payment_confirmation');
 }
-} // end namespace {

@@ -234,6 +234,7 @@ $localize_data['featuredOnly'] = $featured_only;
 $localize_data['displayTemplate'] = $display_template;
 $localize_data['photoBoothMode'] = $photo_booth_mode;
 $localize_data['memberInitial'] = $effective_member_initial;
+$localize_data['shareBridgeBaseUrl'] = home_url('/');
 
 wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_data);
 ?>
@@ -552,6 +553,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                 <button type="button" class="mj-testimonials__carousel-btn mj-testimonials__carousel-btn--prev" aria-label="<?php esc_attr_e('Précédent', 'mj-member'); ?>">&#8249;</button>
                 <button type="button" class="mj-testimonials__carousel-btn mj-testimonials__carousel-btn--next" aria-label="<?php esc_attr_e('Suivant', 'mj-member'); ?>">&#8250;</button>
             <?php else: ?>
+                <?php $requested_section = isset($_GET['section']) ? sanitize_key((string) $_GET['section']) : ''; ?>
                 <?php foreach ($all_display_testimonials as $testimonial): 
                     $photos = MjTestimonials::get_photo_urls($testimonial, 'large');
                     $video = MjTestimonials::get_video_data($testimonial);
@@ -583,6 +585,15 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                     }
                     
                     $post_id = (int)$testimonial->id;
+                    $post_url_args = array('post' => $post_id);
+                    if ($requested_section !== '') {
+                        $post_url_args['section'] = $requested_section;
+                    }
+                    $post_url = add_query_arg($post_url_args);
+                    $share_url = add_query_arg(array(
+                        'mj_testimonial_share' => $post_id,
+                        'target' => $post_url,
+                    ), home_url('/'));
                     
                     // Déterminer le statut et si c'est mon témoignage
                     $testimonial_status = isset($testimonial->status) ? $testimonial->status : MjTestimonials::STATUS_APPROVED;
@@ -593,7 +604,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                     $is_featured = !empty($testimonial->featured);
                     $show_approval_actions = $is_animator && $is_pending && !$is_my_testimonial;
                 ?>
-                <article class="mj-feed-post-wrapper<?php echo $is_single_mode ? ' mj-feed-post-wrapper--single' : ''; ?><?php echo $is_pending ? ' mj-feed-post-wrapper--pending' : ''; ?>" data-post-id="<?php echo $post_id; ?>" data-post-url="<?php echo esc_url(add_query_arg('post', $post_id)); ?>" data-post-status="<?php echo esc_attr($testimonial_status); ?>">
+                <article class="mj-feed-post-wrapper<?php echo $is_single_mode ? ' mj-feed-post-wrapper--single' : ''; ?><?php echo $is_pending ? ' mj-feed-post-wrapper--pending' : ''; ?>" data-post-id="<?php echo $post_id; ?>" data-post-url="<?php echo esc_url($post_url); ?>" data-share-url="<?php echo esc_url($share_url); ?>" data-post-status="<?php echo esc_attr($testimonial_status); ?>">
                     <div class="mj-feed-post<?php echo $is_single_mode ? ' mj-feed-post--single' : ''; ?><?php echo $is_pending ? ' mj-feed-post--pending' : ''; ?><?php echo $is_featured ? ' mj-feed-post--featured' : ''; ?>" data-id="<?php echo $post_id; ?>" data-featured="<?php echo $is_featured ? '1' : '0'; ?>"<?php if ($can_manage): ?> data-photos="<?php echo esc_attr(wp_json_encode(array_map(function($p) { return array('id' => $p['id'], 'url' => $p['url']); }, $photos))); ?>" data-video="<?php echo $video ? esc_attr(wp_json_encode(array('id' => $video['id'], 'url' => $video['url']))) : ''; ?>"<?php endif; ?>>
                         <?php if ($is_pending && $is_my_testimonial): ?>
                             <div class="mj-feed-post__pending-badge">
