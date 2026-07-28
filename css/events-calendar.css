@@ -3,6 +3,12 @@
  * Simplified version without multi-day event system
  */
 
+.elementor-widget-mj-member-events-calendar,
+.elementor-widget-mj-member-events-calendar .elementor-widget-container {
+    height: auto;
+    min-height: 0;
+}
+
 .mj-member-events-calendar {
     --mj-events-calendar-nav-bg: #0f172a;
     --mj-events-calendar-nav-text: #ffffff;
@@ -1843,6 +1849,24 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
    ========================================================================== */
 
 @media (max-width: 640px) {
+    .elementor-widget-mj-member-events-calendar,
+    .elementor-widget-mj-member-events-calendar .elementor-widget-container {
+        height: auto !important;
+        min-height: 0 !important;
+    }
+
+    /* Keep enough vertical separation when the next widget contains absolute-positioned CTAs. */
+    .elementor-widget-mj-member-events-calendar {
+        position: relative;
+        z-index: 2;
+        margin-bottom: clamp(56px, 12vw, 96px) !important;
+    }
+
+    .elementor-widget-mj-member-events-calendar + .elementor-element {
+        position: relative;
+        z-index: 1;
+    }
+
     .mj-member-events-calendar__toolbar {
         border-radius: 12px;
     }

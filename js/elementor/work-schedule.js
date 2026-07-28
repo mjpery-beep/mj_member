@@ -52,6 +52,8 @@
         return i18n.animator;
     };
 
+    const isFavoriteSlot = (slot) => Boolean(slot && (slot.favorite || slot.isFavorite || slot.is_favorite));
+
     /* ------------------------------------------------------------------ */
     /*  Components                                                        */
     /* ------------------------------------------------------------------ */
@@ -95,10 +97,18 @@
 
                 const net = slotNetMinutes(slot);
                 const breakMin = parseInt(slot.break_minutes, 10) || 0;
+                const favorite = isFavoriteSlot(slot);
 
                 return h('td', { class: 'mj-ws__cell mj-ws__cell--slot', key: day },
                     h('div', { class: 'mj-ws__slot' },
-                        h('span', { class: 'mj-ws__slot-time' }, `${slot.start} – ${slot.end}`),
+                        h('span', { class: 'mj-ws__slot-time' }, [
+                            favorite ? h('span', {
+                                class: 'mj-ws__slot-favorite',
+                                title: i18n.favorite || 'Favori',
+                                'aria-label': i18n.favorite || 'Favori'
+                            }, '★') : null,
+                            h('span', { class: 'mj-ws__slot-time-label' }, `${slot.start} – ${slot.end}`)
+                        ]),
                         showBreaks && breakMin > 0
                             ? h('span', { class: 'mj-ws__slot-break' },
                                 `${i18n.break} ${breakMin}${i18n.minutesShort}`)

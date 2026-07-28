@@ -1330,11 +1330,19 @@ button.mj-header-login-form__toggle-pwd svg {
     display: block;
 }
 
+body.mj-header-body-scroll-lock {
+    overscroll-behavior: none;
+}
+
 /* ============================================================================
    Responsive — Mobile
    ========================================================================== */
 
 @media (max-width: 1024px) {
+    .mj-header--drawer-active {
+        z-index: 10001;
+    }
+
     /* Cache le menu desktop, affiche le burger */
     .mj-header__nav {
         display: none;
@@ -1404,21 +1412,62 @@ button.mj-header-login-form__toggle-pwd svg {
         padding: 8px 12px;
     }
 
-    /* Tablette : dropdown aligné à droite de l'icône, largeur contrainte */
+    .mj-header-overlay {
+        background: rgba(15, 23, 42, 0.22);
+        backdrop-filter: blur(4px);
+        opacity: 0;
+        transition: opacity 0.22s ease;
+    }
+
+    .mj-header-overlay--active {
+        opacity: 1;
+    }
+
+    /* Tablette/mobile : drawer dédié au viewport */
     .mj-header-dropdown {
+        position: fixed;
+        inset: 0 0 0 auto;
         left: auto;
+        top: 0;
+        bottom: 0;
         right: 0;
-        width: min(400px, calc(100vw - 24px));
-        max-width: min(400px, calc(100vw - 24px));
-        max-height: 78vh;
-        overflow-y: auto;
+        width: min(460px, 100vw);
+        max-width: 100vw;
+        height: 100dvh;
+        max-height: 100dvh !important;
+        border-radius: 24px 0 0 24px;
+        border-right: none;
+        box-shadow: -16px 0 42px rgba(15, 23, 42, 0.18);
+        overflow: hidden;
         overscroll-behavior: contain;
+        opacity: 1;
+        visibility: hidden;
+        transform: translateX(100%);
+        transition: transform 0.24s ease, visibility 0s linear 0.24s;
+    }
+
+    .mj-header-dropdown--open {
+        visibility: visible;
+        transform: translateX(0);
+        transition: transform 0.24s ease;
     }
 
     /* Compte : 1 colonne */
     .mj-header-dropdown--account {
-        width: min(400px, calc(100vw - 24px));
-        max-width: min(400px, calc(100vw - 24px));
+        width: min(460px, 100vw);
+        max-width: 100vw;
+    }
+
+    .mj-header-dropdown__header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #ffffff;
+        padding: calc(16px + env(safe-area-inset-top, 0px)) 18px 14px;
+    }
+
+    .mj-header-dropdown__content {
+        padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     }
 
     .mj-header-acc-panel {
@@ -1430,7 +1479,22 @@ button.mj-header-login-form__toggle-pwd svg {
 
     /* Gestionnaire : largeur contrainte + une seule colonne */
     .mj-header-dropdown--gestionnaire {
-        width: min(480px, calc(100vw - 24px));
+        width: min(560px, 100vw);
+    }
+
+    .mj-header-dropdown--agenda {
+        max-height: 100dvh !important;
+        overflow: hidden;
+    }
+
+    .mj-header-dropdown--agenda .mj-header-dropdown__content {
+        max-height: none;
+        overflow-y: auto;
+    }
+
+    .mj-header-dropdown--agenda .mj-cal-mobile__modal-content,
+    .mj-header-dropdown--agenda .mj-cal-mobile__modal-body {
+        max-height: none;
     }
 
     .mj-header-gest-favs-grid {
@@ -1459,17 +1523,10 @@ button.mj-header-login-form__toggle-pwd svg {
         gap: 4px;
     }
 
-    /* Téléphone : panneau commun pleine largeur depuis le header */
-    .mj-header__action-item {
-        position: static;
-    }
-
     .mj-header-dropdown {
-        left: 0;
-        right: 0;
-        width: 100%;
+        width: 100vw;
         max-width: 100%;
-        border-radius: 0 0 14px 14px;
+        border-radius: 0;
     }
 
     .mj-header-dropdown--account {
@@ -1481,7 +1538,7 @@ button.mj-header-login-form__toggle-pwd svg {
     .mj-header__trigger[aria-expanded="true"] {
         color: #6366f1;
         background-color: #eef2ff;
-        border-radius: 8px 8px 0 0;
+        border-radius: 8px;
     }
 
     .mj-header-nc-apps {
@@ -1516,15 +1573,35 @@ button.mj-header-login-form__toggle-pwd svg {
 a.mj-header-gest-favs-col__title {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     font-size: 1rem !important;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
+    text-transform: none;
+    letter-spacing: 0.01em;
     color: #94a3b8;
     padding: 0 4px;
     margin: 0 0 10px;
     text-decoration: none;
+}
+
+.mj-header-gest-favs-col__title-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.1;
+}
+
+.mj-header-gest-favs-col__title-main {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: inherit;
+}
+
+.mj-header-gest-favs-col__title-sub {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.02em;
 }
 
 .mj-header-gest-favs-col__title-icon {
@@ -1709,6 +1786,7 @@ a.mj-header-gest-fav-link:hover {
     outline-offset: 1px !important;
 }
 
+.mj-header .mj-header-dropdown--gestionnaire button.mj-header-gest-fav-unfav:disabled {
     font-size: 0.72rem !important;
     opacity: 0.55 !important;
     cursor: default !important;

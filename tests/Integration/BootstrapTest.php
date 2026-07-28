@@ -67,13 +67,15 @@ final class BootstrapTest extends TestCase
         $id = uniqid('case', true);
         $moduleClass = 'Mj\\Member\\Tests\\Fixtures\\BootstrapModule_' . preg_replace('/[^A-Za-z0-9_]/', '_', $id);
         $ajaxClass = 'Mj\\Member\\Tests\\Fixtures\\BootstrapAjax_' . preg_replace('/[^A-Za-z0-9_]/', '_', $id);
+        $moduleShortClass = $this->shortClassName($moduleClass);
+        $ajaxShortClass = $this->shortClassName($ajaxClass);
 
         $relative = $this->writeModule(
             'module-ajax',
             "<?php\n"
             . "namespace Mj\\Member\\Tests\\Fixtures;\n"
-            . "class " . basename(str_replace('\\\\', '/', $moduleClass)) . " implements \\Mj\\Member\\Core\\Contracts\\ModuleInterface { public function register(): void { \$GLOBALS['__mj_test_bootstrap_module_registered'][] = self::class; } }\n"
-            . "class " . basename(str_replace('\\\\', '/', $ajaxClass)) . " implements \\Mj\\Member\\Core\\Contracts\\AjaxHandlerInterface { public function registerHooks(): void { \$GLOBALS['__mj_test_bootstrap_ajax_registered'][] = self::class; } }\n"
+            . "class " . $moduleShortClass . " implements \\Mj\\Member\\Core\\Contracts\\ModuleInterface { public function register(): void { \$GLOBALS['__mj_test_bootstrap_module_registered'][] = self::class; } }\n"
+            . "class " . $ajaxShortClass . " implements \\Mj\\Member\\Core\\Contracts\\AjaxHandlerInterface { public function registerHooks(): void { \$GLOBALS['__mj_test_bootstrap_ajax_registered'][] = self::class; } }\n"
         );
 
         add_filter('mj_member_bootstrap_modules', static function ($modules) use ($relative) {
@@ -175,6 +177,12 @@ final class BootstrapTest extends TestCase
         $property = $reflection->getProperty('loaded');
         $property->setAccessible(true);
         $property->setValue(null, false);
+    }
+
+    private function shortClassName(string $fqcn): string
+    {
+        $parts = explode('\\', $fqcn);
+        return (string) end($parts);
     }
 }
 }

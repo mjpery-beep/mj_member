@@ -251,7 +251,8 @@
                         emptyCalendar: 'Le calendrier se chargera une fois les données récupérées.',
                         suggestedTasks: 'Tâches suggérées',
                         pinnedProjects: 'Projets épinglés',
-                        weekProjectsOnly: 'Afficher uniquement les projets de la semaine',
+                        backToProjects: 'Retour aux projets',
+                        weekProjectsOnly: 'Projets de la semaine',
                         noWeeklyProjects: 'Aucun projet encodé cette semaine.',
                         projectPlaceholder: 'Ajouter un projet…',
                         addProjectAction: 'Ajouter',
@@ -287,7 +288,16 @@
                         weekDifference: 'Différence semaine',
                         cumulativeDifference: 'Solde cumulé',
                         hoursToRecover: 'à récupérer',
-                        hoursExtra: 'en plus'
+                        hoursExtra: 'en plus',
+                        mobileDaysViewLabel: 'Vue',
+                        mobileDaysCountOne: '1 jour',
+                        mobileDaysCountTwo: '2 jours',
+                        mobileDaysCountThree: '3 jours',
+                        mobileDaysCountFour: '4 jours',
+                        mobileDaysCountFive: '5 jours',
+                        mobileTabFavorites: 'Favoris',
+                        mobileTabEncodeSlot: 'Encoder une nouvelle plage',
+                        mobileFavoritesEmpty: 'Aucun favori disponible.'
                     }, config.labels && typeof config.labels === 'object' ? config.labels : {});
                     config.capabilities = Object.assign({
                         canManage: false
@@ -559,7 +569,7 @@
 
                 var HOUR_MARKS = buildHourMarks();
                 var NO_PROJECT_KEY = '__mj_hour_encode_no_project__';
-                var MOBILE_BREAKPOINT_QUERY = '(max-width: 900px)';
+                var MOBILE_BREAKPOINT_QUERY = '(max-width: 800px)';
 
                 var HAS_STRING_NORMALIZE = typeof String.prototype.normalize === 'function';
 
@@ -1332,7 +1342,7 @@
                     }
 
                     var dayFormatter = getFormatter(locale, { weekday: 'short' });
-                    var dateFormatter = getFormatter(locale, { day: '2-digit', month: 'short' });
+                    var dateFormatter = getFormatter(locale, { day: '2-digit', month: 'long' });
                     var totals = computeEntryTotals(entries);
                     var days = [];
                     var totalMinutes = 0;
@@ -1491,10 +1501,25 @@
                         if (!selection) {
                             return null;
                         }
+                        var isMobileLayout = Boolean(props.isMobileLayout);
+                        var projectDrawerOpenState = hooks.useState(false);
+                        var isProjectDrawerOpen = projectDrawerOpenState[0];
+                        var setProjectDrawerOpen = projectDrawerOpenState[1];
+                        var mobileProjectQueryState = hooks.useState(selection.formProject || '');
+                        var mobileProjectQuery = mobileProjectQueryState[0];
+                        var setMobileProjectQuery = mobileProjectQueryState[1];
+                        var selectionPanelTabState = hooks.useState('form');
+                        var selectionPanelTab = selectionPanelTabState[0];
+                        var setSelectionPanelTab = selectionPanelTabState[1];
                         var labels = props.labels || {};
                         var isEditing = Boolean(selection.isEditing);
                         var canDelete = isEditing && typeof props.onDelete === 'function';
                         var canDuplicate = isEditing && typeof props.onDuplicate === 'function';
+                        var favorites = props.favorites || {};
+                        var currentProjectKey = ensureProjectKey(selection.formProject || '');
+                        var currentTaskName = normalizeProjectValue(selection.formTask || '');
+                        var canToggleFavorite = isEditing && currentProjectKey !== NO_PROJECT_KEY && currentTaskName !== '' && typeof props.onToggleFavorite === 'function';
+                        var isCurrentTaskFavorite = canToggleFavorite && Boolean(favorites[currentProjectKey] && favorites[currentProjectKey][currentTaskName]);
                         var title = isEditing ? (labels.selectionEditTitle || labels.selectionTitle) : labels.selectionTitle;
                         var primaryLabel = isEditing ? (labels.selectionUpdate || labels.selectionConfirm) : labels.selectionConfirm;
                         var taskSuggestions = Array.isArray(props.taskSuggestions) ? props.taskSuggestions : [];
@@ -1514,10 +1539,66 @@
                             return normalizeSearchValue(project).indexOf(projectQuery) === 0;
                         });
                         var displayedProjectSuggestions = projectQuery === '' ? filteredProjectSuggestions : uniqueStrings(filteredProjectSuggestions);
+                        var normalizedProjectOptions = uniqueStrings(allProjectOptions.map(function(project) {
+                            return normalizeProjectValue(project);
+                        }).filter(Boolean));
+                        var quickProjectSuggestions = uniqueStrings(projectSuggestions.map(function(project) {
+                            return normalizeProjectValue(project);
+                        }).filter(Boolean)).filter(function(project) {
+                            return project !== normalizeProjectValue(selection.formProject || '');
+                        }).slice(0, 4);
+                        var mobileProjectSearch = normalizeSearchValue(mobileProjectQuery);
+                        var mobileProjectDraft = normalizeProjectValue(mobileProjectQuery);
+                        var mobileProjectDraftSearch = normalizeSearchValue(mobileProjectDraft);
+                        var mobileProjectPool = mobileProjectSearch === '' ? projectSuggestions : allProjectOptions;
+                        var mobileDisplayedProjectSuggestions = uniqueStrings(mobileProjectPool.filter(function(project) {
+                            if (!isString(project)) {
+                                return false;
+                            }
+                            if (mobileProjectSearch === '') {
+                                return true;
+                            }
+                            return normalizeSearchValue(project).indexOf(mobileProjectSearch) === 0;
+                        }));
+                        var displayedDrawerProjects = normalizedProjectOptions.filter(function(project) {
+                            if (mobileProjectSearch === '') {
+                                return true;
+                            }
+                            return normalizeSearchValue(project).indexOf(mobileProjectSearch) !== -1;
+                        });
+                        var canCreateProjectFromMobileQuery = mobileProjectDraft !== '' && !normalizedProjectOptions.some(function(project) {
+                            return normalizeSearchValue(project) === mobileProjectDraftSearch;
+                        });
                         var taskQuery = normalizeSearchValue(selection.formTask);
                         var displayedTaskSuggestions = taskQuery === '' ? taskSuggestions : taskSuggestions.filter(function(task) {
                             return normalizeSearchValue(task).indexOf(taskQuery) === 0;
                         });
+                        var favoriteItems = Array.isArray(props.favoriteItems) ? props.favoriteItems : [];
+                        var showFavoritesTab = isMobileLayout && selectionPanelTab === 'favorites';
+                        var showFormTab = !isMobileLayout || selectionPanelTab === 'form';
+                        var showFavoritesPanel = (!isMobileLayout && favoriteItems.length > 0) || showFavoritesTab;
+
+                        hooks.useEffect(function() {
+                            if (!isMobileLayout && isProjectDrawerOpen) {
+                                setProjectDrawerOpen(false);
+                            }
+                        }, [isMobileLayout, isProjectDrawerOpen]);
+
+                        hooks.useEffect(function() {
+                            if (!isMobileLayout && selectionPanelTab !== 'form') {
+                                setSelectionPanelTab('form');
+                            }
+                        }, [isMobileLayout, selectionPanelTab]);
+
+                        hooks.useEffect(function() {
+                            setMobileProjectQuery(selection.formProject || '');
+                        }, [selection.id, selection.formProject]);
+
+                        function handleProjectSelection(project) {
+                            props.onChange('formProject', project);
+                            setProjectDrawerOpen(false);
+                            setMobileProjectQuery(project || '');
+                        }
 
                         return h('form', {
                             className: 'mj-hour-encode-app__card mj-hour-encode-app__card--selection',
@@ -1526,38 +1607,186 @@
                                 props.onSubmit();
                             }
                         }, [
-                            h('h2', null, title),
-                            labels.selectionDescription ? h('p', { className: 'mj-hour-encode-app__selection-description' }, labels.selectionDescription) : null,
-                            h('div', { className: 'mj-hour-encode-app__field' }, [
-                                h('label', { htmlFor: selection.id + '-project' }, labels.selectionProjectLabel),
-                                h('input', {
-                                    id: selection.id + '-project',
-                                    type: 'text',
-                                    value: selection.formProject,
-                                    placeholder: labels.projectPlaceholder || '',
-                                    onInput: function(event) {
-                                        props.onChange('formProject', event.target.value || '');
-                                    }
-                                }),
-                                displayedProjectSuggestions.length > 0 ? h('div', { className: 'mj-hour-encode-app__selection-suggestions' }, displayedProjectSuggestions.map(function(project) {
-                                    var chipColor = projectColorMap[project] || '';
-                                    return h('button', {
-                                        key: project,
+                            h('div', { className: 'mj-hour-encode-app__selection-header' }, [
+                                h('h2', { className: 'mj-hour-encode-app__selection-title' }, title),
+                                isEditing ? h('div', { className: 'mj-hour-encode-app__selection-favorite-row' }, [
+                                    h('button', {
                                         type: 'button',
-                                        className: 'mj-hour-encode-app__chip mj-hour-encode-app__chip--inline',
-                                        onClick: function() {
-                                            props.onChange('formProject', project);
+                                        className: 'mj-hour-encode-app__task-fav-btn' + (isCurrentTaskFavorite ? ' is-favorite' : ''),
+                                        disabled: !canToggleFavorite,
+                                        'aria-label': isCurrentTaskFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
+                                        title: isCurrentTaskFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
+                                        onClick: function(event) {
+                                            event.preventDefault();
+                                            if (canToggleFavorite) {
+                                                props.onToggleFavorite(currentProjectKey, currentTaskName);
+                                            }
+                                        }
+                                    }, h('svg', {
+                                        width: '14',
+                                        height: '14',
+                                        viewBox: '0 0 24 24',
+                                        fill: isCurrentTaskFavorite ? 'currentColor' : 'none',
+                                        stroke: 'currentColor',
+                                        strokeWidth: '2',
+                                        strokeLinecap: 'round',
+                                        strokeLinejoin: 'round'
+                                    }, [
+                                        h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' })
+                                    ]))
+                                ]) : null
+                            ]),
+                            isMobileLayout ? h('div', {
+                                className: 'mj-hour-encode-app__selection-tabs',
+                                role: 'tablist',
+                                'aria-label': labels.mobileTabEncodeSlot || 'Encoder une nouvelle plage'
+                            }, [
+                                h('button', {
+                                    type: 'button',
+                                    role: 'tab',
+                                    className: 'mj-hour-encode-app__selection-tab' + (selectionPanelTab === 'form' ? ' is-active' : ''),
+                                    'aria-selected': selectionPanelTab === 'form' ? 'true' : 'false',
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        setSelectionPanelTab('form');
+                                    }
+                                }, labels.mobileTabEncodeSlot || 'Encoder une nouvelle plage'),
+                                h('button', {
+                                    type: 'button',
+                                    role: 'tab',
+                                    className: 'mj-hour-encode-app__selection-tab' + (selectionPanelTab === 'favorites' ? ' is-active' : ''),
+                                    'aria-selected': selectionPanelTab === 'favorites' ? 'true' : 'false',
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        setSelectionPanelTab('favorites');
+                                    }
+                                }, labels.mobileTabFavorites || 'Favoris')
+                            ]) : null,
+                            showFavoritesPanel ? h('div', {
+                                className: 'mj-hour-encode-calendar__quick-favs mj-hour-encode-calendar__quick-favs--in-selection'
+                            }, favoriteItems.length > 0 ? favoriteItems.map(function(favItem, favIndex) {
+                                return h('div', {
+                                    key: 'selection-fav-' + favIndex,
+                                    className: 'mj-hour-encode-calendar__quick-fav-row'
+                                }, [
+                                    h('button', {
+                                        key: 'submit',
+                                        type: 'button',
+                                        className: 'mj-hour-encode-calendar__quick-fav-item',
+                                        title: favItem.projectLabel + ' \u203A ' + favItem.taskName,
+                                        onClick: function(event) {
+                                            event.preventDefault();
+                                            if (typeof props.onFavoriteQuickSubmit === 'function') {
+                                                props.onFavoriteQuickSubmit(favItem);
+                                                setSelectionPanelTab('form');
+                                            }
                                         }
                                     }, [
-                                        chipColor ? h('span', {
-                                            className: 'mj-hour-encode-app__chip-color-dot',
-                                            style: { backgroundColor: chipColor }
-                                        }) : null,
-                                        project
-                                    ]);
-                                })) : null
-                            ]),
-                            h('div', { className: 'mj-hour-encode-app__field' }, [
+                                        favItem.projectColor
+                                            ? h('span', {
+                                                key: 'dot',
+                                                className: 'mj-hour-encode-calendar__quick-fav-dot',
+                                                style: { backgroundColor: favItem.projectColor }
+                                            })
+                                            : h('span', { key: 'star', className: 'mj-hour-encode-calendar__quick-fav-star' }, '\u2B50'),
+                                        h('span', { key: 'label', className: 'mj-hour-encode-calendar__quick-fav-label' }, [
+                                            h('span', { key: 'project', className: 'mj-hour-encode-calendar__quick-fav-project' }, favItem.projectLabel),
+                                            h('span', { key: 'task', className: 'mj-hour-encode-calendar__quick-fav-task' }, favItem.taskName)
+                                        ])
+                                    ]),
+                                    typeof props.onToggleFavorite === 'function'
+                                        ? h('button', {
+                                            key: 'remove',
+                                            type: 'button',
+                                            className: 'mj-hour-encode-calendar__quick-fav-remove',
+                                            title: 'Retirer des favoris',
+                                            'aria-label': 'Retirer des favoris',
+                                            onClick: function(event) {
+                                                event.preventDefault();
+                                                props.onToggleFavorite(favItem.projectKey, favItem.taskName);
+                                            }
+                                        }, '\u00D7')
+                                        : null
+                                ]);
+                            }) : h('p', { className: 'mj-hour-encode-app__helper-text' }, labels.mobileFavoritesEmpty || 'Aucun favori disponible.')) : null,
+                            labels.selectionDescription ? h('p', { className: 'mj-hour-encode-app__selection-description' }, labels.selectionDescription) : null,
+                            showFormTab ? h('div', { className: 'mj-hour-encode-app__field' }, [
+                                h('label', { htmlFor: selection.id + '-project' + (isMobileLayout ? '-trigger' : '') }, labels.selectionProjectLabel),
+                                isMobileLayout ? h('div', { className: 'mj-hour-encode-app__mobile-project-picker' }, [
+                                    h('input', {
+                                        id: selection.id + '-project',
+                                        type: 'text',
+                                        value: mobileProjectQuery,
+                                        placeholder: labels.projectPlaceholder || labels.projectSearchPlaceholder || '',
+                                        onInput: function(event) {
+                                            var nextValue = event.target.value || '';
+                                            setMobileProjectQuery(nextValue);
+                                            props.onChange('formProject', nextValue);
+                                        }
+                                    }),
+                                    mobileProjectSearch !== '' ? (mobileDisplayedProjectSuggestions.length > 0 ? h('div', { className: 'mj-hour-encode-app__selection-suggestions mj-hour-encode-app__selection-suggestions--mobile-projects' }, mobileDisplayedProjectSuggestions.slice(0, 6).map(function(project) {
+                                        var chipColor = projectColorMap[project] || '';
+                                        return h('button', {
+                                            key: project,
+                                            type: 'button',
+                                            className: 'mj-hour-encode-app__chip mj-hour-encode-app__chip--inline',
+                                            onClick: function() {
+                                                handleProjectSelection(project);
+                                            }
+                                        }, [
+                                            chipColor ? h('span', {
+                                                className: 'mj-hour-encode-app__chip-color-dot',
+                                                style: { backgroundColor: chipColor }
+                                            }) : null,
+                                            project
+                                        ]);
+                                    })) : h('p', { className: 'mj-hour-encode-app__helper-text' }, labels.projectCreateHint || 'Aucun projet existant, ce nom créera un nouveau projet.')) : (quickProjectSuggestions.length > 0 ? h('div', { className: 'mj-hour-encode-app__selection-suggestions mj-hour-encode-app__selection-suggestions--mobile-projects' }, quickProjectSuggestions.map(function(project) {
+                                        var chipColor = projectColorMap[project] || '';
+                                        return h('button', {
+                                            key: 'quick-' + project,
+                                            type: 'button',
+                                            className: 'mj-hour-encode-app__chip mj-hour-encode-app__chip--inline',
+                                            onClick: function() {
+                                                handleProjectSelection(project);
+                                            }
+                                        }, [
+                                            chipColor ? h('span', {
+                                                className: 'mj-hour-encode-app__chip-color-dot',
+                                                style: { backgroundColor: chipColor }
+                                            }) : null,
+                                            project
+                                        ]);
+                                    })) : null)
+                                ]) : [
+                                    h('input', {
+                                        id: selection.id + '-project',
+                                        type: 'text',
+                                        value: selection.formProject,
+                                        placeholder: labels.projectPlaceholder || '',
+                                        onInput: function(event) {
+                                            props.onChange('formProject', event.target.value || '');
+                                        }
+                                    }),
+                                    displayedProjectSuggestions.length > 0 ? h('div', { className: 'mj-hour-encode-app__selection-suggestions' }, displayedProjectSuggestions.map(function(project) {
+                                        var chipColor = projectColorMap[project] || '';
+                                        return h('button', {
+                                            key: project,
+                                            type: 'button',
+                                            className: 'mj-hour-encode-app__chip mj-hour-encode-app__chip--inline',
+                                            onClick: function() {
+                                                props.onChange('formProject', project);
+                                            }
+                                        }, [
+                                            chipColor ? h('span', {
+                                                className: 'mj-hour-encode-app__chip-color-dot',
+                                                style: { backgroundColor: chipColor }
+                                            }) : null,
+                                            project
+                                        ]);
+                                    })) : null
+                                ]
+                            ]) : null,
+                            showFormTab ? h('div', { className: 'mj-hour-encode-app__field' }, [
                                 h('label', { htmlFor: selection.id + '-task' }, labels.selectionTaskLabel),
                                 h('input', {
                                     id: selection.id + '-task',
@@ -1579,8 +1808,8 @@
                                     }, task);
                                 })) : null,
                                 taskSuggestionsMessage ? h('p', { className: 'mj-hour-encode-app__helper-text' }, taskSuggestionsMessage) : null
-                            ]),
-                            h('div', { className: 'mj-hour-encode-app__field-row' }, [
+                            ]) : null,
+                            showFormTab ? h('div', { className: 'mj-hour-encode-app__field-row' }, [
                                 h('div', { className: 'mj-hour-encode-app__field mj-hour-encode-app__field--time' }, [
                                     h('label', { htmlFor: selection.id + '-start' }, labels.selectionStartLabel),
                                     h('input', {
@@ -1609,9 +1838,9 @@
                                         }
                                     })
                                 ])
-                            ]),
-                            selection.error ? h('p', { className: 'mj-hour-encode-app__selection-error' }, selection.error) : null,
-                            h('div', { className: 'mj-hour-encode-app__selection-actions' }, [
+                            ]) : null,
+                            showFormTab && selection.error ? h('p', { className: 'mj-hour-encode-app__selection-error' }, selection.error) : null,
+                            showFormTab ? h('div', { className: 'mj-hour-encode-app__selection-actions' }, [
                                 canDelete ? h('button', {
                                     type: 'button',
                                     className: 'mj-hour-encode-app__button mj-hour-encode-app__button--danger mj-hour-encode-app__selection-delete',
@@ -1640,7 +1869,7 @@
                                         props.onDuplicate();
                                     }
                                 }, labels.selectionDuplicate || 'Dupliquer sur le créneau suivant') : null
-                            ])
+                            ]) : null
                         ]);
                     }
 
@@ -1650,6 +1879,7 @@
                         var initialScrollApplied = hooks.useRef(false);
                         var dragStateRef = hooks.useRef(null);
                         var entryDragRef = hooks.useRef(null);
+                        var selectionDragRef = hooks.useRef(null);
                         var dayRefsRef = hooks.useRef(Object.create(null));
                         var entryPreviewState = hooks.useState(null);
                         var entryPreview = entryPreviewState[0];
@@ -2147,6 +2377,191 @@
                                 }
                             }
                         }
+
+                        function handleSelectionPointerDown(event, mode) {
+                            if (!props.selectedSlot || !props.onSlotSelect) {
+                                return;
+                            }
+                            if ((event.button !== undefined && event.button !== 0) || event.isPrimary === false) {
+                                return;
+                            }
+                            var selected = props.selectedSlot;
+                            var day = selected && selected.dayIso ? daysByIso[selected.dayIso] : null;
+                            if (!day) {
+                                return;
+                            }
+                            if (!selected.position || !Number.isFinite(selected.position.top) || !Number.isFinite(selected.position.height)) {
+                                return;
+                            }
+                            if (typeof event.preventDefault === 'function') {
+                                event.preventDefault();
+                            }
+                            if (typeof event.stopPropagation === 'function') {
+                                event.stopPropagation();
+                            }
+
+                            var startMinutes = clamp(rangeStart + Math.round(selected.position.top * MINUTES_PER_PIXEL), rangeStart, rangeEnd);
+                            var duration = Math.max(Math.round(selected.position.height * MINUTES_PER_PIXEL), SLOT_STEP_MINUTES);
+                            var endMinutes = clamp(startMinutes + duration, rangeStart, rangeEnd);
+                            if (endMinutes <= startMinutes) {
+                                endMinutes = Math.min(rangeEnd, startMinutes + SLOT_STEP_MINUTES);
+                            }
+
+                            var offsetMinutes = 0;
+                            if (mode === 'move') {
+                                var selectionRect = event.currentTarget && typeof event.currentTarget.getBoundingClientRect === 'function'
+                                    ? event.currentTarget.getBoundingClientRect()
+                                    : null;
+                                if (selectionRect) {
+                                    var offsetPixels = event.clientY - selectionRect.top;
+                                    if (!Number.isFinite(offsetPixels)) {
+                                        offsetPixels = 0;
+                                    }
+                                    if (offsetPixels < 0) {
+                                        offsetPixels = 0;
+                                    }
+                                    if (offsetPixels > selectionRect.height) {
+                                        offsetPixels = selectionRect.height;
+                                    }
+                                    offsetMinutes = Math.round(offsetPixels * MINUTES_PER_PIXEL);
+                                }
+                            }
+
+                            selectionDragRef.current = {
+                                pointerId: event.pointerId,
+                                mode: mode,
+                                slotId: selected.id || ('selection-' + day.iso),
+                                dayIso: day.iso,
+                                activeDayIso: day.iso,
+                                day: day,
+                                startMinutes: startMinutes,
+                                endMinutes: endMinutes,
+                                duration: Math.max(endMinutes - startMinutes, SLOT_STEP_MINUTES),
+                                offsetMinutes: offsetMinutes,
+                                captureTarget: event.currentTarget || null,
+                                lastSlot: null
+                            };
+
+                            if (selectionDragRef.current.captureTarget && typeof selectionDragRef.current.captureTarget.setPointerCapture === 'function') {
+                                try {
+                                    selectionDragRef.current.captureTarget.setPointerCapture(event.pointerId);
+                                } catch (captureError) {
+                                    // ignore capture errors
+                                }
+                            }
+                        }
+
+                        function updateSelectionDrag(event) {
+                            var drag = selectionDragRef.current;
+                            if (!drag || drag.pointerId !== event.pointerId) {
+                                return;
+                            }
+                            if (typeof event.preventDefault === 'function') {
+                                event.preventDefault();
+                            }
+                            if (typeof event.stopPropagation === 'function') {
+                                event.stopPropagation();
+                            }
+
+                            var pointerMeta = resolvePointerDay(event.clientX, drag.activeDayIso || drag.dayIso);
+                            if (!pointerMeta) {
+                                return;
+                            }
+                            var day = daysByIso[pointerMeta.iso] || drag.day;
+                            if (!day) {
+                                return;
+                            }
+                            var pointerMinutes = pointerMinutesForRect(pointerMeta.rect, event.clientY);
+                            if (pointerMinutes === null) {
+                                return;
+                            }
+
+                            var candidateStart = drag.startMinutes;
+                            var candidateEnd = drag.endMinutes;
+                            if (drag.mode === 'move') {
+                                var maxStart = Math.max(rangeStart, rangeEnd - drag.duration);
+                                candidateStart = clamp(pointerMinutes - drag.offsetMinutes, rangeStart, maxStart);
+                                candidateEnd = candidateStart + drag.duration;
+                            } else if (drag.mode === 'resize-start') {
+                                candidateStart = pointerMinutes;
+                                candidateEnd = drag.endMinutes;
+                            } else if (drag.mode === 'resize-end') {
+                                candidateStart = drag.startMinutes;
+                                candidateEnd = pointerMinutes;
+                            }
+
+                            var slot = buildSlot(
+                                day,
+                                drag.slotId,
+                                candidateStart,
+                                candidateEnd,
+                                true,
+                                null,
+                                drag.mode === 'move' ? { lockDuration: true } : null
+                            );
+                            if (!slot) {
+                                return;
+                            }
+
+                            drag.day = day;
+                            drag.dayIso = day.iso;
+                            drag.activeDayIso = day.iso;
+                            drag.lastSlot = slot;
+                            if (slot.position) {
+                                drag.startMinutes = clamp(rangeStart + Math.round(slot.position.top * MINUTES_PER_PIXEL), rangeStart, rangeEnd);
+                                drag.endMinutes = clamp(drag.startMinutes + slot.durationMinutes, rangeStart, rangeEnd);
+                            }
+                            drag.duration = Math.max(drag.endMinutes - drag.startMinutes, SLOT_STEP_MINUTES);
+
+                            props.onSlotSelect(slot);
+                        }
+
+                        function finalizeSelectionDrag(event) {
+                            var drag = selectionDragRef.current;
+                            if (!drag || drag.pointerId !== event.pointerId) {
+                                return;
+                            }
+                            selectionDragRef.current = null;
+                            if (drag.captureTarget && typeof drag.captureTarget.releasePointerCapture === 'function') {
+                                try {
+                                    drag.captureTarget.releasePointerCapture(drag.pointerId);
+                                } catch (releaseError) {
+                                    // ignore release errors
+                                }
+                            }
+                            if (typeof event.preventDefault === 'function') {
+                                event.preventDefault();
+                            }
+                            if (typeof event.stopPropagation === 'function') {
+                                event.stopPropagation();
+                            }
+                        }
+
+                        hooks.useEffect(function() {
+                            if (typeof window === 'undefined') {
+                                return function() {};
+                            }
+                            function handleWindowPointerMove(event) {
+                                if (!selectionDragRef.current) {
+                                    return;
+                                }
+                                updateSelectionDrag(event);
+                            }
+                            function handleWindowPointerUp(event) {
+                                if (!selectionDragRef.current) {
+                                    return;
+                                }
+                                finalizeSelectionDrag(event);
+                            }
+                            window.addEventListener('pointermove', handleWindowPointerMove, { passive: false });
+                            window.addEventListener('pointerup', handleWindowPointerUp, { passive: false });
+                            window.addEventListener('pointercancel', handleWindowPointerUp, { passive: false });
+                            return function() {
+                                window.removeEventListener('pointermove', handleWindowPointerMove);
+                                window.removeEventListener('pointerup', handleWindowPointerUp);
+                                window.removeEventListener('pointercancel', handleWindowPointerUp);
+                            };
+                        });
 
                         function handleEntryPointerDown(event, day, eventItem, mode) {
                             if (typeof event.stopPropagation === 'function') {
@@ -2745,7 +3160,11 @@
                                     style: {
                                         top: props.selectedSlot.position.top + 'px',
                                         height: props.selectedSlot.position.height + 'px'
-                                    }
+                                    },
+                                    onPointerDown: function(ev) {
+                                        handleSelectionPointerDown(ev, 'move');
+                                    },
+                                    onLostPointerCapture: finalizeSelectionDrag
                                 };
                                 if (props.selectedSlot.startTime) {
                                     selectionAttrs['data-start-time'] = props.selectedSlot.startTime;
@@ -2779,60 +3198,37 @@
                                     }
                                 }, '\u00D7'));
 
-                                // Quick-encode favorites panel
-                                if (Array.isArray(props.favoriteItems) && props.favoriteItems.length > 0) {
-                                    selectionChildren.push(h('div', {
-                                        key: 'quick-favs',
-                                        className: 'mj-hour-encode-calendar__quick-favs',
-                                        onPointerDown: function(ev) { ev.stopPropagation(); },
-                                        onTouchStart: function(ev) { ev.stopPropagation(); }
-                                    }, props.favoriteItems.map(function(favItem, favIndex) {
-                                        return h('div', {
-                                            key: favIndex,
-                                            className: 'mj-hour-encode-calendar__quick-fav-row'
-                                        }, [
-                                            h('button', {
-                                                key: 'submit',
-                                                type: 'button',
-                                                className: 'mj-hour-encode-calendar__quick-fav-item',
-                                                title: favItem.projectLabel + ' \u203A ' + favItem.taskName,
-                                                onClick: function(event) {
-                                                    event.preventDefault();
-                                                    event.stopPropagation();
-                                                    if (typeof props.onFavoriteQuickSubmit === 'function') {
-                                                        props.onFavoriteQuickSubmit(favItem);
-                                                    }
-                                                }
-                                            }, [
-                                                favItem.projectColor
-                                                    ? h('span', {
-                                                        key: 'dot',
-                                                        className: 'mj-hour-encode-calendar__quick-fav-dot',
-                                                        style: { backgroundColor: favItem.projectColor }
-                                                    })
-                                                    : h('span', { key: 'star', className: 'mj-hour-encode-calendar__quick-fav-star' }, '\u2B50'),
-                                                h('span', { key: 'label', className: 'mj-hour-encode-calendar__quick-fav-label' }, [
-                                                    h('span', { key: 'project', className: 'mj-hour-encode-calendar__quick-fav-project' }, favItem.projectLabel),
-                                                    h('span', { key: 'task', className: 'mj-hour-encode-calendar__quick-fav-task' }, favItem.taskName)
-                                                ])
-                                            ]),
-                                            typeof props.onToggleFavorite === 'function'
-                                                ? h('button', {
-                                                    key: 'remove',
-                                                    type: 'button',
-                                                    className: 'mj-hour-encode-calendar__quick-fav-remove',
-                                                    title: 'Retirer des favoris',
-                                                    'aria-label': 'Retirer des favoris',
-                                                    onClick: function(event) {
-                                                        event.preventDefault();
-                                                        event.stopPropagation();
-                                                        props.onToggleFavorite(favItem.projectKey, favItem.taskName);
-                                                    }
-                                                }, '\u00D7')
-                                                : null
-                                        ]);
-                                    })));
-                                }
+                                // Resize handle (top) for selected slot
+                                selectionChildren.push(h('span', {
+                                    key: 'selection-handle-top',
+                                    className: 'mj-hour-encode-calendar__event-handle mj-hour-encode-calendar__event-handle--top',
+                                    role: 'presentation',
+                                    'aria-hidden': 'true',
+                                    onPointerDown: function(ev) {
+                                        handleSelectionPointerDown(ev, 'resize-start');
+                                    },
+                                    onTouchStart: function(ev) {
+                                        if (ev && typeof ev.stopPropagation === 'function') {
+                                            ev.stopPropagation();
+                                        }
+                                    }
+                                }));
+
+                                // Resize handle (bottom) for selected slot
+                                selectionChildren.push(h('span', {
+                                    key: 'selection-handle-bottom',
+                                    className: 'mj-hour-encode-calendar__event-handle mj-hour-encode-calendar__event-handle--bottom',
+                                    role: 'presentation',
+                                    'aria-hidden': 'true',
+                                    onPointerDown: function(ev) {
+                                        handleSelectionPointerDown(ev, 'resize-end');
+                                    },
+                                    onTouchStart: function(ev) {
+                                        if (ev && typeof ev.stopPropagation === 'function') {
+                                            ev.stopPropagation();
+                                        }
+                                    }
+                                }));
 
                                 canvasChildren.push(h('div', selectionAttrs, selectionChildren));
                             }
@@ -2930,6 +3326,16 @@
                                 }
 
                                 var entrySource = isEntry && eventItem.source && typeof eventItem.source === 'object' ? eventItem.source : null;
+                                var favoriteTasksMap = props.favorites && typeof props.favorites === 'object' ? props.favorites : Object.create(null);
+                                var entryTaskName = isEntry ? normalizeProjectValue((entrySource && entrySource.task) || eventItem.title || '') : '';
+                                var entryProjectKey = isEntry ? ensureProjectKey((entrySource && entrySource.project) || '') : NO_PROJECT_KEY;
+                                var isFavoriteEntry = isEntry
+                                    && entryProjectKey !== NO_PROJECT_KEY
+                                    && entryTaskName !== ''
+                                    && Boolean(favoriteTasksMap[entryProjectKey] && favoriteTasksMap[entryProjectKey][entryTaskName]);
+                                if (isFavoriteEntry) {
+                                    eventClass += ' is-favorite';
+                                }
 
                                 if (isEntry && props.editingEntryKey) {
                                     var thisEntryKey = getEntryKey(entrySource, eventItem.id);
@@ -3349,6 +3755,14 @@
                             }
                         }
 
+                        function handleSelectDay(dayIso, weekIso) {
+                            if (typeof props.onSelectDay === 'function' && dayIso) {
+                                props.onSelectDay(dayIso, weekIso);
+                                return;
+                            }
+                            handleSelectWeek(weekIso);
+                        }
+
                         function buildWeekLabel(weekIso) {
                             var weekDate = parseISODate(weekIso);
                             if (!weekDate) {
@@ -3392,7 +3806,7 @@
                                     title: ariaLabel,
                                     onClick: function(event) {
                                         event.preventDefault();
-                                        handleSelectWeek(week.startIso);
+                                        handleSelectDay(day.iso, week.startIso);
                                     }
                                 }, day.label);
                             });
@@ -3478,11 +3892,16 @@
                                 projectSuggestions: props.projectSuggestions,
                                 allProjectOptions: props.allProjectOptions,
                                 projectColorMap: props.projectColorMap,
+                                favorites: props.favorites,
+                                favoriteItems: props.favoriteItems,
+                                isMobileLayout: props.isMobileLayout,
                                 onChange: props.onSelectionChange,
                                 onSubmit: props.onSelectionSubmit,
                                 onCancel: props.onSelectionCancel,
                                 onDelete: props.onSelectionDelete,
-                                onDuplicate: props.onSelectionDuplicate
+                                onDuplicate: props.onSelectionDuplicate,
+                                onFavoriteQuickSubmit: props.onFavoriteQuickSubmit,
+                                onToggleFavorite: props.onToggleFavorite
                             }));
                         }
 
@@ -3912,6 +4331,16 @@
                         var showWeekOnly = weekOnlyState[0];
                         var setShowWeekOnly = weekOnlyState[1];
 
+                        var isMobileLayout = Boolean(props.isMobileLayout);
+                        var isMobileViewport = false;
+                        if (typeof window !== 'undefined' && window && typeof window.matchMedia === 'function') {
+                            isMobileViewport = window.matchMedia('(max-width: 900px)').matches;
+                        }
+                        var useSingleResourceCard = isMobileLayout || isMobileViewport;
+                        var mobileTasksViewState = hooks.useState(false);
+                        var isMobileTasksView = mobileTasksViewState[0];
+                        var setIsMobileTasksView = mobileTasksViewState[1];
+
                         // ── Favorite tasks (from parent via props) ──
                         var favorites = props.favorites || {};
 
@@ -3958,6 +4387,18 @@
                                 setShowWeekOnly(false);
                             }
                         }, [projectSummaries.length, showWeekOnly]);
+
+                        hooks.useEffect(function() {
+                            if (!useSingleResourceCard && isMobileTasksView) {
+                                setIsMobileTasksView(false);
+                            }
+                        }, [useSingleResourceCard, isMobileTasksView]);
+
+                        hooks.useEffect(function() {
+                            if (useSingleResourceCard && isMobileTasksView && !activeProject) {
+                                setIsMobileTasksView(false);
+                            }
+                        }, [useSingleResourceCard, isMobileTasksView, activeProject ? activeProject.key : null]);
 
                         var visibleProjectSummaries = hooks.useMemo(function() {
                             var list = projectSummaries.slice().filter(function(item) {
@@ -4209,111 +4650,132 @@
                         var hasVisibleProjects = visibleProjectSummaries.some(function(item) {
                             return Boolean(item);
                         });
+                        var shouldShowProjectsCard = !useSingleResourceCard || !isMobileTasksView;
+                        var shouldShowTasksCard = Boolean(activeProject) && (!useSingleResourceCard || isMobileTasksView);
                         var emptyProjectsMessage = showWeekOnly && hasAnyProjects
                             ? (props.labels.noWeeklyProjects || props.labels.noProjects)
                             : props.labels.noProjects;
 
-                        cards.push(h('div', { key: 'projects', className: 'mj-hour-encode-app__card' }, [
-                            h('div', { className: 'mj-hour-encode-app__card-heading' }, [
-                                h('h2', null, props.labels.pinnedProjects),
-                                h('label', {
-                                    className: 'mj-hour-encode-app__card-toggle' + (!hasAnyProjects ? ' is-disabled' : ''),
-                                    htmlFor: weekFilterId,
-                                    'aria-disabled': hasAnyProjects ? 'false' : 'true'
-                                }, [
-                                    h('input', {
-                                        id: weekFilterId,
-                                        type: 'checkbox',
-                                        className: 'mj-hour-encode-app__card-toggle-input',
-                                        checked: showWeekOnly,
-                                        disabled: !hasAnyProjects,
-                                        onChange: function(event) {
-                                            var next = Boolean(event && event.target ? event.target.checked : false);
-                                            setShowWeekOnly(next);
-                                        }
-                                    }),
-                                    h('span', null, props.labels.weekProjectsOnly || 'Afficher uniquement les projets de la semaine')
-                                ])
-                            ]),
-                            hasVisibleProjects
-                                ? h('div', { className: 'mj-hour-encode-app__projects-list' }, visibleProjectSummaries.map(function(summary) {
-                                    if (!summary) {
-                                        return null;
-                                    }
-                                    var isActive = activeKey === summary.key;
-                                    var isDragging = Boolean(props.draggingEntry) || Boolean(draggingTask);
-                                    var isDropTarget = dropTargetKey === summary.key;
-                                    var isCurrentProject = activeProject && activeProject.key === summary.key;
-                                    var pillClass = 'mj-hour-encode-app__project-pill';
-                                    if (isActive) {
-                                        pillClass += ' is-active';
-                                    }
-                                    if (isDragging && !isCurrentProject) {
-                                        pillClass += ' is-drop-zone';
-                                    }
-                                    if (isDropTarget && !isCurrentProject) {
-                                        pillClass += ' is-drop-target';
-                                    }
-                                    return h('button', {
-                                        key: summary.key,
-                                        type: 'button',
-                                        className: pillClass,
-                                        'data-project-key': summary.key,
-                                        onClick: function() {
-                                            if (draggingTask) {
-                                                return;
-                                            }
-                                            if (typeof props.onProjectSelect === 'function') {
-                                                props.onProjectSelect(summary);
-                                            }
-                                        },
-                                        onPointerEnter: function() {
-                                            if ((props.draggingEntry || draggingTask) && !isCurrentProject) {
-                                                setDropTargetKey(summary.key);
-                                            }
-                                        },
-                                        onPointerLeave: function() {
-                                            if (dropTargetKey === summary.key) {
-                                                setDropTargetKey(null);
-                                            }
-                                        },
-                                        onPointerUp: function(event) {
-                                            if (draggingTask && !isCurrentProject && typeof props.onTaskMoveToProject === 'function') {
-                                                event.preventDefault();
-                                                event.stopPropagation();
-                                                props.onTaskMoveToProject(draggingTask, activeProject, summary);
-                                                setDraggingTask(null);
-                                                setDropTargetKey(null);
-                                            } else if (props.draggingEntry && typeof props.onEntryMoveToProject === 'function') {
-                                                event.preventDefault();
-                                                event.stopPropagation();
-                                                props.onEntryMoveToProject(props.draggingEntry, summary);
-                                                setDropTargetKey(null);
-                                            }
-                                        }
+                        if (shouldShowProjectsCard) {
+                            cards.push(h('div', { key: 'projects', className: 'mj-hour-encode-app__card' }, [
+                                h('div', { className: 'mj-hour-encode-app__card-heading' }, [
+                                    h('h2', null, props.labels.pinnedProjects),
+                                    h('label', {
+                                        className: 'mj-hour-encode-app__card-toggle' + (!hasAnyProjects ? ' is-disabled' : ''),
+                                        htmlFor: weekFilterId,
+                                        'aria-disabled': hasAnyProjects ? 'false' : 'true'
                                     }, [
-                                        summary.color
-                                            ? h('span', {
-                                                className: 'mj-hour-encode-app__project-pill-dot',
-                                                style: { backgroundColor: summary.color }
-                                            })
-                                            : null,
-                                        h('div', { className: 'mj-hour-encode-app__project-pill-content' }, [
-                                            h('span', { className: 'mj-hour-encode-app__project-pill-name' }, summary.label),
-                                            summary.lifetimeLabel ? h('span', { className: 'mj-hour-encode-app__project-pill-total' }, summary.lifetimeLabel) : null
-                                        ])
-                                    ]);
-                                }).filter(Boolean))
-                                : h('p', { className: 'mj-hour-encode-app__empty-text' }, emptyProjectsMessage),
-                            hasVisibleProjects && !activeKey
-                                ? h('p', { className: 'mj-hour-encode-app__helper-text' }, props.labels.selectProjectForTasks)
-                                : null
-                        ]));
+                                        h('input', {
+                                            id: weekFilterId,
+                                            type: 'checkbox',
+                                            className: 'mj-hour-encode-app__card-toggle-input',
+                                            checked: showWeekOnly,
+                                            disabled: !hasAnyProjects,
+                                            onChange: function(event) {
+                                                var next = Boolean(event && event.target ? event.target.checked : false);
+                                                setShowWeekOnly(next);
+                                            }
+                                        }),
+                                        h('span', null, props.labels.weekProjectsOnly || 'Projets de la semaine')
+                                    ])
+                                ]),
+                                hasVisibleProjects
+                                    ? h('div', { className: 'mj-hour-encode-app__projects-list' }, visibleProjectSummaries.map(function(summary) {
+                                                if (!summary) {
+                                                    return null;
+                                                }
+                                                var isActive = activeKey === summary.key;
+                                                var isDragging = Boolean(props.draggingEntry) || Boolean(draggingTask);
+                                                var isDropTarget = dropTargetKey === summary.key;
+                                                var isCurrentProject = activeProject && activeProject.key === summary.key;
+                                                var pillClass = 'mj-hour-encode-app__project-pill';
+                                                if (isActive) {
+                                                    pillClass += ' is-active';
+                                                }
+                                                if (isDragging && !isCurrentProject) {
+                                                    pillClass += ' is-drop-zone';
+                                                }
+                                                if (isDropTarget && !isCurrentProject) {
+                                                    pillClass += ' is-drop-target';
+                                                }
+                                                return h('button', {
+                                                    key: summary.key,
+                                                    type: 'button',
+                                                    className: pillClass,
+                                                    'data-project-key': summary.key,
+                                                    onClick: function() {
+                                                        if (draggingTask) {
+                                                            return;
+                                                        }
+                                                        if (typeof props.onProjectSelect === 'function') {
+                                                            props.onProjectSelect(summary);
+                                                        }
+                                                        if (useSingleResourceCard) {
+                                                            setIsMobileTasksView(true);
+                                                        }
+                                                    },
+                                                    onPointerEnter: function() {
+                                                        if ((props.draggingEntry || draggingTask) && !isCurrentProject) {
+                                                            setDropTargetKey(summary.key);
+                                                        }
+                                                    },
+                                                    onPointerLeave: function() {
+                                                        if (dropTargetKey === summary.key) {
+                                                            setDropTargetKey(null);
+                                                        }
+                                                    },
+                                                    onPointerUp: function(event) {
+                                                        if (draggingTask && !isCurrentProject && typeof props.onTaskMoveToProject === 'function') {
+                                                            event.preventDefault();
+                                                            event.stopPropagation();
+                                                            props.onTaskMoveToProject(draggingTask, activeProject, summary);
+                                                            setDraggingTask(null);
+                                                            setDropTargetKey(null);
+                                                        } else if (props.draggingEntry && typeof props.onEntryMoveToProject === 'function') {
+                                                            event.preventDefault();
+                                                            event.stopPropagation();
+                                                            props.onEntryMoveToProject(props.draggingEntry, summary);
+                                                            setDropTargetKey(null);
+                                                        }
+                                                    }
+                                                }, [
+                                                    summary.color
+                                                        ? h('span', {
+                                                            className: 'mj-hour-encode-app__project-pill-dot',
+                                                            style: { backgroundColor: summary.color }
+                                                        })
+                                                        : null,
+                                                    h('div', { className: 'mj-hour-encode-app__project-pill-content' }, [
+                                                        h('span', { className: 'mj-hour-encode-app__project-pill-name' }, summary.label),
+                                                        summary.lifetimeLabel ? h('span', { className: 'mj-hour-encode-app__project-pill-total' }, summary.lifetimeLabel) : null
+                                                    ])
+                                                ]);
+                                            }).filter(Boolean))
+                                    : h('p', { className: 'mj-hour-encode-app__empty-text' }, emptyProjectsMessage),
+                                hasVisibleProjects && !activeKey
+                                    ? h('p', { className: 'mj-hour-encode-app__helper-text' }, props.labels.selectProjectForTasks)
+                                    : null
+                            ]));
+                        }
 
-                        if (activeProject) {
+                        if (shouldShowTasksCard) {
                             var tasksList = Array.isArray(activeProject.tasks) ? activeProject.tasks : [];
                             cards.push(h('div', { key: 'tasks', className: 'mj-hour-encode-app__card' }, [
-                                h('h2', null, props.labels.suggestedTasks),
+                                h('div', { className: 'mj-hour-encode-app__card-heading mj-hour-encode-app__card-heading--tasks' }, [
+                                    useSingleResourceCard
+                                        ? h('button', {
+                                            type: 'button',
+                                            className: 'mj-hour-encode-app__mobile-back-btn',
+                                            onClick: function() {
+                                                setIsMobileTasksView(false);
+                                            }
+                                        }, [
+                                            h('span', { 'aria-hidden': 'true' }, '\u2190'),
+                                            h('span', null, props.labels.backToProjects || 'Retour aux projets')
+                                        ])
+                                        : null,
+                                    h('h2', null, props.labels.suggestedTasks)
+                                ]),
                                 h('div', { className: 'mj-hour-encode-app__project-tasks-header' }, [
                                     h('div', { className: 'mj-hour-encode-app__project-tasks-header-main' }, [
                                         projectRename.editing
@@ -4744,9 +5206,21 @@
                         var isMobileLayout = mobileModeState[0];
                         var setIsMobileLayout = mobileModeState[1];
 
+                        var mobileSectionTabState = hooks.useState('encode');
+                        var mobileSectionTab = mobileSectionTabState[0];
+                        var setMobileSectionTab = mobileSectionTabState[1];
+
                         var activeMobileDayState = hooks.useState(null);
                         var activeMobileDay = activeMobileDayState[0];
                         var setActiveMobileDay = activeMobileDayState[1];
+
+                        var mobileDayCountState = hooks.useState(1);
+                        var mobileDayCount = mobileDayCountState[0];
+                        var setMobileDayCount = mobileDayCountState[1];
+
+                        var mobileDayPickerCalendarOpenState = hooks.useState(false);
+                        var isMobileDayPickerCalendarOpen = mobileDayPickerCalendarOpenState[0];
+                        var setIsMobileDayPickerCalendarOpen = mobileDayPickerCalendarOpenState[1];
 
                         var draggingEntryState = hooks.useState(null);
                         var draggingEntry = draggingEntryState[0];
@@ -5437,16 +5911,27 @@
                             if (!Array.isArray(daysList) || daysList.length === 0) {
                                 return [];
                             }
+                            var requestedCount = Number(mobileDayCount || 1);
+                            if (!Number.isFinite(requestedCount) || requestedCount < 1) {
+                                requestedCount = 1;
+                            }
+                            var clampedCount = Math.min(5, requestedCount);
+                            var maxStartIndex = Math.max(0, daysList.length - clampedCount);
+                            var startIndex = 0;
                             var targetIso = activeMobileDay;
                             if (targetIso) {
                                 for (var index = 0; index < daysList.length; index++) {
                                     if (daysList[index].iso === targetIso) {
-                                        return [daysList[index]];
+                                        startIndex = index;
+                                        break;
                                     }
                                 }
                             }
-                            return [daysList[0]];
-                        }, [calendarModel.days, isMobileLayout, activeMobileDay]);
+                            if (startIndex > maxStartIndex) {
+                                startIndex = maxStartIndex;
+                            }
+                            return daysList.slice(startIndex, startIndex + clampedCount);
+                        }, [calendarModel.days, isMobileLayout, activeMobileDay, mobileDayCount]);
 
                         var calendarHasEvents = hooks.useMemo(function() {
                             if (!isMobileLayout) {
@@ -5493,6 +5978,7 @@
                             var duration = Math.max(endMinutes - startMinutes, MIN_EVENT_HEIGHT);
                             var durationLabel = formatTotalMinutes(duration, config.labels);
                             return {
+                                id: selectedSlot.id,
                                 dayIso: selectedSlot.dayIso,
                                 position: {
                                     top: (startMinutes - rangeStart) / MINUTES_PER_PIXEL,
@@ -5616,6 +6102,20 @@
                                 return previous === selectedSlot.dayIso ? previous : selectedSlot.dayIso;
                             });
                         }, [isMobileLayout, selectedSlot ? selectedSlot.dayIso : null, setActiveMobileDay]);
+
+                        hooks.useEffect(function() {
+                            if (isMobileLayout || mobileSectionTab === 'encode') {
+                                return;
+                            }
+                            setMobileSectionTab('encode');
+                        }, [isMobileLayout, mobileSectionTab, setMobileSectionTab]);
+
+                        hooks.useEffect(function() {
+                            if (isMobileLayout || !isMobileDayPickerCalendarOpen) {
+                                return;
+                            }
+                            setIsMobileDayPickerCalendarOpen(false);
+                        }, [isMobileLayout, isMobileDayPickerCalendarOpen, setIsMobileDayPickerCalendarOpen]);
 
                         function applyPayload(payload) {
                             if (!payload || typeof payload !== 'object') {
@@ -5890,6 +6390,40 @@
                             setActiveMobileDay(function(previous) {
                                 return previous === dayIso ? previous : dayIso;
                             });
+                            setSelectedSlot(function(previous) {
+                                if (!previous || previous.isEditing || previous.dayIso === dayIso) {
+                                    return previous;
+                                }
+                                var next = Object.assign({}, previous);
+                                next.dayIso = dayIso;
+                                next.error = '';
+                                return next;
+                            });
+                        }
+
+                        function handleMobileDayStep(offset) {
+                            if (!isMobileLayout || !offset) {
+                                return;
+                            }
+                            var daysList = Array.isArray(calendarModel.days) ? calendarModel.days : [];
+                            if (daysList.length === 0) {
+                                return;
+                            }
+                            var currentIso = activeMobileDay || (daysList[0] ? daysList[0].iso : '');
+                            var currentDate = parseISODate(currentIso);
+                            if (!currentDate || !isValidDate(currentDate)) {
+                                return;
+                            }
+                            var targetDate = addDays(currentDate, offset);
+                            if (!targetDate || !isValidDate(targetDate)) {
+                                return;
+                            }
+                            var targetIso = toISODate(startOfDay(targetDate));
+                            var targetWeekIso = toISODate(startOfWeek(targetDate));
+                            if (targetWeekIso && targetWeekIso !== weekStart) {
+                                requestWeek(targetWeekIso);
+                            }
+                            handleMobileDaySelect(targetIso);
                         }
 
                         function handleProjectSelect(summary) {
@@ -5907,7 +6441,9 @@
                                 return;
                             }
 
-                            var nextKey = activeProjectKey === summary.key ? null : summary.key;
+                            var nextKey = isMobileLayout
+                                ? summary.key
+                                : (activeProjectKey === summary.key ? null : summary.key);
                             setActiveProjectKey(nextKey);
 
                             var projectValue = nextKey ? normalizeProjectValue(summary.value) : '';
@@ -5962,6 +6498,13 @@
                                 next.error = '';
                                 return next;
                             });
+                        }
+
+                        function handleResourceTaskSelect(value) {
+                            handleChipSelect(value);
+                            if (isMobileLayout) {
+                                setMobileSectionTab('encode');
+                            }
                         }
 
                         function handleFavoriteQuickSubmit(item) {
@@ -7118,39 +7661,6 @@
                             return null;
                         }
 
-                        function isRangeWithinWindows(windows, startMinutes, endMinutes) {
-                            for (var index = 0; index < windows.length; index++) {
-                                var windowRange = windows[index];
-                                if (startMinutes >= windowRange.start && endMinutes <= windowRange.end) {
-                                    return true;
-                                }
-                            }
-                            return false;
-                        }
-
-                        function findShiftedRange(dayIso, startMinutes, durationMinutes, direction, excludeSelection) {
-                            var step = SLOT_STEP_MINUTES;
-                            var safeDirection = direction < 0 ? -1 : 1;
-                            var windows = getScheduleIntervalsForDay(dayIso);
-                            var busyIntervals = getBusyIntervalsForDay(dayIso, excludeSelection);
-                            var candidateStart = Math.round(startMinutes) + (safeDirection * step);
-
-                            while (candidateStart >= HOURS_START * 60 && (candidateStart + durationMinutes) <= HOURS_END * 60) {
-                                var candidateEnd = candidateStart + durationMinutes;
-                                var fitsWindows = isRangeWithinWindows(windows, candidateStart, candidateEnd);
-                                var hasConflict = Boolean(findConflict(candidateStart, candidateEnd, busyIntervals));
-                                if (fitsWindows && !hasConflict) {
-                                    return {
-                                        start: candidateStart,
-                                        end: candidateEnd
-                                    };
-                                }
-                                candidateStart += safeDirection * step;
-                            }
-
-                            return null;
-                        }
-
                         function minutesToTimeValue(minutes) {
                             var safe = clamp(Math.round(minutes), HOURS_START * 60, HOURS_END * 60);
                             var hours = Math.floor(safe / 60);
@@ -7677,143 +8187,192 @@
                                 });
                         }
 
-                        hooks.useEffect(function() {
-                            if (typeof window === 'undefined') {
-                                return function() {};
-                            }
-
-                            function isInteractiveElement(target) {
-                                if (!target || !target.tagName) {
-                                    return false;
-                                }
-                                var tagName = String(target.tagName).toUpperCase();
-                                if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || tagName === 'BUTTON') {
-                                    return true;
-                                }
-                                if (target.isContentEditable) {
-                                    return true;
-                                }
-                                return false;
-                            }
-
-                            function shiftSelectedSlot(direction) {
-                                if (!selectedSlot || loading) {
-                                    return;
-                                }
-
-                                var dayIso = selectedSlot.dayIso;
-                                var dayDate = parseISODate(dayIso);
-                                var startMinutes = timeValueToMinutes(selectedSlot.formStart);
-                                var endMinutes = timeValueToMinutes(selectedSlot.formEnd);
-                                if (!dayDate || !Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
-                                    return;
-                                }
-
-                                if (isMidnightTimeValue(selectedSlot.formEnd) && endMinutes === 0 && startMinutes > 0) {
-                                    endMinutes = HOURS_END * 60;
-                                }
-
-                                var durationMinutes = endMinutes - startMinutes;
-                                if (durationMinutes <= 0) {
-                                    return;
-                                }
-
-                                var excludeSelection = selectedSlot.isEditing
-                                    ? {
-                                        hourId: selectedSlot.hourId || null,
-                                        entryId: selectedSlot.entryId || null
-                                    }
-                                    : null;
-
-                                var nextRange = findShiftedRange(dayIso, startMinutes, durationMinutes, direction, excludeSelection);
-                                if (!nextRange) {
-                                    setSelectedSlot(function(previous) {
-                                        if (!previous) {
-                                            return previous;
-                                        }
-                                        return Object.assign({}, previous, {
-                                            error: config.labels.selectionErrorOverlap || 'Une plage est déjà encodée sur ces horaires.'
-                                        });
-                                    });
-                                    return;
-                                }
-
-                                var nextStartDate = dateFromDayMinutes(dayDate, nextRange.start);
-                                var nextEndDate = dateFromDayMinutes(dayDate, nextRange.end);
-                                setSelectedSlot(function(previous) {
-                                    if (!previous) {
-                                        return previous;
-                                    }
-                                    return Object.assign({}, previous, {
-                                        baseStartIso: nextStartDate.toISOString(),
-                                        baseEndIso: nextEndDate.toISOString(),
-                                        durationMinutes: nextRange.end - nextRange.start,
-                                        formStart: minutesToTimeValue(nextRange.start),
-                                        formEnd: minutesToTimeValue(nextRange.end),
-                                        error: ''
-                                    });
-                                });
-                            }
-
-                            function handleKeyboardShortcuts(event) {
-                                if (!selectedSlot) {
-                                    return;
-                                }
-                                if (event.defaultPrevented) {
-                                    return;
-                                }
-                                if (isInteractiveElement(event.target)) {
-                                    return;
-                                }
-
-                                if (event.key === 'ArrowUp' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-                                    event.preventDefault();
-                                    shiftSelectedSlot(-1);
-                                    return;
-                                }
-
-                                if (event.key === 'ArrowDown' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-                                    event.preventDefault();
-                                    shiftSelectedSlot(1);
-                                    return;
-                                }
-
-                                if ((event.key === 'Delete' || event.key === 'Del') && !event.ctrlKey && !event.metaKey && !event.altKey) {
-                                    event.preventDefault();
-                                    handleSelectionDelete();
-                                    return;
-                                }
-
-                                if ((event.key === 'd' || event.key === 'D') && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
-                                    event.preventDefault();
-                                    handleSelectionDuplicate();
-                                }
-                            }
-
-                            window.addEventListener('keydown', handleKeyboardShortcuts);
-                            return function() {
-                                window.removeEventListener('keydown', handleKeyboardShortcuts);
-                            };
-                        }, [selectedSlot, loading, config.labels, handleSelectionDelete, handleSelectionDuplicate]);
-
                         var activeVisibleDayIso = visibleDays.length > 0 ? visibleDays[0].iso : null;
                         var allDaysForPicker = Array.isArray(calendarModel.days) ? calendarModel.days : [];
+                        var activeMobileDayIndex = -1;
+                        for (var activeDayIndex = 0; activeDayIndex < allDaysForPicker.length; activeDayIndex++) {
+                            if (allDaysForPicker[activeDayIndex] && allDaysForPicker[activeDayIndex].iso === activeVisibleDayIso) {
+                                activeMobileDayIndex = activeDayIndex;
+                                break;
+                            }
+                        }
+                        var activeMobileDayData = activeMobileDayIndex >= 0 ? allDaysForPicker[activeMobileDayIndex] : null;
+                        var canStepToPreviousDay = isMobileLayout && !!activeMobileDayData;
+                        var canStepToNextDay = isMobileLayout && !!activeMobileDayData;
+                        var normalizedMobileDayCount = Number(mobileDayCount || 1);
+                        if (!Number.isFinite(normalizedMobileDayCount) || normalizedMobileDayCount < 1) {
+                            normalizedMobileDayCount = 1;
+                        }
+                        normalizedMobileDayCount = Math.min(5, normalizedMobileDayCount);
+                        var mobileDayCountOptions = [
+                            { value: 1, label: config.labels.mobileDaysCountOne || '1 jour' },
+                            { value: 2, label: config.labels.mobileDaysCountTwo || '2 jours' },
+                            { value: 3, label: config.labels.mobileDaysCountThree || '3 jours' },
+                            { value: 4, label: config.labels.mobileDaysCountFour || '4 jours' },
+                            { value: 5, label: config.labels.mobileDaysCountFive || '5 jours' }
+                        ];
+                        var visibleDaysColumnCount = visibleDays.length > 0 ? visibleDays.length : 1;
+                        var visibleDaysGridStyle = {
+                            gridTemplateColumns: 'repeat(' + visibleDaysColumnCount + ', minmax(0, 1fr))'
+                        };
                         
-                        // Construire les items de statistiques avec le différentiel de la semaine
+                        var averageLabels = {
+                            week: '',
+                            month: '',
+                            year: '',
+                            lifetime: ''
+                        };
+                        var periodScopeLabels = {
+                            week: '',
+                            month: '',
+                            year: '',
+                            lifetime: ''
+                        };
+                        (function buildAverageLabels() {
+                            var referenceDate = parseISODate(weekStart);
+                            if (!referenceDate || !isValidDate(referenceDate)) {
+                                referenceDate = new Date();
+                            }
+                            var weekStartDate = startOfWeek(referenceDate);
+                            var weekEndDate = addDays(weekStartDate, 6);
+
+                            var shortDayMonthFormatter = getFormatter(config.locale, {
+                                day: '2-digit',
+                                month: 'short'
+                            });
+                            var monthFormatter = getFormatter(config.locale, {
+                                month: 'short',
+                                year: 'numeric'
+                            });
+
+                            var monthDays = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0).getDate();
+                            if (!Number.isFinite(monthDays) || monthDays <= 0) {
+                                monthDays = 30;
+                            }
+
+                            var yearStart = new Date(referenceDate.getFullYear(), 0, 1);
+                            var nextYearStart = new Date(referenceDate.getFullYear() + 1, 0, 1);
+                            var yearDays = Math.round((nextYearStart.getTime() - yearStart.getTime()) / 86400000);
+                            if (!Number.isFinite(yearDays) || yearDays <= 0) {
+                                yearDays = 365;
+                            }
+
+                            var lifetimeDays = 365;
+                            var lifetimeStartDate = null;
+                            if (Array.isArray(entries) && entries.length > 0) {
+                                var minDate = null;
+                                entries.forEach(function(entry) {
+                                    if (!entry || !entry.dayIso) {
+                                        return;
+                                    }
+                                    var entryDate = parseISODate(entry.dayIso);
+                                    if (!entryDate || !isValidDate(entryDate)) {
+                                        return;
+                                    }
+                                    if (!minDate || entryDate.getTime() < minDate.getTime()) {
+                                        minDate = entryDate;
+                                    }
+                                });
+                                if (minDate) {
+                                    lifetimeStartDate = minDate;
+                                    var nowDate = startOfDay(new Date());
+                                    var diffMs = nowDate.getTime() - startOfDay(minDate).getTime();
+                                    var computedDays = Math.floor(diffMs / 86400000) + 1;
+                                    if (Number.isFinite(computedDays) && computedDays > 0) {
+                                        lifetimeDays = computedDays;
+                                    }
+                                }
+                            }
+
+                            var weekAverage = Math.round(Number(globalAggregateTotals.weekMinutes || 0) / 7);
+                            var monthAverage = Math.round(Number(globalAggregateTotals.monthMinutes || 0) / monthDays);
+                            var yearAverage = Math.round(Number(globalAggregateTotals.yearMinutes || 0) / yearDays);
+                            var lifetimeAverage = Math.round(Number(globalAggregateTotals.lifetimeMinutes || 0) / lifetimeDays);
+
+                            averageLabels.week = 'Moy/j : ' + formatTotalMinutes(Math.max(0, weekAverage), config.labels);
+                            averageLabels.month = 'Moy/j : ' + formatTotalMinutes(Math.max(0, monthAverage), config.labels);
+                            averageLabels.year = 'Moy/j : ' + formatTotalMinutes(Math.max(0, yearAverage), config.labels);
+                            averageLabels.lifetime = 'Moy/j : ' + formatTotalMinutes(Math.max(0, lifetimeAverage), config.labels);
+
+                            periodScopeLabels.week = capitalize(shortDayMonthFormatter.format(weekStartDate)) + ' - ' + capitalize(shortDayMonthFormatter.format(weekEndDate));
+                            periodScopeLabels.month = capitalize(monthFormatter.format(referenceDate));
+                            periodScopeLabels.year = String(referenceDate.getFullYear());
+                            periodScopeLabels.lifetime = lifetimeStartDate
+                                ? ('Depuis ' + formatDisplayDate(lifetimeStartDate, config.locale, true))
+                                : ('Depuis ' + String(referenceDate.getFullYear()));
+                        })();
+
+                        // Construire les items de statistiques avec un indicateur visuel
+                        var maxAggregateMinutes = Math.max(
+                            1,
+                            Number(globalAggregateTotals.weekMinutes || 0),
+                            Number(globalAggregateTotals.monthMinutes || 0),
+                            Number(globalAggregateTotals.yearMinutes || 0),
+                            Number(globalAggregateTotals.lifetimeMinutes || 0)
+                        );
                         var aggregateItems = globalStatsDefinitions.map(function(definition) {
                             var aggregateLabel = '';
+                            var aggregateMinutes = 0;
+                            var aggregateIcon = '•';
+                            var isWeekAggregate = false;
                             if (definition.valueKey === 'week') {
+                                isWeekAggregate = true;
                                 aggregateLabel = globalAggregateTotals.weekLabel;
+                                aggregateMinutes = Number(globalAggregateTotals.weekMinutes || 0);
+                                aggregateIcon = '📅';
                             } else if (definition.valueKey === 'month') {
                                 aggregateLabel = globalAggregateTotals.monthLabel;
+                                aggregateMinutes = Number(globalAggregateTotals.monthMinutes || 0);
+                                aggregateIcon = '🗓️';
                             } else if (definition.valueKey === 'year') {
                                 aggregateLabel = globalAggregateTotals.yearLabel;
+                                aggregateMinutes = Number(globalAggregateTotals.yearMinutes || 0);
+                                aggregateIcon = '📈';
                             } else {
                                 aggregateLabel = globalAggregateTotals.lifetimeLabel;
+                                aggregateMinutes = Number(globalAggregateTotals.lifetimeMinutes || 0);
+                                aggregateIcon = '⏱️';
                             }
-                            return h('div', { key: 'global-' + definition.key, className: 'mj-hour-encode-app__global-aggregate-item' }, [
-                                h('span', { className: 'mj-hour-encode-app__global-aggregate-label' }, definition.label),
-                                h('span', { className: 'mj-hour-encode-app__global-aggregate-value' }, aggregateLabel)
+
+                            if (!Number.isFinite(aggregateMinutes) || aggregateMinutes < 0) {
+                                aggregateMinutes = 0;
+                            }
+                            var aggregateRatio = Math.max(0, Math.min(1, aggregateMinutes / maxAggregateMinutes));
+                            var ratioLabel = String(Math.round(aggregateRatio * 100)) + '%';
+                            var averageLabel = averageLabels[definition.valueKey] || '';
+                            var scopeLabel = periodScopeLabels[definition.valueKey] || '';
+
+                            if (isWeekAggregate && Number(globalAggregateTotals.weekContractualMinutes || 0) > 0) {
+                                var expectedWeekMinutes = Math.max(1, Number(globalAggregateTotals.weekContractualMinutes || 0));
+                                aggregateRatio = Math.max(0, Math.min(1, aggregateMinutes / expectedWeekMinutes));
+                                ratioLabel = String(Math.round((aggregateMinutes / expectedWeekMinutes) * 100)) + '%';
+                                aggregateLabel = globalAggregateTotals.weekLabel + ' / ' + globalAggregateTotals.weekContractualLabel;
+                                averageLabel = 'Moy/j : ' + formatTotalMinutes(Math.max(0, Math.round(expectedWeekMinutes / 7)), config.labels);
+                                scopeLabel = (periodScopeLabels.week || '') + ' • prévu';
+                            }
+
+                            return h('div', {
+                                key: 'global-' + definition.key,
+                                className: 'mj-hour-encode-app__global-aggregate-item',
+                                style: {
+                                    '--mj-aggregate-ratio': String(aggregateRatio)
+                                }
+                            }, [
+                                h('div', { className: 'mj-hour-encode-app__global-aggregate-head' }, [
+                                    h('span', { className: 'mj-hour-encode-app__global-aggregate-label' }, aggregateIcon + ' ' + definition.label),
+                                    scopeLabel ? h('span', { className: 'mj-hour-encode-app__global-aggregate-scope' }, scopeLabel) : null
+                                ]),
+                                h('div', { className: 'mj-hour-encode-app__global-aggregate-value-row' }, [
+                                    h('span', { className: 'mj-hour-encode-app__global-aggregate-value' }, aggregateLabel),
+                                    h('span', { className: 'mj-hour-encode-app__global-aggregate-percent' }, ratioLabel)
+                                ]),
+                                averageLabel ? h('span', { className: 'mj-hour-encode-app__global-aggregate-meta' }, averageLabel) : null,
+                                h('span', { className: 'mj-hour-encode-app__global-aggregate-meter' }, [
+                                    h('span', {
+                                        className: 'mj-hour-encode-app__global-aggregate-meter-fill',
+                                        style: { width: ratioLabel }
+                                    })
+                                ])
                             ]);
                         });
 
@@ -7825,9 +8384,25 @@
                             } else {
                                 diffClass += ' is-negative';
                             }
+                            var diffReferenceMinutes = globalAggregateTotals.weekContractualMinutes > 0
+                                ? globalAggregateTotals.weekContractualMinutes
+                                : maxAggregateMinutes;
+                            var diffRatio = Math.max(0, Math.min(1, Math.abs(globalAggregateTotals.weekDifferenceMinutes || 0) / Math.max(1, diffReferenceMinutes)));
+                            var diffRatioLabel = String(Math.round(diffRatio * 100)) + '%';
                             aggregateItems.push(h('div', { key: 'global-week-diff', className: diffClass }, [
-                                h('span', { className: 'mj-hour-encode-app__global-aggregate-label' }, config.labels.weekDifference || 'Différence semaine'),
-                                h('span', { className: 'mj-hour-encode-app__global-aggregate-value' }, globalAggregateTotals.weekDifferenceLabel)
+                                h('div', { className: 'mj-hour-encode-app__global-aggregate-head' }, [
+                                    h('span', { className: 'mj-hour-encode-app__global-aggregate-label' }, '⚖️ ' + (config.labels.weekDifference || 'Différence semaine'))
+                                ]),
+                                h('div', { className: 'mj-hour-encode-app__global-aggregate-value-row' }, [
+                                    h('span', { className: 'mj-hour-encode-app__global-aggregate-value' }, globalAggregateTotals.weekDifferenceLabel),
+                                    h('span', { className: 'mj-hour-encode-app__global-aggregate-percent' }, diffRatioLabel)
+                                ]),
+                                h('span', { className: 'mj-hour-encode-app__global-aggregate-meter' }, [
+                                    h('span', {
+                                        className: 'mj-hour-encode-app__global-aggregate-meter-fill',
+                                        style: { width: diffRatioLabel }
+                                    })
+                                ])
                             ]));
                         }
 
@@ -7847,85 +8422,232 @@
                             } else {
                                 balanceClass += ' is-negative';
                             }
+                            var balanceReferenceMinutes = Math.max(1, Number(globalAggregateTotals.yearMinutes || 0), Number(globalAggregateTotals.monthMinutes || 0), Number(globalAggregateTotals.weekMinutes || 0));
+                            var balanceRatio = Math.max(0, Math.min(1, absBalance / balanceReferenceMinutes));
+                            var balanceRatioLabel = String(Math.round(balanceRatio * 100)) + '%';
                             aggregateItems.push(h('div', { key: 'global-cumulative-balance', className: balanceClass }, [
-                                h('span', { className: 'mj-hour-encode-app__global-aggregate-label' }, config.labels.cumulativeDifference || 'Solde cumulé'),
-                                h('span', { className: 'mj-hour-encode-app__global-aggregate-value' }, balanceLabel)
+                                h('div', { className: 'mj-hour-encode-app__global-aggregate-head' }, [
+                                    h('span', { className: 'mj-hour-encode-app__global-aggregate-label' }, '🧾 ' + (config.labels.cumulativeDifference || 'Solde cumulé'))
+                                ]),
+                                h('div', { className: 'mj-hour-encode-app__global-aggregate-value-row' }, [
+                                    h('span', { className: 'mj-hour-encode-app__global-aggregate-value' }, balanceLabel),
+                                    h('span', { className: 'mj-hour-encode-app__global-aggregate-percent' }, balanceRatioLabel)
+                                ]),
+                                h('span', { className: 'mj-hour-encode-app__global-aggregate-meter' }, [
+                                    h('span', {
+                                        className: 'mj-hour-encode-app__global-aggregate-meter-fill',
+                                        style: { width: balanceRatioLabel }
+                                    })
+                                ])
                             ]));
                         }
 
                         var aggregateSummary = h('div', { className: 'mj-hour-encode-app__global-aggregates' }, aggregateItems);
 
+                        var hasHeaderContent = !!((config.labels.title && String(config.labels.title).trim()) || (config.labels.subtitle && String(config.labels.subtitle).trim()));
+                        var showEncodeSection = !isMobileLayout || mobileSectionTab === 'encode';
+                        var showPinnedProjectsSection = !isMobileLayout || mobileSectionTab === 'pinned';
+                        var controlsSection = h('div', { className: 'mj-hour-encode-app__controls' }, [
+                            h('div', { className: 'mj-hour-encode-app__controls-left' }, [
+                                h('button', {
+                                    type: 'button',
+                                    className: 'mj-hour-encode-app__nav-btn',
+                                    'aria-label': config.labels.previousWeek,
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        handleNavigate(-1);
+                                    }
+                                }, '<'),
+                                h('button', {
+                                    type: 'button',
+                                    className: 'mj-hour-encode-app__nav-btn',
+                                    'aria-label': config.labels.nextWeek,
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        handleNavigate(1);
+                                    }
+                                }, '>'),
+                                h('button', {
+                                    type: 'button',
+                                    className: 'mj-hour-encode-app__today-btn',
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        handleToday();
+                                    }
+                                }, config.labels.today),
+                                h('button', {
+                                    type: 'button',
+                                    className: 'mj-hour-encode-app__events-toggle' + (!showAllEvents ? ' is-active' : ''),
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        setShowAllEvents(function(prev) { return !prev; });
+                                    },
+                                    title: showAllEvents ? (config.labels.showAllEvents || 'Tous les événements') : (config.labels.showMyEvents || 'Mes événements')
+                                }, [
+                                    h('svg', { width: '16', height: '16', viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
+                                        h('circle', { cx: '8', cy: '8', r: '6.5' }),
+                                        h('path', { d: !showAllEvents ? 'M5 8l2 2 4-4' : 'M4.5 8h7' })
+                                    ]),
+                                    h('span', null, showAllEvents ? (config.labels.showAllEvents || 'Tous les événements') : (config.labels.showMyEvents || 'Mes événements'))
+                                ])
+                            ]),
+                        ]);
+                        var mobileDayPickerSection = isMobileLayout && activeMobileDayData ? h('div', { className: 'mj-hour-encode-app__mobile-day-picker' }, [
+                            h('button', {
+                                type: 'button',
+                                className: 'mj-hour-encode-app__mobile-day-stepper-button mj-hour-encode-app__mobile-day-stepper-button--prev',
+                                'aria-label': config.labels.previousDay || config.labels.previousWeek,
+                                disabled: !canStepToPreviousDay,
+                                onClick: function(event) {
+                                    event.preventDefault();
+                                    handleMobileDayStep(-1);
+                                }
+                            }, '<'),
+                            h('button', {
+                                type: 'button',
+                                className: 'mj-hour-encode-app__mobile-day-stepper-button mj-hour-encode-app__mobile-day-stepper-button--next',
+                                'aria-label': config.labels.nextDay || config.labels.nextWeek,
+                                disabled: !canStepToNextDay,
+                                onClick: function(event) {
+                                    event.preventDefault();
+                                    handleMobileDayStep(1);
+                                }
+                            }, '>'),
+                            h('div', { className: 'mj-hour-encode-app__mobile-day-columns' }, [
+                                h('span', {
+                                    className: 'mj-hour-encode-app__mobile-day-columns-spacer',
+                                    'aria-hidden': 'true'
+                                }),
+                                h('div', {
+                                    className: 'mj-hour-encode-app__mobile-day-columns-grid',
+                                    style: visibleDaysGridStyle
+                                }, visibleDays.map(function(day) {
+                                    var dayButtonClass = 'mj-hour-encode-app__mobile-day-column';
+                                    var isActiveDay = day.iso === activeMobileDayData.iso;
+                                    if (isActiveDay) {
+                                        dayButtonClass += ' is-active';
+                                    }
+                                    if (day.isToday) {
+                                        dayButtonClass += ' is-today';
+                                    }
+                                    return h('button', {
+                                        key: 'mobile-day-column-' + day.iso,
+                                        type: 'button',
+                                        className: dayButtonClass,
+                                        'aria-expanded': isActiveDay && isMobileDayPickerCalendarOpen ? 'true' : 'false',
+                                        'aria-controls': 'mj-hour-encode-mobile-mini-calendar',
+                                        onClick: function(event) {
+                                            event.preventDefault();
+                                            if (isActiveDay) {
+                                                setIsMobileDayPickerCalendarOpen(function(previous) {
+                                                    return !previous;
+                                                });
+                                            } else {
+                                                handleMobileDaySelect(day.iso);
+                                                setIsMobileDayPickerCalendarOpen(false);
+                                            }
+                                        }
+                                    }, [
+                                        h('span', { className: 'mj-hour-encode-app__mobile-day-column-weekday' }, day.label.short),
+                                        h('span', { className: 'mj-hour-encode-app__mobile-day-column-date' }, day.label.date),
+                                        day.isToday ? h('span', { className: 'mj-hour-encode-app__mobile-day-picker-today-badge' }, config.labels.today) : null,
+                                        selectedSlot && selectedSlot.entry && selectedSlot.entry.dayIso === day.iso ? h('span', { className: 'mj-hour-encode-app__mobile-day-picker-edit-badge' }, config.labels.selectionEditTitle || 'Modifier') : null
+                                    ]);
+                                }))
+                            ]),
+                            h('div', { className: 'mj-hour-encode-app__mobile-day-count' }, [
+                                h('span', { className: 'mj-hour-encode-app__mobile-day-count-label' }, config.labels.mobileDaysViewLabel || 'Vue'),
+                                h('div', {
+                                    className: 'mj-hour-encode-app__mobile-day-count-options',
+                                    role: 'group',
+                                    'aria-label': config.labels.mobileDaysViewLabel || 'Vue'
+                                }, mobileDayCountOptions.map(function(option) {
+                                    var isActive = normalizedMobileDayCount === option.value;
+                                    return h('button', {
+                                        key: 'mobile-days-' + option.value,
+                                        type: 'button',
+                                        className: 'mj-hour-encode-app__mobile-day-count-option' + (isActive ? ' is-active' : ''),
+                                        'aria-pressed': isActive ? 'true' : 'false',
+                                        onClick: function(event) {
+                                            event.preventDefault();
+                                            setMobileDayCount(option.value);
+                                        }
+                                    }, option.label);
+                                }))
+                            ]),
+                            (isMobileDayPickerCalendarOpen && miniCalendarModel) ? h('div', {
+                                id: 'mj-hour-encode-mobile-mini-calendar',
+                                className: 'mj-hour-encode-app__mobile-day-picker-dropdown'
+                            }, [
+                                h(MiniCalendar, {
+                                    model: miniCalendarModel,
+                                    labels: config.labels,
+                                    locale: config.locale,
+                                    onNavigate: handleCalendarMonthNavigate,
+                                    onSelectDay: function(dayIso, weekIso) {
+                                        if (dayIso) {
+                                            var selectedDate = parseISODate(dayIso);
+                                            if (selectedDate && isValidDate(selectedDate)) {
+                                                var selectedWeekIso = toISODate(startOfWeek(selectedDate));
+                                                if (selectedWeekIso && selectedWeekIso !== weekStart) {
+                                                    requestWeek(selectedWeekIso);
+                                                }
+                                            } else if (weekIso) {
+                                                handleCalendarWeekSelect(weekIso);
+                                            }
+                                            handleMobileDaySelect(dayIso);
+                                        } else if (weekIso) {
+                                            handleCalendarWeekSelect(weekIso);
+                                        }
+                                        setIsMobileDayPickerCalendarOpen(false);
+                                    },
+                                    onSelectWeek: function(weekIso) {
+                                        handleCalendarWeekSelect(weekIso);
+                                        setIsMobileDayPickerCalendarOpen(false);
+                                    }
+                                })
+                            ]) : null
+                        ]) : null;
+
                         return h('div', { className: 'mj-hour-encode-app' + (loading ? ' is-loading' : '') + (isMobileLayout ? ' is-mobile-layout' : '') }, [
                             error ? h('div', { className: 'mj-hour-encode-app__error' }, error) : null,
-                            h('div', { className: 'mj-hour-encode-app__header' }, [
+                            hasHeaderContent ? h('div', { className: 'mj-hour-encode-app__header' }, [
                                 h('div', { className: 'mj-hour-encode-app__title-group' }, [
                                     h('h1', { className: 'mj-hour-encode-app__title' }, config.labels.title),
                                     config.labels.subtitle ? h('p', { className: 'mj-hour-encode-app__subtitle' }, config.labels.subtitle) : null
                                 ])
-                            ]),
-                            h('div', { className: 'mj-hour-encode-app__controls' }, [
-                                h('div', { className: 'mj-hour-encode-app__controls-left' }, [
-                                    h('button', {
-                                        type: 'button',
-                                        className: 'mj-hour-encode-app__nav-btn',
-                                        'aria-label': config.labels.previousWeek,
-                                        onClick: function(event) {
-                                            event.preventDefault();
-                                            handleNavigate(-1);
-                                        }
-                                    }, '<'),
-                                    h('button', {
-                                        type: 'button',
-                                        className: 'mj-hour-encode-app__nav-btn',
-                                        'aria-label': config.labels.nextWeek,
-                                        onClick: function(event) {
-                                            event.preventDefault();
-                                            handleNavigate(1);
-                                        }
-                                    }, '>'),
-                                    h('button', {
-                                        type: 'button',
-                                        className: 'mj-hour-encode-app__today-btn',
-                                        onClick: function(event) {
-                                            event.preventDefault();
-                                            handleToday();
-                                        }
-                                    }, config.labels.today),
-                                    h('button', {
-                                        type: 'button',
-                                        className: 'mj-hour-encode-app__events-toggle' + (showAllEvents ? ' is-active' : ''),
-                                        onClick: function(event) {
-                                            event.preventDefault();
-                                            setShowAllEvents(function(prev) { return !prev; });
-                                        },
-                                        title: showAllEvents ? (config.labels.showMyEvents || 'Mes événements') : (config.labels.showAllEvents || 'Tous les événements')
-                                    }, [
-                                        h('svg', { width: '16', height: '16', viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
-                                            h('circle', { cx: '8', cy: '8', r: '6.5' }),
-                                            h('path', { d: showAllEvents ? 'M5 8l2 2 4-4' : 'M4.5 8h7' })
-                                        ]),
-                                        h('span', null, showAllEvents ? (config.labels.showMyEvents || 'Mes événements') : (config.labels.showAllEvents || 'Tous les événements'))
-                                    ])
-                                    ]),
-                                    h('div', { className: 'mj-hour-encode-app__week-label' }, calendarModel.periodLabel)
-                            ]),
-                            isMobileLayout && allDaysForPicker.length > 0 ? h('div', { className: 'mj-hour-encode-app__mobile-day-picker' }, allDaysForPicker.map(function(day) {
-                                var isActive = activeVisibleDayIso === day.iso;
-                                return h('button', {
-                                    key: day.iso,
+                            ]) : null,
+                            h('div', { className: 'mj-hour-encode-app__week-label' }, calendarModel.periodLabel),
+                            !isMobileLayout ? controlsSection : null,
+                            isMobileLayout ? h('div', {
+                                className: 'mj-hour-encode-app__mobile-section-tabs',
+                                role: 'tablist',
+                                'aria-label': config.labels.mobileSectionsLabel || 'Sections'
+                            }, [
+                                h('button', {
                                     type: 'button',
-                                    className: 'mj-hour-encode-app__mobile-day-picker-button' + (isActive ? ' is-active' : ''),
+                                    role: 'tab',
+                                    className: 'mj-hour-encode-app__mobile-section-tab' + (mobileSectionTab === 'encode' ? ' is-active' : ''),
+                                    'aria-selected': mobileSectionTab === 'encode' ? 'true' : 'false',
                                     onClick: function(event) {
                                         event.preventDefault();
-                                        handleMobileDaySelect(day.iso);
+                                        setMobileSectionTab('encode');
                                     }
-                                }, [
-                                    h('span', { className: 'mj-hour-encode-app__mobile-day-picker-weekday' }, day.label.short),
-                                    h('span', { className: 'mj-hour-encode-app__mobile-day-picker-date' }, day.label.date),
-                                    isActive && selectedSlot && selectedSlot.entry && selectedSlot.entry.dayIso === day.iso ? h('span', { className: 'mj-hour-encode-app__mobile-day-picker-edit-badge' }, config.labels.selectionEditTitle || 'Modifier') : null
-                                ]);
-                            })) : null,
-                            h('div', { className: 'mj-hour-encode-app__layout' }, [
+                                }, config.labels.mobileTabEncode || 'Plage Horaire 🕒'),
+                                h('button', {
+                                    type: 'button',
+                                    role: 'tab',
+                                    className: 'mj-hour-encode-app__mobile-section-tab' + (mobileSectionTab === 'pinned' ? ' is-active' : ''),
+                                    'aria-selected': mobileSectionTab === 'pinned' ? 'true' : 'false',
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        setMobileSectionTab('pinned');
+                                    }
+                                }, config.labels.mobileTabPinnedProjects || 'Projets 📌')
+                            ]) : null,
+                            showEncodeSection ? h('div', { className: 'mj-hour-encode-app__layout' }, [
+                                isMobileLayout ? controlsSection : null,
+                                isMobileLayout ? mobileDayPickerSection : null,
                                 h('div', { className: 'mj-hour-encode-app__calendar-section' }, [
                                     h(CalendarView, {
                                         days: visibleDays,
@@ -7947,6 +8669,7 @@
                                         editingEntryKey: selectedSlot && selectedSlot.isEditing
                                             ? (selectedSlot.hourId ? 'hour:' + selectedSlot.hourId : (selectedSlot.entryId ? 'entry:' + selectedSlot.entryId : null))
                                             : null,
+                                        favorites: favorites,
                                         favoriteItems: favoriteItems,
                                         onFavoriteQuickSubmit: handleFavoriteQuickSubmit,
                                         onToggleFavorite: handleToggleFavorite,
@@ -7964,6 +8687,9 @@
                                     projectSuggestions: projectSelectionSuggestions,
                                     allProjectOptions: allProjectOptionsFromEntries,
                                     projectColorMap: projectColorMap,
+                                    favorites: favorites,
+                                    favoriteItems: favoriteItems,
+                                    isMobileLayout: isMobileLayout,
                                     calendarModel: null,
                                     onCalendarMonthNavigate: handleCalendarMonthNavigate,
                                     onCalendarWeekSelect: handleCalendarWeekSelect,
@@ -7971,12 +8697,14 @@
                                     onSelectionSubmit: handleSelectionSubmit,
                                     onSelectionDuplicate: handleSelectionDuplicate,
                                     onSelectionCancel: handleSelectionCancel,
-                                    onSelectionDelete: handleSelectionDelete
+                                    onSelectionDelete: handleSelectionDelete,
+                                    onFavoriteQuickSubmit: handleFavoriteQuickSubmit,
+                                    onToggleFavorite: handleToggleFavorite
                                 }),
                                 isMobileLayout ? aggregateSummary : null
-                            ]),
-                            h(ResourceSection, {
-                                miniCalendarModel: miniCalendarModel,
+                            ]) : null,
+                            showPinnedProjectsSection ? h(ResourceSection, {
+                                miniCalendarModel: isMobileLayout ? null : miniCalendarModel,
                                 locale: config.locale,
                                 projectSummaries: projectSummaryDetails,
                                 projectCatalog: projects,
@@ -7985,7 +8713,6 @@
                                 draggingEntry: draggingEntry,
                                 favorites: favorites,
                                 onToggleFavorite: handleToggleFavorite,
-                                onTaskSelect: handleChipSelect,
                                 onProjectSelect: handleProjectSelect,
                                 onProjectRename: handleProjectRename,
                                 onProjectColorChange: handleProjectColorChange,
@@ -7993,8 +8720,9 @@
                                 onEntryMoveToProject: handleEntryMoveToProject,
                                 onTaskMoveToProject: handleTaskMoveToProject,
                                 onCalendarNavigate: handleCalendarMonthNavigate,
-                                onCalendarWeekSelect: handleCalendarWeekSelect
-                            }),
+                                onCalendarWeekSelect: handleCalendarWeekSelect,
+                                onTaskSelect: handleResourceTaskSelect
+                            }) : null,
                             loading ? h('div', { className: 'mj-hour-encode-app__loader-text' }, config.labels.loading) : null
                         ]);
                     }
@@ -8078,3 +8806,4 @@
                     toArray(nodes).forEach(destroy);
                 });
             })();
+

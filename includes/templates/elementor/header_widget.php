@@ -179,7 +179,10 @@ function mj_header_svg_icon(string $name): string {
                     <div class="mj-header-gest-favs-col">
                         <a class="mj-header-gest-favs-col__title mj-header-gest-favs-col__title--link" href="<?php echo esc_url(add_query_arg('main-tab', 'member', $gest_url)); ?>">
                             <span class="mj-header-gest-favs-col__title-icon" aria-hidden="true"><?php echo mj_header_svg_icon('user'); ?></span>
-                            <span><?php esc_html_e('Membres', 'mj-member'); ?></span>
+                            <span class="mj-header-gest-favs-col__title-stack">
+                                <span class="mj-header-gest-favs-col__title-main"><?php esc_html_e('Membres favoris', 'mj-member'); ?></span>
+                                <span class="mj-header-gest-favs-col__title-sub"><?php esc_html_e('★ Favoris', 'mj-member'); ?></span>
+                            </span>
                         </a>
                         <?php if (!empty($gest_fav_member_items)): ?>
                         <ul class="mj-header-gest-fav-list">
@@ -219,13 +222,16 @@ function mj_header_svg_icon(string $name): string {
                             <?php endforeach; ?>
                         </ul>
                         <?php else: ?>
-                        <p class="mj-header-gest-fav-empty"><?php esc_html_e('Aucun favori', 'mj-member'); ?></p>
+                        <p class="mj-header-gest-fav-empty"><?php esc_html_e('Aucun favori enregistré', 'mj-member'); ?></p>
                         <?php endif; ?>
                     </div>
                     <div class="mj-header-gest-favs-col">
                         <a class="mj-header-gest-favs-col__title mj-header-gest-favs-col__title--link" href="<?php echo esc_url(add_query_arg('main-tab', 'event', $gest_url)); ?>">
                             <span class="mj-header-gest-favs-col__title-icon" aria-hidden="true"><?php echo mj_header_svg_icon('calendar'); ?></span>
-                            <span><?php esc_html_e('Événements', 'mj-member'); ?></span>
+                            <span class="mj-header-gest-favs-col__title-stack">
+                                <span class="mj-header-gest-favs-col__title-main"><?php esc_html_e('Événements favoris', 'mj-member'); ?></span>
+                                <span class="mj-header-gest-favs-col__title-sub"><?php esc_html_e('★ Favoris', 'mj-member'); ?></span>
+                            </span>
                         </a>
                         <?php if (!empty($gest_fav_event_items)): ?>
                         <ul class="mj-header-gest-fav-list">
@@ -259,7 +265,7 @@ function mj_header_svg_icon(string $name): string {
                             <?php endforeach; ?>
                         </ul>
                         <?php else: ?>
-                        <p class="mj-header-gest-fav-empty"><?php esc_html_e('Aucun favori', 'mj-member'); ?></p>
+                        <p class="mj-header-gest-fav-empty"><?php esc_html_e('Aucun favori enregistré', 'mj-member'); ?></p>
                         <?php endif; ?>
                     </div>
                 </div>

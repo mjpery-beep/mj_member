@@ -1043,7 +1043,8 @@ $member_email_required = !MjRoles::isJeune($form_values['member_role']);
                 day: 'monday',
                 start: '09:00',
                 end: '17:00',
-                break_minutes: 60
+                break_minutes: 60,
+                favorite: false
             });
             renderScheduleEntries();
         });
@@ -1075,6 +1076,10 @@ $member_email_required = !MjRoles::isJeune($form_values['member_role']);
                     <input type="number" data-field="break_minutes" data-index="${index}" value="${entry.break_minutes || 0}" min="0" max="480" step="5" title="Durée de la pause repas en minutes" />
                     <span class="break-unit">min</span>
                 </span>
+                <label class="favorite-group" title="Marquer cette plage comme favorite">
+                    <input type="checkbox" data-field="favorite" data-index="${index}" ${entry.favorite ? 'checked' : ''} />
+                    <span>Favori</span>
+                </label>
                 <span class="entry-hours">${calcEntryHours(entry)}h</span>
                 <button type="button" class="remove-entry" data-index="${index}">✕</button>
             `;
@@ -1090,6 +1095,8 @@ $member_email_required = !MjRoles::isJeune($form_values['member_role']);
                 
                 if (field === 'break_minutes') {
                     value = parseInt(value, 10) || 0;
+                } else if (field === 'favorite') {
+                    value = this.checked;
                 }
                 
                 if (scheduleEntries[idx]) {

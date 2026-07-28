@@ -221,9 +221,28 @@
 }
 
 .mj-ws__slot-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    justify-content: center;
+}
+
+.mj-ws__slot-favorite {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #eab308;
+    font-size: 0.85em;
+    line-height: 1;
+}
+
+.mj-ws__slot-time-label {
+    white-space: nowrap;
+}
+
+.mj-ws__slot-time {
     font-weight: 500;
     font-size: 0.82rem;
-    white-space: nowrap;
 }
 
 .mj-ws__slot-break {

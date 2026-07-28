@@ -21,9 +21,12 @@
         this.el             = el;
         this.config         = config || {};
         this.activeDropdown = null;
+        this._lastTrigger   = null;
         this._isStuck       = false;
         this._scrollHandler = null;
         this._refreshTimer  = null;
+        this._scrollLockY   = 0;
+        this._scrollLocked  = false;
 
         /** Track which lazy dropdowns have been loaded already */
         this._loaded = {
@@ -41,6 +44,9 @@
     // -------------------------------------------------------------------------
 
     MjHeader.prototype._init = function () {
+        this.el.querySelectorAll('[data-mj-header-dropdown]').forEach(function (dropdown) {
+            dropdown.setAttribute('aria-hidden', 'true');
+        });
         this._bindTriggers();
         this._bindCloseBtns();
         this._bindOverlay();
@@ -114,7 +120,7 @@
                 if (self.activeDropdown === name) {
                     self._closeAll();
                 } else {
-                    self._closeAll();
+                    self._closeAll(false);
                     self._openDropdown(name);
                 }
             });
@@ -129,7 +135,7 @@
                 if (self.activeDropdown === name) {
                     self._closeAll();
                 } else {
-                    self._closeAll();
+                    self._closeAll(false);
                     self._openDropdown(name);
                 }
             });
@@ -152,7 +158,7 @@
                 if (window.matchMedia('(hover: hover)').matches) {
                     clearTimeout(hoverTimer);
                     if (self.activeDropdown !== name) {
-                        self._closeAll();
+                        self._closeAll(false);
                         self._openDropdown(name, true); // skipOverlay: avoid cursor flicker
                     }
                 }
@@ -209,7 +215,7 @@
             } else {
                 navWrap.classList.add('mj-header__nav--active');
                 burger.setAttribute('aria-expanded', 'true');
-                self._closeAll();
+                self._closeAll(false);
             }
         });
 
@@ -402,7 +408,7 @@
                         if (col && !col.querySelector('.mj-header-gest-fav-empty')) {
                             var empty = document.createElement('p');
                             empty.className = 'mj-header-gest-fav-empty';
-                            empty.textContent = 'Aucun favori';
+                            empty.textContent = 'Aucun favori enregistré';
                             col.appendChild(empty);
                         }
                     }
@@ -724,15 +730,41 @@
         return window.innerWidth <= 1024;
     };
 
+    MjHeader.prototype._closeBurgerMenu = function () {
+        var burger = this.el.querySelector('.mj-header__burger');
+        var navWrap = this.el.querySelector('.mj-header__nav');
+        if (!burger || !navWrap) return;
+
+        navWrap.classList.remove('mj-header__nav--active');
+        burger.setAttribute('aria-expanded', 'false');
+    };
+
     MjHeader.prototype._lockScroll = function () {
-        if (this._isMobile()) {
-            this._scrollLockY = window.pageYOffset;
-            document.body.style.overflow = 'hidden';
-        }
+        if (!this._isMobile() || this._scrollLocked) return;
+
+        this._scrollLockY = window.pageYOffset;
+        this._scrollLocked = true;
+        document.body.classList.add('mj-header-body-scroll-lock');
+        document.body.style.position = 'fixed';
+        document.body.style.top = '-' + this._scrollLockY + 'px';
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.width = '100%';
+        document.body.style.overflow = 'hidden';
     };
 
     MjHeader.prototype._unlockScroll = function () {
+        if (!this._scrollLocked) return;
+
+        this._scrollLocked = false;
+        document.body.classList.remove('mj-header-body-scroll-lock');
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
         document.body.style.overflow = '';
+        window.scrollTo(0, this._scrollLockY || 0);
     };
 
     MjHeader.prototype._openDropdown = function (name, skipOverlay) {
@@ -741,13 +773,33 @@
         if (!dropdown) return;
 
         this.activeDropdown = name;
+        this._lastTrigger = trigger;
+
+        if (this._isMobile()) {
+            this._closeBurgerMenu();
+            this._lockScroll();
+            this.el.classList.add('mj-header--drawer-active');
+        }
 
         if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        dropdown.setAttribute('aria-hidden', 'false');
         dropdown.classList.add('mj-header-dropdown--open');
 
         if (!skipOverlay) {
             var overlay = this.el.querySelector('.mj-header-overlay');
             if (overlay) overlay.classList.add('mj-header-overlay--active');
+        }
+
+        if (this._isMobile()) {
+            dropdown.scrollTop = 0;
+            window.requestAnimationFrame(function () {
+                var closeBtn = dropdown.querySelector('.mj-header-dropdown__close');
+                var headerLink = dropdown.querySelector('.mj-header-dropdown__header-link');
+                var focusTarget = closeBtn || headerLink || dropdown;
+                if (focusTarget && typeof focusTarget.focus === 'function') {
+                    focusTarget.focus();
+                }
+            });
         }
 
         // Lazy-load content
@@ -762,11 +814,16 @@
         }
     };
 
-    MjHeader.prototype._closeAll = function () {
+    MjHeader.prototype._closeAll = function (restoreFocus) {
+        var shouldRestoreFocus = restoreFocus !== false;
+        var lastTrigger = this._lastTrigger;
+
         this.activeDropdown = null;
+        this.el.classList.remove('mj-header--drawer-active');
 
         this.el.querySelectorAll('[data-mj-header-dropdown]').forEach(function (d) {
             d.classList.remove('mj-header-dropdown--open');
+            d.setAttribute('aria-hidden', 'true');
         });
         this.el.querySelectorAll('[data-mj-header-trigger]').forEach(function (t) {
             t.setAttribute('aria-expanded', 'false');
@@ -774,6 +831,16 @@
 
         var overlay = this.el.querySelector('.mj-header-overlay');
         if (overlay) overlay.classList.remove('mj-header-overlay--active');
+
+        this._unlockScroll();
+
+        if (shouldRestoreFocus && lastTrigger && typeof lastTrigger.focus === 'function') {
+            lastTrigger.focus();
+        }
+
+        if (shouldRestoreFocus) {
+            this._lastTrigger = null;
+        }
     };
 
     // -------------------------------------------------------------------------
