@@ -54,6 +54,7 @@
                     timezone: 'UTC',
                     introText: '',
                     accentColor: '#2a55ff',
+                    viewDays: 1,
                     ajax: {},
                     entries: [],
                     commonTasks: [],
@@ -180,6 +181,9 @@
                     config.ajax.deleteAction = typeof config.ajax.deleteAction === 'string' && config.ajax.deleteAction !== ''
                         ? config.ajax.deleteAction
                         : '';
+                    config.ajax.updateViewDaysAction = typeof config.ajax.updateViewDaysAction === 'string' && config.ajax.updateViewDaysAction !== ''
+                        ? config.ajax.updateViewDaysAction
+                        : '';
                     if (!config.ajax.action && config.ajax.weekAction) {
                         config.ajax.action = config.ajax.weekAction;
                     }
@@ -296,12 +300,20 @@
                         mobileDaysCountFour: '4 jours',
                         mobileDaysCountFive: '5 jours',
                         mobileTabFavorites: 'Favoris',
-                        mobileTabEncodeSlot: 'Encoder une nouvelle plage',
+                        mobileTabEncodeSlot: 'Nouvelle tâche',
+                        mobileSelectionAction: 'Encoder',
+                        mobileSelectionDuplicateAction: 'Dupliquer',
+                        mobileSelectionDeleteAction: 'Supprimer',
                         mobileFavoritesEmpty: 'Aucun favori disponible.'
                     }, config.labels && typeof config.labels === 'object' ? config.labels : {});
                     config.capabilities = Object.assign({
                         canManage: false
                     }, config.capabilities && typeof config.capabilities === 'object' ? config.capabilities : {});
+                    var configuredViewDays = Number(config.viewDays || 1);
+                    if (!Number.isFinite(configuredViewDays) || configuredViewDays < 1) {
+                        configuredViewDays = 1;
+                    }
+                    config.viewDays = Math.min(5, configuredViewDays);
                     config.isPreview = Boolean(config.isPreview);
 
                     return config;
@@ -1602,6 +1614,7 @@
 
                         return h('form', {
                             className: 'mj-hour-encode-app__card mj-hour-encode-app__card--selection',
+                            ref: props.formRef || null,
                             onSubmit: function(event) {
                                 event.preventDefault();
                                 props.onSubmit();
@@ -1639,7 +1652,7 @@
                             isMobileLayout ? h('div', {
                                 className: 'mj-hour-encode-app__selection-tabs',
                                 role: 'tablist',
-                                'aria-label': labels.mobileTabEncodeSlot || 'Encoder une nouvelle plage'
+                                'aria-label': labels.mobileTabEncodeSlot || 'Nouvelle tâche'
                             }, [
                                 h('button', {
                                     type: 'button',
@@ -1650,7 +1663,7 @@
                                         event.preventDefault();
                                         setSelectionPanelTab('form');
                                     }
-                                }, labels.mobileTabEncodeSlot || 'Encoder une nouvelle plage'),
+                                }, labels.mobileTabEncodeSlot || 'Nouvelle tâche'),
                                 h('button', {
                                     type: 'button',
                                     role: 'tab',
@@ -3173,11 +3186,48 @@
                                     selectionAttrs['data-end-time'] = props.selectedSlot.endTime;
                                 }
                                 var selectionChildren = [];
+                                var selectionActionButton = null;
                                 if (props.selectedSlot.duration) {
                                     selectionChildren.push(h('div', {
                                         key: 'duration',
                                         className: 'mj-hour-encode-calendar__selection-duration'
                                     }, props.selectedSlot.duration));
+                                }
+
+                                if (props.isMobileLayout
+                                    && typeof props.onRequestSelectionFormScroll === 'function'
+                                    && props.selectedSlot.position
+                                    && Number.isFinite(props.selectedSlot.position.top)
+                                    && Number.isFinite(props.selectedSlot.position.height)) {
+                                    var rawActionTop = props.selectedSlot.position.top + props.selectedSlot.position.height + 8;
+                                    var maxActionTop = Math.max(0, DAY_CANVAS_HEIGHT - 34);
+                                    var selectionActionTop = clamp(rawActionTop, 0, maxActionTop);
+                                    selectionActionButton = h('button', {
+                                        key: 'mobile-encode-btn',
+                                        type: 'button',
+                                        className: 'mj-hour-encode-calendar__selection-action',
+                                        style: {
+                                            top: selectionActionTop + 'px'
+                                        },
+                                        onPointerDown: function(ev) {
+                                            if (ev && typeof ev.preventDefault === 'function') {
+                                                ev.preventDefault();
+                                            }
+                                            if (ev && typeof ev.stopPropagation === 'function') {
+                                                ev.stopPropagation();
+                                            }
+                                        },
+                                        onTouchStart: function(ev) {
+                                            if (ev && typeof ev.stopPropagation === 'function') {
+                                                ev.stopPropagation();
+                                            }
+                                        },
+                                        onClick: function(ev) {
+                                            ev.preventDefault();
+                                            ev.stopPropagation();
+                                            props.onRequestSelectionFormScroll();
+                                        }
+                                    }, labels.mobileSelectionAction || 'Encoder');
                                 }
 
                                 // Cancel selection button
@@ -3231,6 +3281,9 @@
                                 }));
 
                                 canvasChildren.push(h('div', selectionAttrs, selectionChildren));
+                                if (selectionActionButton) {
+                                    canvasChildren.push(selectionActionButton);
+                                }
                             }
 
                             // Render leave overlays covering the full timeline height
@@ -3333,6 +3386,7 @@
                                     && entryProjectKey !== NO_PROJECT_KEY
                                     && entryTaskName !== ''
                                     && Boolean(favoriteTasksMap[entryProjectKey] && favoriteTasksMap[entryProjectKey][entryTaskName]);
+                                var isSelectedEntry = false;
                                 if (isFavoriteEntry) {
                                     eventClass += ' is-favorite';
                                 }
@@ -3341,6 +3395,7 @@
                                     var thisEntryKey = getEntryKey(entrySource, eventItem.id);
                                     if (thisEntryKey && thisEntryKey === props.editingEntryKey) {
                                         eventClass += ' is-selected';
+                                        isSelectedEntry = true;
                                     }
                                 }
 
@@ -3558,6 +3613,83 @@
                                 };
 
                                 canvasChildren.push(h('div', eventProps, eventChildren));
+
+                                var canShowDuplicateAction = isSelectedEntry
+                                    && typeof props.onSelectionDuplicate === 'function'
+                                    && typeof props.canDuplicateEntry === 'function'
+                                    && props.canDuplicateEntry(entrySource || eventItem.source);
+
+                                if (canShowDuplicateAction
+                                    && eventItem.position
+                                    && Number.isFinite(eventItem.position.top)
+                                    && Number.isFinite(eventItem.position.height)) {
+                                    var rawDuplicateTop = eventItem.position.top + eventItem.position.height + 8;
+                                    var maxDuplicateTop = Math.max(0, DAY_CANVAS_HEIGHT - 34);
+                                    var duplicateActionTop = clamp(rawDuplicateTop, 0, maxDuplicateTop);
+                                    canvasChildren.push(h('button', {
+                                        key: eventItem.id + '-mobile-duplicate-btn',
+                                        type: 'button',
+                                        className: 'mj-hour-encode-calendar__selection-action',
+                                        style: {
+                                            top: duplicateActionTop + 'px'
+                                        },
+                                        onPointerDown: function(ev) {
+                                            if (ev && typeof ev.preventDefault === 'function') {
+                                                ev.preventDefault();
+                                            }
+                                            if (ev && typeof ev.stopPropagation === 'function') {
+                                                ev.stopPropagation();
+                                            }
+                                        },
+                                        onTouchStart: function(ev) {
+                                            if (ev && typeof ev.stopPropagation === 'function') {
+                                                ev.stopPropagation();
+                                            }
+                                        },
+                                        onClick: function(ev) {
+                                            ev.preventDefault();
+                                            ev.stopPropagation();
+                                            props.onSelectionDuplicate();
+                                        }
+                                    }, labels.mobileSelectionDuplicateAction || labels.selectionDuplicate || 'Dupliquer'));
+                                }
+
+                                if (isSelectedEntry
+                                    && typeof props.onSelectionDelete === 'function'
+                                    && eventItem.position
+                                    && Number.isFinite(eventItem.position.top)
+                                    && Number.isFinite(eventItem.position.height)) {
+                                    var deleteOffset = canShowDuplicateAction ? 44 : 8;
+                                    var rawDeleteTop = eventItem.position.top + eventItem.position.height + deleteOffset;
+                                    var maxDeleteTop = Math.max(0, DAY_CANVAS_HEIGHT - 34);
+                                    var deleteActionTop = clamp(rawDeleteTop, 0, maxDeleteTop);
+                                    canvasChildren.push(h('button', {
+                                        key: eventItem.id + '-mobile-delete-btn',
+                                        type: 'button',
+                                        className: 'mj-hour-encode-calendar__selection-action mj-hour-encode-calendar__selection-action--danger',
+                                        style: {
+                                            top: deleteActionTop + 'px'
+                                        },
+                                        onPointerDown: function(ev) {
+                                            if (ev && typeof ev.preventDefault === 'function') {
+                                                ev.preventDefault();
+                                            }
+                                            if (ev && typeof ev.stopPropagation === 'function') {
+                                                ev.stopPropagation();
+                                            }
+                                        },
+                                        onTouchStart: function(ev) {
+                                            if (ev && typeof ev.stopPropagation === 'function') {
+                                                ev.stopPropagation();
+                                            }
+                                        },
+                                        onClick: function(ev) {
+                                            ev.preventDefault();
+                                            ev.stopPropagation();
+                                            props.onSelectionDelete();
+                                        }
+                                    }, labels.mobileSelectionDeleteAction || labels.selectionDelete || 'Supprimer'));
+                                }
                             });
 
                             if (entryPreview && entryPreview.dayIso === day.iso) {
@@ -3895,6 +4027,7 @@
                                 favorites: props.favorites,
                                 favoriteItems: props.favoriteItems,
                                 isMobileLayout: props.isMobileLayout,
+                                formRef: props.selectionFormRef,
                                 onChange: props.onSelectionChange,
                                 onSubmit: props.onSelectionSubmit,
                                 onCancel: props.onSelectionCancel,
@@ -5214,7 +5347,13 @@
                         var activeMobileDay = activeMobileDayState[0];
                         var setActiveMobileDay = activeMobileDayState[1];
 
-                        var mobileDayCountState = hooks.useState(1);
+                        var mobileDayCountState = hooks.useState(function() {
+                            var initialCount = Number(config.viewDays || 1);
+                            if (!Number.isFinite(initialCount) || initialCount < 1) {
+                                initialCount = 1;
+                            }
+                            return Math.min(5, initialCount);
+                        });
                         var mobileDayCount = mobileDayCountState[0];
                         var setMobileDayCount = mobileDayCountState[1];
 
@@ -5295,8 +5434,31 @@
 
                         var fetchControllerRef = hooks.useRef(null);
                         var hasFetchedInitial = hooks.useRef(false);
+                        var hasInitializedViewDaysPreference = hooks.useRef(false);
                         var pendingDragSubmitRef = hooks.useRef(null);
                         var pendingQuickFavRef = hooks.useRef(null);
+                        var selectionFormRef = hooks.useRef(null);
+
+                        function saveViewDaysPreference(nextViewDays) {
+                            if (!config.ajax || !config.ajax.url || !config.ajax.updateViewDaysAction) {
+                                return;
+                            }
+                            var params = new URLSearchParams();
+                            params.append('action', config.ajax.updateViewDaysAction);
+                            params.append('nonce', config.ajax.nonce || '');
+                            params.append('view_days', String(nextViewDays));
+                            appendStaticParams(params, config.ajax.staticParams);
+
+                            fetch(config.ajax.url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                                credentials: 'same-origin',
+                                body: params.toString()
+                            })
+                            .catch(function(error) {
+                                console.error('MJ Hour Encode - save view days preference error', error);
+                            });
+                        }
 
                         var calendarModel = hooks.useMemo(function() {
                             return buildCalendarModel(config, weekStart, entries, events);
@@ -5949,6 +6111,21 @@
                             return formatDurationFromValues(selectedSlot.dayIso, selectedSlot.formStart, selectedSlot.formEnd, config.labels);
                         }, [selectedSlot, config.labels]);
 
+                        var canDuplicateEntry = hooks.useCallback(function(entry) {
+                            if (!entry || typeof entry !== 'object') {
+                                return false;
+                            }
+                            var startDate = parseDateTime(entry.start);
+                            var endDate = parseDateTime(entry.end);
+                            if (!isValidDate(startDate) || !isValidDate(endDate) || endDate <= startDate) {
+                                return false;
+                            }
+                            var dayIso = toISODate(startOfDay(startDate));
+                            var durationMinutes = Math.max(SLOT_STEP_MINUTES, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
+                            var preferredStart = minutesSinceMidnight(endDate);
+                            return Boolean(findNextAvailableRange(dayIso, preferredStart, durationMinutes, null));
+                        }, [entries, config.workSchedule]);
+
                         var selectionHighlight = hooks.useMemo(function() {
                             if (!selectedSlot) {
                                 return null;
@@ -6095,13 +6272,37 @@
                         }, [isMobileLayout, calendarModel.days, activeMobileDay, setActiveMobileDay]);
 
                         hooks.useEffect(function() {
-                            if (!isMobileLayout || !selectedSlot || !selectedSlot.dayIso) {
+                            var currentMobileDayCount = Number(mobileDayCount || 1);
+                            if (!Number.isFinite(currentMobileDayCount) || currentMobileDayCount < 1) {
+                                currentMobileDayCount = 1;
+                            }
+                            if (!isMobileLayout || currentMobileDayCount > 1 || !selectedSlot || !selectedSlot.dayIso) {
                                 return;
                             }
                             setActiveMobileDay(function(previous) {
                                 return previous === selectedSlot.dayIso ? previous : selectedSlot.dayIso;
                             });
-                        }, [isMobileLayout, selectedSlot ? selectedSlot.dayIso : null, setActiveMobileDay]);
+                        }, [isMobileLayout, mobileDayCount, selectedSlot ? selectedSlot.dayIso : null, setActiveMobileDay]);
+
+                        hooks.useEffect(function() {
+                            var currentMobileDayCount = Number(mobileDayCount || 1);
+                            if (!Number.isFinite(currentMobileDayCount) || currentMobileDayCount < 1) {
+                                currentMobileDayCount = 1;
+                            }
+                            currentMobileDayCount = Math.min(5, currentMobileDayCount);
+
+                            if (currentMobileDayCount !== mobileDayCount) {
+                                setMobileDayCount(currentMobileDayCount);
+                                return;
+                            }
+
+                            if (!hasInitializedViewDaysPreference.current) {
+                                hasInitializedViewDaysPreference.current = true;
+                                return;
+                            }
+
+                            saveViewDaysPreference(currentMobileDayCount);
+                        }, [mobileDayCount, setMobileDayCount]);
 
                         hooks.useEffect(function() {
                             if (isMobileLayout || mobileSectionTab === 'encode') {
@@ -6527,6 +6728,32 @@
                             });
                         }
 
+                        var handleMobileSelectionFormScroll = hooks.useCallback(function() {
+                            if (!isMobileLayout) {
+                                return;
+                            }
+                            if (mobileSectionTab !== 'encode') {
+                                setMobileSectionTab('encode');
+                            }
+
+                            function scrollToSelectionForm() {
+                                var node = selectionFormRef.current;
+                                if (!node || typeof node.scrollIntoView !== 'function') {
+                                    return;
+                                }
+                                node.scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'start'
+                                });
+                            }
+
+                            if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+                                window.requestAnimationFrame(scrollToSelectionForm);
+                                return;
+                            }
+                            scrollToSelectionForm();
+                        }, [isMobileLayout, mobileSectionTab, setMobileSectionTab]);
+
                         function handleSlotSelect(slot) {
                             if (!slot) {
                                 return;
@@ -6553,7 +6780,11 @@
                                     error: ''
                                 };
                             });
-                            if (isMobileLayout && slot.dayIso) {
+                            var mobileDaysVisibleOnSelect = Number(mobileDayCount || 1);
+                            if (!Number.isFinite(mobileDaysVisibleOnSelect) || mobileDaysVisibleOnSelect < 1) {
+                                mobileDaysVisibleOnSelect = 1;
+                            }
+                            if (isMobileLayout && mobileDaysVisibleOnSelect <= 1 && slot.dayIso) {
                                 setActiveMobileDay(function(previous) {
                                     return previous === slot.dayIso ? previous : slot.dayIso;
                                 });
@@ -6625,7 +6856,11 @@
                                 };
                             });
 
-                            if (isMobileLayout && contextDayIso) {
+                            var mobileDaysVisibleOnEntrySelect = Number(mobileDayCount || 1);
+                            if (!Number.isFinite(mobileDaysVisibleOnEntrySelect) || mobileDaysVisibleOnEntrySelect < 1) {
+                                mobileDaysVisibleOnEntrySelect = 1;
+                            }
+                            if (isMobileLayout && mobileDaysVisibleOnEntrySelect <= 1 && contextDayIso) {
                                 setActiveMobileDay(function(previous) {
                                     return previous === contextDayIso ? previous : contextDayIso;
                                 });
@@ -8513,6 +8748,26 @@
                                     handleMobileDayStep(1);
                                 }
                             }, '>'),
+                            h('div', { className: 'mj-hour-encode-app__mobile-day-count' }, [
+                                h('span', { className: 'mj-hour-encode-app__mobile-day-count-label' }, config.labels.mobileDaysViewLabel || 'Vue'),
+                                h('div', {
+                                    className: 'mj-hour-encode-app__mobile-day-count-options',
+                                    role: 'group',
+                                    'aria-label': config.labels.mobileDaysViewLabel || 'Vue'
+                                }, mobileDayCountOptions.map(function(option) {
+                                    var isActive = normalizedMobileDayCount === option.value;
+                                    return h('button', {
+                                        key: 'mobile-days-' + option.value,
+                                        type: 'button',
+                                        className: 'mj-hour-encode-app__mobile-day-count-option' + (isActive ? ' is-active' : ''),
+                                        'aria-pressed': isActive ? 'true' : 'false',
+                                        onClick: function(event) {
+                                            event.preventDefault();
+                                            setMobileDayCount(option.value);
+                                        }
+                                    }, option.label);
+                                }))
+                            ]),
                             h('div', { className: 'mj-hour-encode-app__mobile-day-columns' }, [
                                 h('span', {
                                     className: 'mj-hour-encode-app__mobile-day-columns-spacer',
@@ -8553,26 +8808,6 @@
                                         day.isToday ? h('span', { className: 'mj-hour-encode-app__mobile-day-picker-today-badge' }, config.labels.today) : null,
                                         selectedSlot && selectedSlot.entry && selectedSlot.entry.dayIso === day.iso ? h('span', { className: 'mj-hour-encode-app__mobile-day-picker-edit-badge' }, config.labels.selectionEditTitle || 'Modifier') : null
                                     ]);
-                                }))
-                            ]),
-                            h('div', { className: 'mj-hour-encode-app__mobile-day-count' }, [
-                                h('span', { className: 'mj-hour-encode-app__mobile-day-count-label' }, config.labels.mobileDaysViewLabel || 'Vue'),
-                                h('div', {
-                                    className: 'mj-hour-encode-app__mobile-day-count-options',
-                                    role: 'group',
-                                    'aria-label': config.labels.mobileDaysViewLabel || 'Vue'
-                                }, mobileDayCountOptions.map(function(option) {
-                                    var isActive = normalizedMobileDayCount === option.value;
-                                    return h('button', {
-                                        key: 'mobile-days-' + option.value,
-                                        type: 'button',
-                                        className: 'mj-hour-encode-app__mobile-day-count-option' + (isActive ? ' is-active' : ''),
-                                        'aria-pressed': isActive ? 'true' : 'false',
-                                        onClick: function(event) {
-                                            event.preventDefault();
-                                            setMobileDayCount(option.value);
-                                        }
-                                    }, option.label);
                                 }))
                             ]),
                             (isMobileDayPickerCalendarOpen && miniCalendarModel) ? h('div', {
@@ -8665,6 +8900,11 @@
                                         onEntryDragStart: handleEntryDragStart,
                                         onEntryDrag: handleEntryDragUpdate,
                                         onEntryDragEnd: handleEntryDragEnd,
+                                        isMobileLayout: isMobileLayout,
+                                        onRequestSelectionFormScroll: handleMobileSelectionFormScroll,
+                                        onSelectionDuplicate: handleSelectionDuplicate,
+                                        onSelectionDelete: handleSelectionDelete,
+                                        canDuplicateEntry: canDuplicateEntry,
                                         selectedSlot: selectionHighlight,
                                         editingEntryKey: selectedSlot && selectedSlot.isEditing
                                             ? (selectedSlot.hourId ? 'hour:' + selectedSlot.hourId : (selectedSlot.entryId ? 'entry:' + selectedSlot.entryId : null))
@@ -8690,6 +8930,7 @@
                                     favorites: favorites,
                                     favoriteItems: favoriteItems,
                                     isMobileLayout: isMobileLayout,
+                                    selectionFormRef: selectionFormRef,
                                     calendarModel: null,
                                     onCalendarMonthNavigate: handleCalendarMonthNavigate,
                                     onCalendarWeekSelect: handleCalendarWeekSelect,

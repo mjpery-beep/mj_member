@@ -15,6 +15,7 @@ AssetsManager::requirePackage('hour-encode');
 
 $isPreview = function_exists('is_elementor_preview') && is_elementor_preview();
 $hasAccess = current_user_can(Config::hoursCapability());
+$currentUserId = get_current_user_id();
 
 if (!$hasAccess && !$isPreview) {
     echo '<div class="mj-hour-encode mj-hour-encode--restricted">' . esc_html__("Vous n'avez pas accès à cet outil.", 'mj-member') . '</div>';
@@ -126,6 +127,14 @@ $projects = array();
 $entries = array();
 $events = array();
 $projectTotalsPreview = array();
+
+$viewDaysPreference = 1;
+if ($currentUserId > 0) {
+    $savedViewDays = (int) get_user_meta($currentUserId, 'mj_member_hour_encode_view_days', true);
+    if ($savedViewDays >= 1 && $savedViewDays <= 5) {
+        $viewDaysPreference = $savedViewDays;
+    }
+}
 
 if ($isPreview) {
     $commonTasks = array(
@@ -260,6 +269,7 @@ $config = array(
         'renameTaskAction' => 'mj_member_hour_encode_rename_task',
         'toggleFavTaskAction' => 'mj_member_hour_encode_toggle_fav_task',
         'updateProjectColorAction' => 'mj_member_hour_encode_update_project_color',
+        'updateViewDaysAction' => 'mj_member_hour_encode_update_view_days',
         'nonce' => wp_create_nonce('mj-member-hour-encode'),
         'renameNonce' => wp_create_nonce('mj-member-hour-encode'),
     ),
@@ -316,6 +326,7 @@ $config = array(
         }
         return $favorites;
     })(),
+    'viewDays' => $viewDaysPreference,
     'workSchedule' => array_map(static function ($slot) {
         return array(
             'day' => isset($slot['day']) ? sanitize_text_field((string) $slot['day']) : '',

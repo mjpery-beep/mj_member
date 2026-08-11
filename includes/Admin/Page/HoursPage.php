@@ -150,6 +150,14 @@ final class HoursPage
         }
 
         $nonce = wp_create_nonce('mj-member-hour-encode');
+        $viewDaysPreference = 1;
+        $currentUserId = get_current_user_id();
+        if ($currentUserId > 0) {
+            $savedViewDays = (int) get_user_meta($currentUserId, 'mj_member_hour_encode_view_days', true);
+            if ($savedViewDays >= 1 && $savedViewDays <= 5) {
+                $viewDaysPreference = $savedViewDays;
+            }
+        }
 
         return array(
             'locale' => determine_locale(),
@@ -167,6 +175,7 @@ final class HoursPage
                 'renameTaskAction' => 'mj_member_hour_encode_rename_task',
                 'toggleFavTaskAction' => 'mj_member_hour_encode_toggle_fav_task',
                 'updateProjectColorAction' => 'mj_member_hour_encode_update_project_color',
+                'updateViewDaysAction' => 'mj_member_hour_encode_update_view_days',
                 'nonce' => $nonce,
                 'renameNonce' => $nonce,
                 'staticParams' => array(),
@@ -178,6 +187,7 @@ final class HoursPage
             'projectTotals' => array(),
             'workSchedule' => array(),
             'cumulativeBalance' => null,
+            'viewDays' => $viewDaysPreference,
             'labels' => self::hourEncodeLabels(),
             'capabilities' => array(
                 'canManage' => true,

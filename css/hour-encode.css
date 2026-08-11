@@ -1183,9 +1183,9 @@
 .mj-hour-encode-calendar__event--entry.is-favorite::after {
     content: '★';
     position: absolute;
-    top: 6px;
-    right: 8px;
-    font-size: 11px;
+    top: 5px;
+    right: 7px;
+    font-size: 15px;
     line-height: 1;
     color: #eab308;
     text-shadow: 0 1px 2px rgba(17, 38, 94, 0.25);
@@ -1532,6 +1532,40 @@
 
 .mj-hour-encode-calendar__selection-cancel:active {
     transform: scale(0.92);
+}
+
+.mj-hour-encode-calendar__selection-action {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    min-width: 0;
+    border: 0;
+    border-radius: 999px;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    padding: 6px 12px;
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    pointer-events: auto;
+    z-index: 96;
+}
+
+.mj-hour-encode-calendar__selection-action:active {
+    transform: translateY(1px);
+}
+
+.mj-hour-encode-calendar__selection-action--danger {
+    background: #b91c1c;
+    border-color: rgba(255, 255, 255, 0.78);
 }
 
 /* ── Quick-favorites panel floating next to selection ── */
@@ -3404,6 +3438,39 @@
     .mj-hour-encode-app__card--calendar{
         padding: 0;
         border: 0;
+    }
+
+    .mj-hour-encode-app__card--selection {
+        scroll-margin-top: 84px;
+    }
+
+    .mj-hour-encode-calendar__selection-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+        min-width: 0;
+        border: 0;
+        border-radius: 999px;
+        background: #0f172a;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        line-height: 1.2;
+        padding: 6px 12px;
+        cursor: pointer;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.28);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+    }
+
+    .mj-hour-encode-calendar__selection-action:active {
+        transform: translateY(1px);
+    }
+
+    .mj-hour-encode-calendar__selection-action--danger {
+        background: #b91c1c;
+        border-color: rgba(255, 255, 255, 0.78);
     }
 
     .mj-hour-encode-app__resources {
