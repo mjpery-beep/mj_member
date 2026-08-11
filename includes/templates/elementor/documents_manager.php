@@ -287,30 +287,23 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                         <span class="mj-documents-status-bar__sep">·</span>
                         <span class="mj-documents-status-bar__meta"><?php echo esc_html($ncCurrStatus['apiStatusMessage']); ?></span>
                     <?php endif; ?>
-                    <?php if (!empty($ncCurrStatus['lastConnection'])) :
-                        $ncTs = strtotime($ncCurrStatus['lastConnection']);
-                    ?>
-                        <span class="mj-documents-status-bar__sep">·</span>
-                        <span class="mj-documents-status-bar__meta">
-                            <?php echo $ncTs ? esc_html(sprintf(__('Dernière connexion : %s', 'mj-member'), date_i18n('d/m/Y H:i', $ncTs))) : ''; ?>
-                        </span>
-                    <?php endif; ?>
                 </div>
 
                 <div class="mj-documents-status-bar__actions">
                     <a href="<?php echo esc_url($nextcloudIframeUrl); ?>"
                        id="<?php echo esc_attr($ncSbUid . '-open-page'); ?>"
-                       class="mj-documents-status-bar__connect-btn mj-documents-status-bar__open-link">
+                       class="mj-documents-status-bar__connect-btn mj-documents-status-bar__open-link"
+                       aria-label="<?php esc_attr_e('Ouvrir Nextcloud dans une autre page', 'mj-member'); ?>">
                         <svg class="mj-documents-status-bar__open-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                             <path d="M8.75 2.25H11.75V5.25" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                             <path d="M6 8L11.5 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                             <path d="M11 7.5V10.25C11 10.9404 10.4404 11.5 9.75 11.5H3.75C3.05964 11.5 2.5 10.9404 2.5 10.25V4.25C2.5 3.55964 3.05964 3 3.75 3H6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <?php esc_html_e('Ouvrir dans une autre page', 'mj-member'); ?>
                     </a>
                     <button type="button"
                             id="<?php echo esc_attr($ncSbUid . '-fullscreen'); ?>"
                             class="mj-documents-status-bar__fullscreen-btn"
+                            aria-label="<?php esc_attr_e('Basculer en plein écran', 'mj-member'); ?>"
                             aria-pressed="false">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                             <path d="M5 2.5H2.5V5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -318,7 +311,6 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                             <path d="M5 11.5H2.5V9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                             <path d="M9 11.5H11.5V9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span id="<?php echo esc_attr($ncSbUid . '-fullscreen-label'); ?>"><?php esc_html_e('Plein écran', 'mj-member'); ?></span>
                     </button>
                 </div>
 
@@ -342,7 +334,6 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                     var inlinePasswordEl = $(UID + '-password-value');
                     var connectBtn = $(UID + '-connect');
                     var fullscreenBtn = $(UID + '-fullscreen');
-                    var fullscreenLabel = $(UID + '-fullscreen-label');
                     var openPageBtn = $(UID + '-open-page');
                     var sessionPrompt = $(UID + '-session-prompt');
                     var sessionConnectBtn = $(UID + '-session-connect');
@@ -451,10 +442,9 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
 
                     function renderConnectedStatus(detectedUser) {
                         var label = detectedUser || currentLogin || '';
-                        var html = 'Session navigateur Nextcloud active';
-                        if (label) {
-                            html += ' : <strong>' + escHtml(label) + '</strong>';
-                        }
+                        var html = label
+                            ? 'Connecté : <strong>' + escHtml(label) + '</strong>'
+                            : 'Connecté';
 
                         manualLoginRequested = false;
                         lastKnownBrowserState = 'connected';
@@ -596,9 +586,6 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
 
                         var active = isWidgetFullscreen();
                         fullscreenBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
-                        if (fullscreenLabel) {
-                            fullscreenLabel.textContent = active ? 'Quitter plein écran' : 'Plein écran';
-                        }
                     }
 
                     function toggleWidgetFullscreen() {
