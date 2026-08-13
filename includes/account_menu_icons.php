@@ -26,6 +26,50 @@ if (!function_exists('mj_member_account_menu_icon_meta_key')) {
     }
 }
 
+if (!function_exists('mj_member_account_menu_extract_attachment_id')) {
+    function mj_member_account_menu_extract_attachment_id($value): int {
+        if (is_array($value)) {
+            if (isset($value['id'])) {
+                return mj_member_account_menu_extract_attachment_id($value['id']);
+            }
+
+            foreach ($value as $candidate) {
+                $parsed = mj_member_account_menu_extract_attachment_id($candidate);
+                if ($parsed > 0) {
+                    return $parsed;
+                }
+            }
+
+            return 0;
+        }
+
+        if (is_object($value) && isset($value->id)) {
+            return mj_member_account_menu_extract_attachment_id($value->id);
+        }
+
+        if (is_string($value)) {
+            $value = trim($value);
+            if ($value === '') {
+                return 0;
+            }
+            if (preg_match('/^\d+$/', $value) === 1) {
+                return (int) $value;
+            }
+            return 0;
+        }
+
+        if (is_int($value)) {
+            return $value > 0 ? $value : 0;
+        }
+
+        if (is_float($value)) {
+            return (int) $value > 0 ? (int) $value : 0;
+        }
+
+        return 0;
+    }
+}
+
 if (!function_exists('mj_member_account_menu_sanitize_icon_payload')) {
     function mj_member_account_menu_sanitize_icon_payload($payload) {
         $defaults = array(

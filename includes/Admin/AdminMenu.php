@@ -19,6 +19,8 @@ use Mj\Member\Admin\Page\ContactMessagesPage;
 use Mj\Member\Admin\Page\HoursPage;
 use Mj\Member\Admin\Page\TodosPage;
 use Mj\Member\Admin\Page\TodoProjectsPage;
+use Mj\Member\Admin\Page\RequestRoomsPage;
+use Mj\Member\Admin\Page\RequestTypesPage;
 use Mj\Member\Admin\Page\BadgesPage;
 use Mj\Member\Admin\Page\TrophiesPage;
 use Mj\Member\Admin\Page\LevelsPage;
@@ -330,5 +332,36 @@ final class AdminMenu
             CardsPdfPage::slug(),
             array(CardsPdfPage::class, 'render')
         );
+
+        // ===== MENU REQUESTS =====
+        add_menu_page(
+            __('MJ Request', 'mj-member'),
+            __('MJ Request', 'mj-member'),
+            $capability,
+            'mj_request',
+            array(RequestRoomsPage::class, 'render'),
+            'dashicons-feedback',
+            35
+        );
+
+        add_submenu_page(
+            'mj_request',
+            __('Salles', 'mj-member'),
+            __('Salles', 'mj-member'),
+            $capability,
+            RequestRoomsPage::slug(),
+            array(RequestRoomsPage::class, 'render')
+        );
+
+        add_submenu_page(
+            'mj_request',
+            __('Types de demande', 'mj-member'),
+            __('Types de demande', 'mj-member'),
+            $capability,
+            RequestTypesPage::slug(),
+            array(RequestTypesPage::class, 'render')
+        );
+
+        remove_submenu_page('mj_request', 'mj_request');
     }
 }

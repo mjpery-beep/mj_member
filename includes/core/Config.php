@@ -20,7 +20,7 @@ final class Config
         self::$pluginFile = $pluginFile;
 
         self::defineIfMissing('MJ_MEMBER_VERSION', '2.22.0');
-        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.86.0');
+        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.86.2');
         self::defineIfMissing('MJ_MEMBER_PATH', plugin_dir_path($pluginFile));
         self::defineIfMissing('MJ_MEMBER_URL', plugin_dir_url($pluginFile));
         self::defineIfMissing('MJ_MEMBER_CAPABILITY', 'mj_manage_members');
@@ -72,27 +72,27 @@ final class Config
 
     public static function capability(): string
     {
-        return constant('MJ_MEMBER_CAPABILITY');
+        return defined('MJ_MEMBER_CAPABILITY') ? constant('MJ_MEMBER_CAPABILITY') : 'mj_manage_members';
     }
 
     public static function contactCapability(): string
     {
-        return constant('MJ_MEMBER_CONTACT_CAPABILITY');
+        return defined('MJ_MEMBER_CONTACT_CAPABILITY') ? constant('MJ_MEMBER_CONTACT_CAPABILITY') : 'mj_manage_contact_messages';
     }
 
     public static function hoursCapability(): string
     {
-        return constant('MJ_MEMBER_HOURS_CAPABILITY');
+        return defined('MJ_MEMBER_HOURS_CAPABILITY') ? constant('MJ_MEMBER_HOURS_CAPABILITY') : 'mj_member_log_hours';
     }
 
     public static function todosCapability(): string
     {
-        return constant('MJ_MEMBER_TODOS_CAPABILITY');
+        return defined('MJ_MEMBER_TODOS_CAPABILITY') ? constant('MJ_MEMBER_TODOS_CAPABILITY') : 'mj_member_manage_todos';
     }
 
     public static function documentsCapability(): string
     {
-        return constant('MJ_MEMBER_DOCUMENTS_CAPABILITY');
+        return defined('MJ_MEMBER_DOCUMENTS_CAPABILITY') ? constant('MJ_MEMBER_DOCUMENTS_CAPABILITY') : 'mj_member_manage_documents';
     }
 
     public static function paymentExpirationDays(): int

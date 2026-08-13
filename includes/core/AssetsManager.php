@@ -463,6 +463,10 @@ final class AssetsManager
         self::registerStyle('mj-member-leave-requests', 'css/leave-requests.css', array('mj-member-components'));
         self::registerScript('mj-member-leave-requests', 'js/elementor/leave-requests.js', array('mj-member-utils', 'mj-member-preact-hooks'));
 
+        // Request Management Widget
+        self::registerStyle('mj-member-request-management', 'css/request-management.css', array('mj-member-components', 'mj-member-hour-encode'));
+        self::registerScript('mj-member-request-management', 'js/elementor/request-management.js', array('mj-member-utils', 'mj-member-preact-hooks'));
+
         // Expenses Widget
         self::registerStyle('mj-member-expenses', 'css/expenses.css', array('mj-member-components'));
         self::registerScript('mj-member-expenses', 'js/elementor/expenses.js', array('mj-member-utils'));
@@ -813,6 +817,18 @@ final class AssetsManager
                     \Mj\Member\Core\Ajax\Front\mj_member_leave_requests_localize();
                 } elseif (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\LeaveRequestsController')) {
                     \Mj\Member\Core\Ajax\Front\LeaveRequestsController::localize();
+                }
+                break;
+
+            case 'request-management':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-hour-encode');
+                wp_enqueue_style('mj-member-request-management');
+                wp_enqueue_script('mj-member-preact');
+                wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-request-management');
+                if (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\RequestManagementController')) {
+                    \Mj\Member\Core\Ajax\Front\RequestManagementController::localize();
                 }
                 break;
 

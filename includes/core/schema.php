@@ -505,6 +505,231 @@ function mj_member_get_leave_requests_table_name() {
     return $cached;
 }
 
+function mj_member_get_requests_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_requests';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_request_notes_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_request_notes';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_request_media_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_request_media';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_request_rooms_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_request_rooms';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_request_types_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_request_types';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+if (!function_exists('mj_member_request_default_room_emoji')) {
+    function mj_member_request_default_room_emoji($name) {
+        $label = is_scalar($name) ? (string) $name : '';
+        $normalized = sanitize_title(remove_accents($label));
+
+        $map = array(
+            'studio-son' => '🎧',
+            'salle-polyvalente' => '🏛️',
+            'hors-les-murs' => '🌳',
+        );
+
+        if ($normalized !== '' && isset($map[$normalized])) {
+            return $map[$normalized];
+        }
+
+        if ($normalized !== '') {
+            if (str_contains($normalized, 'studio') || str_contains($normalized, 'musique') || str_contains($normalized, 'son')) {
+                return '🎧';
+            }
+            if (str_contains($normalized, 'salle') || str_contains($normalized, 'polyvalente') || str_contains($normalized, 'hall')) {
+                return '🏛️';
+            }
+            if (str_contains($normalized, 'exterieur') || str_contains($normalized, 'jardin') || str_contains($normalized, 'plein-air') || str_contains($normalized, 'hors-les-murs')) {
+                return '🌳';
+            }
+        }
+
+        return '📍';
+    }
+}
+
+if (!function_exists('mj_member_request_default_type_emoji')) {
+    function mj_member_request_default_type_emoji($typeKey, $label = '') {
+        $key = is_scalar($typeKey) ? sanitize_key((string) $typeKey) : '';
+        $normalizedLabel = sanitize_title(remove_accents(is_scalar($label) ? (string) $label : ''));
+
+        $map = array(
+            'projet' => '🚀',
+            'atelier' => '🛠️',
+            'stage' => '🎓',
+            'sortie' => '🚌',
+            'soiree' => '🎉',
+            'emploi' => '💼',
+            'location_salle' => '🏠',
+            'pret_materiel' => '📦',
+        );
+
+        if ($key !== '' && isset($map[$key])) {
+            return $map[$key];
+        }
+
+        $haystack = $key !== '' ? $key : $normalizedLabel;
+        if ($haystack !== '') {
+            if (str_contains($haystack, 'projet')) {
+                return '🚀';
+            }
+            if (str_contains($haystack, 'atelier')) {
+                return '🛠️';
+            }
+            if (str_contains($haystack, 'stage')) {
+                return '🎓';
+            }
+            if (str_contains($haystack, 'sortie')) {
+                return '🚌';
+            }
+            if (str_contains($haystack, 'soiree') || str_contains($haystack, 'fete')) {
+                return '🎉';
+            }
+            if (str_contains($haystack, 'emploi') || str_contains($haystack, 'job')) {
+                return '💼';
+            }
+            if (str_contains($haystack, 'location') || str_contains($haystack, 'salle')) {
+                return '🏠';
+            }
+            if (str_contains($haystack, 'materiel') || str_contains($haystack, 'pret')) {
+                return '📦';
+            }
+        }
+
+        return '📝';
+    }
+}
+
+if (!function_exists('mj_member_request_default_type_color')) {
+    function mj_member_request_default_type_color($typeKey, $label = '') {
+        $key = is_scalar($typeKey) ? sanitize_key((string) $typeKey) : '';
+        $normalizedLabel = sanitize_title(remove_accents(is_scalar($label) ? (string) $label : ''));
+
+        $map = array(
+            'projet' => '#2563EB',
+            'atelier' => '#0F766E',
+            'stage' => '#7C3AED',
+            'sortie' => '#EA580C',
+            'soiree' => '#DB2777',
+            'emploi' => '#475569',
+            'location_salle' => '#059669',
+            'pret_materiel' => '#B45309',
+        );
+
+        if ($key !== '' && isset($map[$key])) {
+            return $map[$key];
+        }
+
+        $haystack = $key !== '' ? $key : $normalizedLabel;
+        if ($haystack !== '') {
+            if (str_contains($haystack, 'projet')) {
+                return '#2563EB';
+            }
+            if (str_contains($haystack, 'atelier')) {
+                return '#0F766E';
+            }
+            if (str_contains($haystack, 'stage')) {
+                return '#7C3AED';
+            }
+            if (str_contains($haystack, 'sortie')) {
+                return '#EA580C';
+            }
+            if (str_contains($haystack, 'soiree') || str_contains($haystack, 'fete')) {
+                return '#DB2777';
+            }
+            if (str_contains($haystack, 'emploi') || str_contains($haystack, 'job')) {
+                return '#475569';
+            }
+            if (str_contains($haystack, 'location') || str_contains($haystack, 'salle')) {
+                return '#059669';
+            }
+            if (str_contains($haystack, 'materiel') || str_contains($haystack, 'pret')) {
+                return '#B45309';
+            }
+        }
+
+        return '#1F6FEB';
+    }
+}
+
 function mj_member_get_todo_assignments_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -6128,6 +6353,358 @@ function mj_member_upgrade_to_2_76($wpdb) {
 add_action('admin_init', 'mj_member_run_schema_upgrade', 5);
 add_action('admin_init', 'mj_check_and_add_columns', 6);
 add_action('admin_init', 'mj_member_ensure_event_location_links_table', 7);
+
+function mj_member_ensure_request_management_tables() {
+    global $wpdb;
+
+    if (!isset($wpdb) || !is_object($wpdb)) {
+        return;
+    }
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $requests = mj_member_get_requests_table_name();
+    $notes = mj_member_get_request_notes_table_name();
+    $media = mj_member_get_request_media_table_name();
+    $rooms = mj_member_get_request_rooms_table_name();
+    $types = mj_member_get_request_types_table_name();
+
+    $sqlRequests = "CREATE TABLE {$requests} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        member_id bigint(20) unsigned NOT NULL,
+        assigned_to_member_id bigint(20) unsigned NOT NULL DEFAULT 0,
+        request_type varchar(60) NOT NULL,
+        status varchar(30) NOT NULL DEFAULT 'pending',
+        room_id bigint(20) unsigned NOT NULL DEFAULT 0,
+        is_outdoor tinyint(1) NOT NULL DEFAULT 0,
+        title varchar(191) NOT NULL,
+        description text DEFAULT NULL,
+        age_range varchar(40) NOT NULL DEFAULT '',
+        week_start varchar(10) NOT NULL DEFAULT '',
+        slot_day tinyint(1) unsigned NOT NULL DEFAULT 0,
+        slot_start varchar(5) NOT NULL DEFAULT '',
+        slot_end varchar(5) NOT NULL DEFAULT '',
+        room_options_json longtext DEFAULT NULL,
+        materials_json longtext DEFAULT NULL,
+        status_note text DEFAULT NULL,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_member (member_id),
+        KEY idx_status (status),
+        KEY idx_room (room_id),
+        KEY idx_created (created_at)
+    ) {$charset_collate};";
+
+    $sqlNotes = "CREATE TABLE {$notes} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        request_id bigint(20) unsigned NOT NULL,
+        author_member_id bigint(20) unsigned NOT NULL,
+        content text NOT NULL,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_request (request_id),
+        KEY idx_author (author_member_id)
+    ) {$charset_collate};";
+
+    $sqlMedia = "CREATE TABLE {$media} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        request_id bigint(20) unsigned NOT NULL,
+        attachment_id bigint(20) unsigned NOT NULL,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_request (request_id),
+        KEY idx_attachment (attachment_id)
+    ) {$charset_collate};";
+
+    $sqlRooms = "CREATE TABLE {$rooms} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        emoji varchar(16) NOT NULL DEFAULT '',
+        name varchar(191) NOT NULL,
+        description text DEFAULT NULL,
+        capacity int(11) NOT NULL DEFAULT 0,
+        options_json longtext DEFAULT NULL,
+        materials_json longtext DEFAULT NULL,
+        photo_ids_json longtext DEFAULT NULL,
+        plan_id bigint(20) unsigned NOT NULL DEFAULT 0,
+        is_active tinyint(1) NOT NULL DEFAULT 1,
+        sort_order int(11) NOT NULL DEFAULT 0,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_active (is_active),
+        KEY idx_sort (sort_order)
+    ) {$charset_collate};";
+
+    $sqlTypes = "CREATE TABLE {$types} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        type_key varchar(80) NOT NULL,
+        emoji varchar(16) NOT NULL DEFAULT '',
+        color varchar(7) NOT NULL DEFAULT '',
+        label varchar(191) NOT NULL,
+        description text DEFAULT NULL,
+        allows_location tinyint(1) NOT NULL DEFAULT 0,
+        allows_materials tinyint(1) NOT NULL DEFAULT 0,
+        allows_date tinyint(1) NOT NULL DEFAULT 0,
+        allows_multiple_dates tinyint(1) NOT NULL DEFAULT 0,
+        requires_animateur tinyint(1) NOT NULL DEFAULT 0,
+        is_active tinyint(1) NOT NULL DEFAULT 1,
+        sort_order int(11) NOT NULL DEFAULT 0,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_type_key (type_key),
+        KEY idx_active_sort (is_active, sort_order)
+    ) {$charset_collate};";
+
+    dbDelta($sqlRequests);
+    dbDelta($sqlNotes);
+    dbDelta($sqlMedia);
+    dbDelta($sqlRooms);
+    dbDelta($sqlTypes);
+
+    $existingCount = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$rooms}");
+    if ($existingCount === 0) {
+        $defaultRooms = array(
+            array(
+                'emoji' => '🎧',
+                'name' => 'Studio Son',
+                'description' => 'Espace musique et enregistrement. Max 4 personnes.',
+                'capacity' => 4,
+                'options_json' => wp_json_encode(array('Accès au bar', 'Accès à la scène')),
+                'materials_json' => wp_json_encode(array('Micros', 'Table de mixage', 'Casques')),
+                'photo_ids_json' => wp_json_encode(array()),
+                'plan_id' => 0,
+                'is_active' => 1,
+                'sort_order' => 10,
+            ),
+            array(
+                'emoji' => '🏛️',
+                'name' => 'Salle Polyvalente',
+                'description' => 'Grande salle modulable pour ateliers et événements. Max 30 personnes.',
+                'capacity' => 30,
+                'options_json' => wp_json_encode(array('Accès au bar', 'Accès à la scène')),
+                'materials_json' => wp_json_encode(array('Projecteur', 'Tables pliantes', 'Sonorisation légère')),
+                'photo_ids_json' => wp_json_encode(array()),
+                'plan_id' => 0,
+                'is_active' => 1,
+                'sort_order' => 20,
+            ),
+            array(
+                'emoji' => '🌳',
+                'name' => 'Hors-les-murs',
+                'description' => 'Activité extérieure hors bâtiment MJ.',
+                'capacity' => 0,
+                'options_json' => wp_json_encode(array()),
+                'materials_json' => wp_json_encode(array('Kit mobile', 'Matériel animation')),
+                'photo_ids_json' => wp_json_encode(array()),
+                'plan_id' => 0,
+                'is_active' => 1,
+                'sort_order' => 30,
+            ),
+        );
+
+        foreach ($defaultRooms as $room) {
+            $wpdb->insert(
+                $rooms,
+                $room,
+                array('%s', '%s', '%s', '%d', '%s', '%s', '%s', '%d', '%d', '%d')
+            );
+        }
+    }
+
+    $roomsWithoutEmoji = $wpdb->get_results("SELECT id, name FROM {$rooms} WHERE emoji = '' OR emoji IS NULL");
+    if (is_array($roomsWithoutEmoji)) {
+        foreach ($roomsWithoutEmoji as $roomRow) {
+            $emoji = mj_member_request_default_room_emoji(isset($roomRow->name) ? (string) $roomRow->name : '');
+            if ($emoji === '') {
+                continue;
+            }
+
+            $wpdb->update(
+                $rooms,
+                array('emoji' => $emoji),
+                array('id' => (int) $roomRow->id),
+                array('%s'),
+                array('%d')
+            );
+        }
+    }
+
+    $existingTypesCount = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$types}");
+    if ($existingTypesCount === 0) {
+        $defaultTypes = array(
+            array(
+                'type_key' => 'projet',
+                'emoji' => '🚀',
+                'color' => '#2563EB',
+                'label' => 'Projet',
+                'description' => 'Proposez une initiative citoyenne, culturelle ou collective.',
+                'allows_location' => 1,
+                'allows_materials' => 1,
+                'allows_date' => 1,
+                'allows_multiple_dates' => 1,
+                'requires_animateur' => 1,
+                'is_active' => 1,
+                'sort_order' => 10,
+            ),
+            array(
+                'type_key' => 'atelier',
+                'emoji' => '🛠️',
+                'color' => '#0F766E',
+                'label' => 'Atelier',
+                'description' => 'Organisez un atelier ponctuel ou régulier à la MJ.',
+                'allows_location' => 1,
+                'allows_materials' => 1,
+                'allows_date' => 1,
+                'allows_multiple_dates' => 1,
+                'requires_animateur' => 1,
+                'is_active' => 1,
+                'sort_order' => 20,
+            ),
+            array(
+                'type_key' => 'stage',
+                'emoji' => '🎓',
+                'color' => '#7C3AED',
+                'label' => 'Stage',
+                'description' => 'Préparez une période de stage avec encadrement.',
+                'allows_location' => 1,
+                'allows_materials' => 1,
+                'allows_date' => 1,
+                'allows_multiple_dates' => 1,
+                'requires_animateur' => 1,
+                'is_active' => 1,
+                'sort_order' => 30,
+            ),
+            array(
+                'type_key' => 'sortie',
+                'emoji' => '🚌',
+                'color' => '#EA580C',
+                'label' => 'Sortie',
+                'description' => 'Demandez une sortie éducative, sportive ou culturelle.',
+                'allows_location' => 1,
+                'allows_materials' => 1,
+                'allows_date' => 1,
+                'allows_multiple_dates' => 0,
+                'requires_animateur' => 1,
+                'is_active' => 1,
+                'sort_order' => 40,
+            ),
+            array(
+                'type_key' => 'soiree',
+                'emoji' => '🎉',
+                'color' => '#DB2777',
+                'label' => 'Soirée',
+                'description' => 'Proposez une soirée thématique ou événementielle.',
+                'allows_location' => 1,
+                'allows_materials' => 1,
+                'allows_date' => 1,
+                'allows_multiple_dates' => 0,
+                'requires_animateur' => 1,
+                'is_active' => 1,
+                'sort_order' => 50,
+            ),
+            array(
+                'type_key' => 'emploi',
+                'emoji' => '💼',
+                'color' => '#475569',
+                'label' => 'Emploi',
+                'description' => 'Soumettez une demande liée à un job étudiant ou engagement.',
+                'allows_location' => 0,
+                'allows_materials' => 0,
+                'allows_date' => 1,
+                'allows_multiple_dates' => 0,
+                'requires_animateur' => 1,
+                'is_active' => 1,
+                'sort_order' => 60,
+            ),
+            array(
+                'type_key' => 'location_salle',
+                'emoji' => '🏠',
+                'color' => '#059669',
+                'label' => 'Location de salle',
+                'description' => 'Réservez un espace intérieur avec options associées.',
+                'allows_location' => 1,
+                'allows_materials' => 1,
+                'allows_date' => 1,
+                'allows_multiple_dates' => 1,
+                'requires_animateur' => 1,
+                'is_active' => 1,
+                'sort_order' => 70,
+            ),
+            array(
+                'type_key' => 'pret_materiel',
+                'emoji' => '📦',
+                'color' => '#B45309',
+                'label' => 'Prêt de matériel',
+                'description' => 'Demandez du matériel disponible selon inventaire.',
+                'allows_location' => 0,
+                'allows_materials' => 1,
+                'allows_date' => 1,
+                'allows_multiple_dates' => 0,
+                'requires_animateur' => 0,
+                'is_active' => 1,
+                'sort_order' => 80,
+            ),
+        );
+
+        foreach ($defaultTypes as $type) {
+            $wpdb->insert(
+                $types,
+                $type,
+                array('%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d')
+            );
+        }
+    }
+
+    $typesWithoutEmoji = $wpdb->get_results("SELECT id, type_key, label FROM {$types} WHERE emoji = '' OR emoji IS NULL");
+    if (is_array($typesWithoutEmoji)) {
+        foreach ($typesWithoutEmoji as $typeRow) {
+            $emoji = mj_member_request_default_type_emoji(
+                isset($typeRow->type_key) ? (string) $typeRow->type_key : '',
+                isset($typeRow->label) ? (string) $typeRow->label : ''
+            );
+            if ($emoji === '') {
+                continue;
+            }
+
+            $wpdb->update(
+                $types,
+                array('emoji' => $emoji),
+                array('id' => (int) $typeRow->id),
+                array('%s'),
+                array('%d')
+            );
+        }
+    }
+
+    $typesWithoutColor = $wpdb->get_results("SELECT id, type_key, label FROM {$types} WHERE color = '' OR color IS NULL");
+    if (is_array($typesWithoutColor)) {
+        foreach ($typesWithoutColor as $typeRow) {
+            $color = mj_member_request_default_type_color(
+                isset($typeRow->type_key) ? (string) $typeRow->type_key : '',
+                isset($typeRow->label) ? (string) $typeRow->label : ''
+            );
+            if ($color === '') {
+                continue;
+            }
+
+            $wpdb->update(
+                $types,
+                array('color' => $color),
+                array('id' => (int) $typeRow->id),
+                array('%s'),
+                array('%d')
+            );
+        }
+    }
+}
+
+add_action('admin_init', 'mj_member_ensure_request_management_tables', 8);
 
 /**
  * Migration 2.77: Add missing performance indexes.

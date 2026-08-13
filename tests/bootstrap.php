@@ -135,6 +135,13 @@ if (!function_exists('shortcode_atts')) {
     }
 }
 
+if (!function_exists('__')) {
+    function __($text, $domain = null)
+    {
+        return (string) $text;
+    }
+}
+
 if (!function_exists('sanitize_text_field')) {
     function sanitize_text_field($value) {
         if (is_array($value) || is_object($value)) {

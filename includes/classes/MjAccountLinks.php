@@ -19,6 +19,25 @@ class MjAccountLinks {
     /**
      * Retourne la configuration par défaut des liens "Mon compte".
      */
+    public static function pruneDeletedCustomSections(array $settings, array $deletedKeys): array {
+        if (empty($deletedKeys)) {
+            return $settings;
+        }
+
+        $removed = array_fill_keys(array_map(static function ($key) {
+            return (string) sanitize_key((string) $key);
+        }, $deletedKeys), true);
+
+        foreach ($settings as $key => $config) {
+            $keyString = (string) $key;
+            if (strpos($keyString, 'custom_section_') === 0 && isset($removed[$keyString])) {
+                unset($settings[$key]);
+            }
+        }
+
+        return $settings;
+    }
+
     public static function getDefaultSettings(): array {
         $default_account_section = array('section' => 'profile');
         $contact_capability = Config::contactCapability() ?: 'mj_manage_contact_messages';
@@ -42,19 +61,6 @@ class MjAccountLinks {
                 'description' => __('Consultez et modifiez vos coordonnées et informations de profil.', 'mj-member'),
                 'slug' => 'mon-compte',
                 'query' => $default_account_section,
-                'enabled' => true,
-                'page_id' => 0,
-                'visibility' => 'all',
-                'editable_label' => true,
-                'type' => 'standard',
-                'icon_id' => 0,
-                'notification_types' => array(),
-            ),
-            'photos' => array(
-                'label' => __('Mes photos', 'mj-member'),
-                'description' => __('Gérez vos photos de profil et vos albums.', 'mj-member'),
-                'slug' => 'mes-photos',
-                'query' => array('section' => 'photos'),
                 'enabled' => true,
                 'page_id' => 0,
                 'visibility' => 'all',
@@ -120,6 +126,19 @@ class MjAccountLinks {
                 'description' => __('Retrouvez vos inscriptions aux événements passés et à venir.', 'mj-member'),
                 'slug' => 'inscriptions',
                 'query' => array('section' => 'registrations'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+                'notification_types' => array(),
+            ),
+            'request_management' => array(
+                'label' => __('Mes demandes', 'mj-member'),
+                'description' => __('Consultez et suivez vos demandes en cours.', 'mj-member'),
+                'slug' => '',
+                'query' => array('section' => 'request_management'),
                 'enabled' => true,
                 'page_id' => 0,
                 'visibility' => 'all',
@@ -398,7 +417,9 @@ class MjAccountLinks {
             $defaults[$key]['page_id'] = $page_id;
             $defaults[$key]['page_slug'] = $page_slug;
 
-            $icon_id = isset($saved_row['icon_id']) ? (int) $saved_row['icon_id'] : 0;
+            $icon_id = function_exists('mj_member_account_menu_extract_attachment_id')
+                ? mj_member_account_menu_extract_attachment_id($saved_row['icon_id'] ?? 0)
+                : (isset($saved_row['icon_id']) && is_numeric($saved_row['icon_id']) ? (int) $saved_row['icon_id'] : 0);
             $defaults[$key]['icon_id'] = $icon_id > 0 ? $icon_id : 0;
 
             // Récupérer la description si sauvegardée
@@ -639,7 +660,9 @@ class MjAccountLinks {
                 continue;
             }
 
-            $icon_id = isset($config['icon_id']) ? (int) $config['icon_id'] : 0;
+            $icon_id = function_exists('mj_member_account_menu_extract_attachment_id')
+                ? mj_member_account_menu_extract_attachment_id($config['icon_id'] ?? 0)
+                : (isset($config['icon_id']) && is_numeric($config['icon_id']) ? (int) $config['icon_id'] : 0);
             $icon_payload = array();
             if ($icon_id > 0 && function_exists('mj_member_account_menu_build_icon_payload_from_attachment')) {
                 $icon_payload = \mj_member_account_menu_build_icon_payload_from_attachment($icon_id);
@@ -761,7 +784,9 @@ class MjAccountLinks {
                 'notification_types' => isset($link['notification_types']) && is_array($link['notification_types'])
                     ? array_values(array_filter(array_map('sanitize_key', $link['notification_types'])))
                     : array(),
-                'icon_id' => isset($link['icon_id']) ? (int) $link['icon_id'] : 0,
+                'icon_id' => function_exists('mj_member_account_menu_extract_attachment_id')
+                    ? mj_member_account_menu_extract_attachment_id($link['icon_id'] ?? 0)
+                    : (isset($link['icon_id']) && is_numeric($link['icon_id']) ? (int) $link['icon_id'] : 0),
                 'icon' => $icon_payload,
             );
         }

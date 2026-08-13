@@ -73,6 +73,7 @@ final class Bootstrap
         'includes/core/ajax/front/employee_documents_ajax.php',
         'includes/core/ajax/front/work_schedules_ajax.php',
         'includes/core/ajax/front/mileage_ajax.php',
+        'includes/core/ajax/front/request_management_ajax.php',
         'includes/core/ajax/front/header_widget_ajax.php',
         'includes/core/ajax/front/photo_import_timeline_ajax.php',
         'includes/core/ajax/front/player_ajax.php',

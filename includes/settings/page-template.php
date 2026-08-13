@@ -1199,7 +1199,9 @@ if (!defined('ABSPATH')) {
                                 $page_id_value = isset($link_config['page_id']) ? (int) $link_config['page_id'] : 0;
                                 $section_value = isset($link_config['query']['section']) ? sanitize_key($link_config['query']['section']) : sanitize_key($link_key);
                                 $slug_value = isset($link_config['slug']) ? (string) $link_config['slug'] : '';
-                                $icon_id_value = isset($link_config['icon_id']) ? (int) $link_config['icon_id'] : 0;
+                                $icon_id_value = function_exists('mj_member_account_menu_extract_attachment_id')
+                                    ? mj_member_account_menu_extract_attachment_id(isset($link_config['icon_id']) ? $link_config['icon_id'] : 0)
+                                    : (isset($link_config['icon_id']) && is_numeric($link_config['icon_id']) ? (int) $link_config['icon_id'] : 0);
                                 $icon_payload = array();
                                 if ($icon_id_value > 0 && function_exists('mj_member_account_menu_build_icon_payload_from_attachment')) {
                                     $icon_payload = mj_member_account_menu_build_icon_payload_from_attachment($icon_id_value);
@@ -1263,8 +1265,8 @@ if (!defined('ABSPATH')) {
                                         <button type="button" class="mj-account-link-expand" aria-expanded="false" title="Modifier les options">
                                             <span class="dashicons dashicons-arrow-down-alt2"></span>
                                         </button>
-                                    <?php else : ?>
-                                        <button type="button" class="mj-account-link-delete-btn" title="Supprimer cette section" data-is-custom="<?php echo strpos($link_key, 'custom_section_') === 0 ? '1' : '0'; ?>" style="background:none; border:none; color:#ef4444; cursor:pointer; padding:4px; font-size:18px; display:inline-flex; align-items:center; margin-left:8px;">
+                                    <?php elseif (strpos($link_key, 'custom_section_') === 0) : ?>
+                                        <button type="button" class="mj-account-link-delete-btn" title="Supprimer cette section" data-is-custom="1" style="background:none; border:none; color:#ef4444; cursor:pointer; padding:4px; font-size:18px; display:inline-flex; align-items:center; margin-left:8px;">
                                             <span class="dashicons dashicons-trash" style="font-size:18px;"></span>
                                         </button>
                                     <?php endif; ?>
@@ -4048,9 +4050,23 @@ if (!defined('ABSPATH')) {
                 var label = item.querySelector('.mj-account-link-label').textContent;
                 var isCustom = deleteBtn.getAttribute('data-is-custom') === '1';
 
+                if (!isCustom) {
+                    alert('Seules les sections créées dans cette configuration peuvent être supprimées.');
+                    return;
+                }
+
                 var confirmMsg = 'Êtes-vous sûr de vouloir supprimer la section "' + label + '" ?\n\nLes liens dans cette section restent actifs.';
 
                 if (confirm(confirmMsg)) {
+                    var form = item.closest('form');
+                    if (form) {
+                        var removedInput = document.createElement('input');
+                        removedInput.type = 'hidden';
+                        removedInput.name = 'mj_account_links_deleted[]';
+                        removedInput.value = linkKey;
+                        form.appendChild(removedInput);
+                    }
+
                     // Supprimer complètement la section du DOM
                     item.remove();
                     

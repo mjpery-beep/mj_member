@@ -16,6 +16,7 @@ namespace Mj\Member\Module\Admin {
 }
 
 namespace {
+    use Mj\Member\Classes\MjAccountLinks;
     use Mj\Member\Classes\MjBackupProfile;
     use Mj\Member\Classes\MjDatabaseBackup;
     use Mj\Member\Classes\MjManualActionLog;
@@ -823,6 +824,11 @@ function mj_settings_page() {
         $submitted_account_links = isset($_POST['mj_account_links']) && is_array($_POST['mj_account_links'])
             ? wp_unslash($_POST['mj_account_links'])
             : array();
+        $deleted_account_link_keys = isset($_POST['mj_account_links_deleted']) && is_array($_POST['mj_account_links_deleted'])
+            ? array_filter(array_map(static function ($key) {
+                return sanitize_key((string) wp_unslash($key));
+            }, $_POST['mj_account_links_deleted']))
+            : array();
 
         $normalized_account_links = array();
 
@@ -836,7 +842,9 @@ function mj_settings_page() {
             $label = isset($raw_row['label']) ? sanitize_text_field($raw_row['label']) : '';
             $link_description = isset($raw_row['description']) ? sanitize_text_field($raw_row['description']) : '';
             $page_id = isset($raw_row['page_id']) ? (int) $raw_row['page_id'] : 0;
-            $icon_id = isset($raw_row['icon_id']) ? (int) $raw_row['icon_id'] : 0;
+            $icon_id = function_exists('mj_member_account_menu_extract_attachment_id')
+                ? mj_member_account_menu_extract_attachment_id($raw_row['icon_id'] ?? 0)
+                : (isset($raw_row['icon_id']) && is_numeric($raw_row['icon_id']) ? (int) $raw_row['icon_id'] : 0);
             $position = isset($raw_row['position']) ? (int) $raw_row['position'] : 999;
             $visibility = isset($raw_row['visibility']) ? sanitize_key($raw_row['visibility']) : 'all';
 
@@ -904,6 +912,8 @@ function mj_settings_page() {
                 'visibility' => $visibility,
             );
         }
+
+        $normalized_account_links = MjAccountLinks::pruneDeletedCustomSections($normalized_account_links, $deleted_account_link_keys);
 
         update_option('mj_account_links_settings', $normalized_account_links);
 

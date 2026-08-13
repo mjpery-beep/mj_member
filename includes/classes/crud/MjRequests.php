@@ -1,0 +1,347 @@
+<?php
+
+namespace Mj\Member\Classes\Crud;
+
+use Mj\Member\Classes\MjTools;
+use WP_Error;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class MjRequests extends MjTools implements CrudRepositoryInterface
+{
+    private const TABLE = 'mj_requests';
+
+    public const STATUS_PENDING = 'pending';
+    public const STATUS_APPROVED = 'approved';
+    public const STATUS_REJECTED = 'rejected';
+    public const STATUS_CANCELLED = 'cancelled';
+
+    public static function statuses(): array
+    {
+        return array(
+            self::STATUS_PENDING,
+            self::STATUS_APPROVED,
+            self::STATUS_REJECTED,
+            self::STATUS_CANCELLED,
+        );
+    }
+
+    public static function get_status_labels(): array
+    {
+        return array(
+            self::STATUS_PENDING => __('En attente', 'mj-member'),
+            self::STATUS_APPROVED => __('Approuvée', 'mj-member'),
+            self::STATUS_REJECTED => __('Refusée', 'mj-member'),
+            self::STATUS_CANCELLED => __('Annulée', 'mj-member'),
+        );
+    }
+
+    private static function table_name(): string
+    {
+        if (function_exists('mj_member_get_requests_table_name')) {
+            return mj_member_get_requests_table_name();
+        }
+
+        return self::getTableName(self::TABLE);
+    }
+
+    private static function normalize_status(string $status): string
+    {
+        $status = strtolower(trim($status));
+        return in_array($status, self::statuses(), true) ? $status : self::STATUS_PENDING;
+    }
+
+    public static function get_all(array $args = array())
+    {
+        global $wpdb;
+        $table = self::table_name();
+
+        $defaults = array(
+            'member_id' => 0,
+            'assigned_to_member_id' => 0,
+            'room_id' => 0,
+            'status' => '',
+            'statuses' => array(),
+            'type' => '',
+            'limit' => 100,
+            'offset' => 0,
+            'order' => 'DESC',
+            'orderby' => 'created_at',
+            'search' => '',
+        );
+        $args = wp_parse_args($args, $defaults);
+
+        $where = array();
+        $params = array();
+
+        if ((int) $args['member_id'] > 0) {
+            $where[] = 'member_id = %d';
+            $params[] = (int) $args['member_id'];
+        }
+
+        if ((int) $args['assigned_to_member_id'] > 0) {
+            $where[] = 'assigned_to_member_id = %d';
+            $params[] = (int) $args['assigned_to_member_id'];
+        }
+
+        if ((int) $args['room_id'] > 0) {
+            $where[] = 'room_id = %d';
+            $params[] = (int) $args['room_id'];
+        }
+
+        if (!empty($args['statuses']) && is_array($args['statuses'])) {
+            $safe = array_values(array_filter(array_map('strval', $args['statuses'])));
+            if (!empty($safe)) {
+                $placeholders = implode(', ', array_fill(0, count($safe), '%s'));
+                $where[] = "status IN ({$placeholders})";
+                foreach ($safe as $status) {
+                    $params[] = self::normalize_status($status);
+                }
+            }
+        } elseif (!empty($args['status'])) {
+            $where[] = 'status = %s';
+            $params[] = self::normalize_status((string) $args['status']);
+        }
+
+        if (!empty($args['type'])) {
+            $where[] = 'request_type = %s';
+            $params[] = sanitize_text_field((string) $args['type']);
+        }
+
+        if (!empty($args['search'])) {
+            $search = '%' . $wpdb->esc_like((string) $args['search']) . '%';
+            $where[] = '(title LIKE %s OR description LIKE %s)';
+            $params[] = $search;
+            $params[] = $search;
+        }
+
+        $orderby = in_array($args['orderby'], array('created_at', 'updated_at', 'status', 'id'), true)
+            ? $args['orderby']
+            : 'created_at';
+        $order = strtoupper((string) $args['order']) === 'ASC' ? 'ASC' : 'DESC';
+
+        $sql = "SELECT * FROM {$table}";
+        if (!empty($where)) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+        $sql .= " ORDER BY {$orderby} {$order}";
+
+        $limit = max(0, (int) $args['limit']);
+        $offset = max(0, (int) $args['offset']);
+        if ($limit > 0) {
+            $sql .= ' LIMIT %d OFFSET %d';
+            $params[] = $limit;
+            $params[] = $offset;
+        }
+
+        if (!empty($params)) {
+            $sql = $wpdb->prepare($sql, $params);
+        }
+
+        $rows = $wpdb->get_results($sql);
+        return is_array($rows) ? $rows : array();
+    }
+
+    public static function count(array $args = array())
+    {
+        global $wpdb;
+        $table = self::table_name();
+
+        $where = array('1=1');
+        $params = array();
+
+        if (!empty($args['member_id'])) {
+            $where[] = 'member_id = %d';
+            $params[] = (int) $args['member_id'];
+        }
+
+        if (!empty($args['status'])) {
+            $where[] = 'status = %s';
+            $params[] = self::normalize_status((string) $args['status']);
+        }
+
+        $sql = "SELECT COUNT(*) FROM {$table} WHERE " . implode(' AND ', $where);
+        if (!empty($params)) {
+            $sql = $wpdb->prepare($sql, $params);
+        }
+
+        return (int) $wpdb->get_var($sql);
+    }
+
+    public static function get_by_id(int $id): ?object
+    {
+        global $wpdb;
+        $table = self::table_name();
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
+        return $row ?: null;
+    }
+
+    public static function create($data)
+    {
+        global $wpdb;
+        $table = self::table_name();
+
+        $memberId = isset($data['member_id']) ? (int) $data['member_id'] : 0;
+        if ($memberId <= 0) {
+            return new WP_Error('invalid_member', __('Membre invalide.', 'mj-member'));
+        }
+
+        $title = isset($data['title']) ? sanitize_text_field((string) $data['title']) : '';
+        if ($title === '') {
+            return new WP_Error('missing_title', __('Le titre est requis.', 'mj-member'));
+        }
+
+        $requestType = isset($data['request_type']) ? sanitize_text_field((string) $data['request_type']) : '';
+        if ($requestType === '') {
+            return new WP_Error('missing_type', __('Le type de demande est requis.', 'mj-member'));
+        }
+
+        $insert = array(
+            'member_id' => $memberId,
+            'assigned_to_member_id' => isset($data['assigned_to_member_id']) ? (int) $data['assigned_to_member_id'] : 0,
+            'request_type' => $requestType,
+            'status' => self::normalize_status((string) ($data['status'] ?? self::STATUS_PENDING)),
+            'room_id' => isset($data['room_id']) ? (int) $data['room_id'] : 0,
+            'is_outdoor' => !empty($data['is_outdoor']) ? 1 : 0,
+            'title' => $title,
+            'description' => isset($data['description']) ? sanitize_textarea_field((string) $data['description']) : '',
+            'age_range' => isset($data['age_range']) ? sanitize_text_field((string) $data['age_range']) : '',
+            'week_start' => isset($data['week_start']) ? sanitize_text_field((string) $data['week_start']) : '',
+            'slot_day' => isset($data['slot_day']) ? max(0, min(6, (int) $data['slot_day'])) : 0,
+            'slot_start' => isset($data['slot_start']) ? sanitize_text_field((string) $data['slot_start']) : '',
+            'slot_end' => isset($data['slot_end']) ? sanitize_text_field((string) $data['slot_end']) : '',
+            'room_options_json' => isset($data['room_options_json']) ? wp_json_encode($data['room_options_json']) : wp_json_encode(array()),
+            'materials_json' => isset($data['materials_json']) ? wp_json_encode($data['materials_json']) : wp_json_encode(array()),
+            'status_note' => isset($data['status_note']) ? sanitize_textarea_field((string) $data['status_note']) : '',
+            'created_at' => current_time('mysql'),
+            'updated_at' => current_time('mysql'),
+        );
+
+        $ok = $wpdb->insert(
+            $table,
+            $insert,
+            array(
+                '%d', '%d', '%s', '%s', '%d', '%d', '%s', '%s', '%s',
+                '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s',
+            )
+        );
+
+        if ($ok === false) {
+            return new WP_Error('db_insert_failed', __('Impossible de créer la demande.', 'mj-member'));
+        }
+
+        return (int) $wpdb->insert_id;
+    }
+
+    public static function update($id, $data)
+    {
+        global $wpdb;
+        $table = self::table_name();
+
+        $id = (int) $id;
+        if ($id <= 0) {
+            return new WP_Error('invalid_id', __('Identifiant invalide.', 'mj-member'));
+        }
+
+        $updates = array();
+        $formats = array();
+
+        if (isset($data['assigned_to_member_id'])) {
+            $updates['assigned_to_member_id'] = (int) $data['assigned_to_member_id'];
+            $formats[] = '%d';
+        }
+
+        if (isset($data['status'])) {
+            $updates['status'] = self::normalize_status((string) $data['status']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['room_id'])) {
+            $updates['room_id'] = (int) $data['room_id'];
+            $formats[] = '%d';
+        }
+
+        if (isset($data['is_outdoor'])) {
+            $updates['is_outdoor'] = !empty($data['is_outdoor']) ? 1 : 0;
+            $formats[] = '%d';
+        }
+
+        if (isset($data['title'])) {
+            $updates['title'] = sanitize_text_field((string) $data['title']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['description'])) {
+            $updates['description'] = sanitize_textarea_field((string) $data['description']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['age_range'])) {
+            $updates['age_range'] = sanitize_text_field((string) $data['age_range']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['week_start'])) {
+            $updates['week_start'] = sanitize_text_field((string) $data['week_start']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['slot_day'])) {
+            $updates['slot_day'] = max(0, min(6, (int) $data['slot_day']));
+            $formats[] = '%d';
+        }
+
+        if (isset($data['slot_start'])) {
+            $updates['slot_start'] = sanitize_text_field((string) $data['slot_start']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['slot_end'])) {
+            $updates['slot_end'] = sanitize_text_field((string) $data['slot_end']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['room_options_json'])) {
+            $updates['room_options_json'] = wp_json_encode($data['room_options_json']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['materials_json'])) {
+            $updates['materials_json'] = wp_json_encode($data['materials_json']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['status_note'])) {
+            $updates['status_note'] = sanitize_textarea_field((string) $data['status_note']);
+            $formats[] = '%s';
+        }
+
+        if (empty($updates)) {
+            return true;
+        }
+
+        $updates['updated_at'] = current_time('mysql');
+        $formats[] = '%s';
+
+        $ok = $wpdb->update($table, $updates, array('id' => $id), $formats, array('%d'));
+        if ($ok === false) {
+            return new WP_Error('db_update_failed', __('Impossible de mettre à jour la demande.', 'mj-member'));
+        }
+
+        return true;
+    }
+
+    public static function delete($id)
+    {
+        global $wpdb;
+        $table = self::table_name();
+        $ok = $wpdb->delete($table, array('id' => (int) $id), array('%d'));
+        if ($ok === false) {
+            return new WP_Error('db_delete_failed', __('Impossible de supprimer la demande.', 'mj-member'));
+        }
+
+        return true;
+    }
+}

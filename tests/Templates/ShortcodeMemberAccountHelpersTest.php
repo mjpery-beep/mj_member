@@ -140,6 +140,7 @@ final class ShortcodeMemberAccountHelpersTest extends TestCase
 {
     public static function setUpBeforeClass(): void
     {
+        require_once dirname(__DIR__, 2) . '/includes/classes/MjAccountLinks.php';
         require_once dirname(__DIR__, 2) . '/includes/templates/elementor/shortcode_member_account.php';
     }
 
@@ -214,6 +215,57 @@ final class ShortcodeMemberAccountHelpersTest extends TestCase
         $redirect = mj_member_get_account_redirect();
 
         $this->assertSame('https://example.com/mon-compte-fallback', $redirect);
+    }
+
+    public function testPruneDeletedCustomSectionsRemovesOnlyCustomSectionKeys(): void
+    {
+        $settings = array(
+            'section_profile' => array(
+                'label' => '👤 Profil',
+                'type' => 'section_header',
+            ),
+            'custom_section_123' => array(
+                'label' => 'Mes documents',
+                'type' => 'section_header',
+            ),
+            'custom_section_456' => array(
+                'label' => 'Mes tâches',
+                'type' => 'section_header',
+            ),
+        );
+
+        $filtered = \Mj\Member\Classes\MjAccountLinks::pruneDeletedCustomSections($settings, array('custom_section_123'));
+
+        $this->assertArrayHasKey('section_profile', $filtered);
+        $this->assertArrayNotHasKey('custom_section_123', $filtered);
+        $this->assertArrayHasKey('custom_section_456', $filtered);
+    }
+
+    public function testDefaultAccountSettingsExcludeLegacyEventPhotosAndIncludeRequestManagement(): void
+    {
+        $settings = \Mj\Member\Classes\MjAccountLinks::getDefaultSettings();
+
+        $this->assertArrayNotHasKey('photos', $settings);
+        $this->assertArrayHasKey('request_management', $settings);
+        $this->assertSame('Mes demandes', $settings['request_management']['label']);
+        $this->assertSame(array('section' => 'request_management'), $settings['request_management']['query']);
+    }
+
+    public function testMalformedIconAttachmentIdsAreIgnoredSafely(): void
+    {
+        $saved = array(
+            'profile' => array(
+                'enabled' => 1,
+                'label' => 'Profil',
+                'icon_id' => array('id' => 123),
+            ),
+        );
+
+        $GLOBALS['__mj_test_options']['mj_account_links_settings'] = $saved;
+
+        $settings = \Mj\Member\Classes\MjAccountLinks::getSettings();
+
+        $this->assertSame(0, $settings['profile']['icon_id']);
     }
 
     /**
