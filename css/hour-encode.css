@@ -2125,13 +2125,26 @@
 }
 
 @media (max-width: 900px) {
+    .mj-hour-encode-app.is-mobile-layout .mj-hour-encode-app__nav-btn {
+        display: none;
+    }
+
+    .mj-hour-encode-app.is-mobile-layout .mj-hour-encode-app__controls .mj-hour-encode-app__today-btn,
+    .mj-hour-encode-app.is-mobile-layout .mj-hour-encode-app__controls .mj-hour-encode-app__events-toggle {
+        display: none;
+    }
+
+    .mj-hour-encode-app__calendar-section {
+        gap: 6px;
+    }
+
     .mj-hour-encode-app__mobile-day-picker {
         display: flex;
         flex-wrap: wrap;
         align-items: stretch;
         gap: 12px;
         padding: 10px;
-        margin: 8px 0 18px;
+        margin: 2px 0 6px;
         border-radius: 20px;
         background: linear-gradient(140deg, rgba(255, 255, 255, 0.92), rgba(245, 247, 255, 0.92));
         border: 1px solid rgba(26, 45, 71, 0.1);
@@ -2203,6 +2216,34 @@
     .mj-hour-encode-app__mobile-day-picker-dropdown {
         flex: 1 0 100%;
         width: 100%;
+    }
+
+    .mj-hour-encode-app__mobile-day-actions {
+        flex: 1 1 auto;
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 8px;
+        margin-left: auto;
+        min-width: 0;
+        justify-content: flex-end;
+    }
+
+    .mj-hour-encode-app__mobile-day-actions .mj-hour-encode-app__today-btn,
+    .mj-hour-encode-app__mobile-day-actions .mj-hour-encode-app__events-toggle {
+        flex: 0 0 auto;
+        justify-content: center;
+    }
+
+    .mj-hour-encode-app__mobile-day-actions .mj-hour-encode-app__today-btn {
+        padding: 6px 10px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .mj-hour-encode-app__mobile-day-actions .mj-hour-encode-app__events-toggle {
+        padding: 6px 10px;
+        font-size: 11px;
+        white-space: nowrap;
     }
 
     .mj-hour-encode-app__mobile-day-count {
@@ -2384,6 +2425,16 @@
     .mj-hour-encode-app__mobile-day-picker {
     gap: 4px;
     padding: 3px;
+    }
+
+    .mj-hour-encode-app__mobile-day-actions {
+        gap: 6px;
+    }
+
+    .mj-hour-encode-app__mobile-day-actions .mj-hour-encode-app__today-btn,
+    .mj-hour-encode-app__mobile-day-actions .mj-hour-encode-app__events-toggle {
+        padding-left: 8px;
+        padding-right: 8px;
     }
 
     .mj-hour-encode-app__mobile-day-count {
@@ -3365,7 +3416,7 @@
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        gap: 16px;
+        gap: 6px;
     }
 
     .mj-hour-encode-app__sidebar {
@@ -3425,9 +3476,9 @@
         z-index: 40;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-        padding: 8px;
-        margin: 2px 0 4px;
+        gap: 4px;
+        padding: 4px;
+        margin: 0;
         border-radius: 14px;
         border: 1px solid rgba(26, 45, 71, 0.1);
         background: rgba(255, 255, 255, 0.94);
@@ -3637,8 +3688,8 @@
 
     .mj-hour-encode-app.is-mobile-layout .mj-hour-encode-app__mobile-section-tabs {
         top: 6px;
-        gap: 6px;
-        padding: 6px;
+        gap: 4px;
+        padding: 4px;
     }
 
     .mj-hour-encode-app__mobile-section-tab {

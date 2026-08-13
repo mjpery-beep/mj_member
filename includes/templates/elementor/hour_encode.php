@@ -136,6 +136,12 @@ if ($currentUserId > 0) {
     }
 }
 
+$showAllEventsPreference = false;
+if ($currentUserId > 0) {
+    $savedShowAllEvents = get_user_meta($currentUserId, 'mj_member_hour_encode_show_all_events', true);
+    $showAllEventsPreference = !empty($savedShowAllEvents);
+}
+
 if ($isPreview) {
     $commonTasks = array(
         'Accueil jeunes',
@@ -270,6 +276,7 @@ $config = array(
         'toggleFavTaskAction' => 'mj_member_hour_encode_toggle_fav_task',
         'updateProjectColorAction' => 'mj_member_hour_encode_update_project_color',
         'updateViewDaysAction' => 'mj_member_hour_encode_update_view_days',
+        'updateShowAllEventsAction' => 'mj_member_hour_encode_update_show_all_events',
         'nonce' => wp_create_nonce('mj-member-hour-encode'),
         'renameNonce' => wp_create_nonce('mj-member-hour-encode'),
     ),
@@ -327,6 +334,7 @@ $config = array(
         return $favorites;
     })(),
     'viewDays' => $viewDaysPreference,
+    'showAllEventsPreference' => $showAllEventsPreference,
     'workSchedule' => array_map(static function ($slot) {
         return array(
             'day' => isset($slot['day']) ? sanitize_text_field((string) $slot['day']) : '',

@@ -16,6 +16,7 @@ namespace Mj\Member\Module {
             add_action('wp_ajax_mj_member_hour_encode_toggle_fav_task', 'mj_member_ajax_hour_encode_toggle_fav_task');
             add_action('wp_ajax_mj_member_hour_encode_update_project_color', 'mj_member_ajax_hour_encode_update_project_color');
             add_action('wp_ajax_mj_member_hour_encode_update_view_days', 'mj_member_ajax_hour_encode_update_view_days');
+            add_action('wp_ajax_mj_member_hour_encode_update_show_all_events', 'mj_member_ajax_hour_encode_update_show_all_events');
             // Apply project color from MjTodoProjects to each entry
             add_filter('mj_member_hour_encode_entry_color', function ($color, $record) {
                 $project = isset($record['notes']) ? trim((string) $record['notes']) : '';
@@ -741,6 +742,46 @@ function mj_member_ajax_hour_encode_update_view_days() {
 
     wp_send_json_success(array(
         'viewDays' => $viewDays,
+    ));
+}
+
+function mj_member_ajax_hour_encode_update_show_all_events() {
+    check_ajax_referer('mj-member-hour-encode', 'nonce');
+
+    $capability = Config::hoursCapability();
+    if ($capability === '') {
+        $capability = Config::capability();
+    }
+
+    if (!current_user_can($capability)) {
+        wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+    }
+
+    $userId = get_current_user_id();
+    if ($userId <= 0) {
+        wp_send_json_error(array('message' => __('Utilisateur non authentifié.', 'mj-member')), 401);
+    }
+
+    $targetUserId = $userId;
+    $overrideMemberId = isset($_POST['member_id']) ? (int) sanitize_text_field(wp_unslash((string) $_POST['member_id'])) : 0;
+    if ($overrideMemberId > 0) {
+        if (!mj_member_hour_encode_user_can_manage_others()) {
+            wp_send_json_error(array('message' => __('Vous ne pouvez pas gérer les préférences de ce membre.', 'mj-member')), 403);
+        }
+        $overrideMember = MjMembers::getById($overrideMemberId);
+        if (!is_object($overrideMember) || empty($overrideMember->wp_user_id)) {
+            wp_send_json_error(array('message' => __('Membre cible introuvable.', 'mj-member')), 404);
+        }
+        $targetUserId = (int) $overrideMember->wp_user_id;
+    }
+
+    $rawShowAllEvents = isset($_POST['show_all_events']) ? (string) wp_unslash($_POST['show_all_events']) : '';
+    $showAllEvents = $rawShowAllEvents === '1';
+
+    update_user_meta($targetUserId, 'mj_member_hour_encode_show_all_events', $showAllEvents ? 1 : 0);
+
+    wp_send_json_success(array(
+        'showAllEvents' => $showAllEvents,
     ));
 }
 

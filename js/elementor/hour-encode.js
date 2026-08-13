@@ -62,6 +62,7 @@
                     events: [],
                     labels: {},
                     capabilities: {},
+                    showAllEventsPreference: false,
                     isPreview: false
                 };
 
@@ -183,6 +184,9 @@
                         : '';
                     config.ajax.updateViewDaysAction = typeof config.ajax.updateViewDaysAction === 'string' && config.ajax.updateViewDaysAction !== ''
                         ? config.ajax.updateViewDaysAction
+                        : '';
+                    config.ajax.updateShowAllEventsAction = typeof config.ajax.updateShowAllEventsAction === 'string' && config.ajax.updateShowAllEventsAction !== ''
+                        ? config.ajax.updateShowAllEventsAction
                         : '';
                     if (!config.ajax.action && config.ajax.weekAction) {
                         config.ajax.action = config.ajax.weekAction;
@@ -309,6 +313,7 @@
                     config.capabilities = Object.assign({
                         canManage: false
                     }, config.capabilities && typeof config.capabilities === 'object' ? config.capabilities : {});
+                    config.showAllEventsPreference = Boolean(config.showAllEventsPreference);
                     var configuredViewDays = Number(config.viewDays || 1);
                     if (!Number.isFinite(configuredViewDays) || configuredViewDays < 1) {
                         configuredViewDays = 1;
@@ -5294,7 +5299,9 @@
                         var projects = projectsState[0];
                         var setProjects = projectsState[1];
 
-                        var showAllEventsState = hooks.useState(false);
+                        var showAllEventsState = hooks.useState(function() {
+                            return Boolean(config.showAllEventsPreference);
+                        });
                         var showAllEvents = showAllEventsState[0];
                         var setShowAllEvents = showAllEventsState[1];
 
@@ -5435,6 +5442,7 @@
                         var fetchControllerRef = hooks.useRef(null);
                         var hasFetchedInitial = hooks.useRef(false);
                         var hasInitializedViewDaysPreference = hooks.useRef(false);
+                        var hasInitializedShowAllEventsPreference = hooks.useRef(false);
                         var pendingDragSubmitRef = hooks.useRef(null);
                         var pendingQuickFavRef = hooks.useRef(null);
                         var selectionFormRef = hooks.useRef(null);
@@ -5457,6 +5465,27 @@
                             })
                             .catch(function(error) {
                                 console.error('MJ Hour Encode - save view days preference error', error);
+                            });
+                        }
+
+                        function saveShowAllEventsPreference(nextShowAllEvents) {
+                            if (!config.ajax || !config.ajax.url || !config.ajax.updateShowAllEventsAction) {
+                                return;
+                            }
+                            var params = new URLSearchParams();
+                            params.append('action', config.ajax.updateShowAllEventsAction);
+                            params.append('nonce', config.ajax.nonce || '');
+                            params.append('show_all_events', nextShowAllEvents ? '1' : '0');
+                            appendStaticParams(params, config.ajax.staticParams);
+
+                            fetch(config.ajax.url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                                credentials: 'same-origin',
+                                body: params.toString()
+                            })
+                            .catch(function(error) {
+                                console.error('MJ Hour Encode - save show all events preference error', error);
                             });
                         }
 
@@ -6286,6 +6315,14 @@
 
                         hooks.useEffect(function() {
                             var currentMobileDayCount = Number(mobileDayCount || 1);
+
+                        hooks.useEffect(function() {
+                            if (!hasInitializedShowAllEventsPreference.current) {
+                                hasInitializedShowAllEventsPreference.current = true;
+                                return;
+                            }
+                            saveShowAllEventsPreference(showAllEvents);
+                        }, [showAllEvents]);
                             if (!Number.isFinite(currentMobileDayCount) || currentMobileDayCount < 1) {
                                 currentMobileDayCount = 1;
                             }
@@ -8702,17 +8739,17 @@
                                         handleNavigate(1);
                                     }
                                 }, '>'),
-                                h('button', {
+                                !isMobileLayout ? h('button', {
                                     type: 'button',
                                     className: 'mj-hour-encode-app__today-btn',
                                     onClick: function(event) {
                                         event.preventDefault();
                                         handleToday();
                                     }
-                                }, config.labels.today),
-                                h('button', {
+                                }, config.labels.today) : null,
+                                !isMobileLayout ? h('button', {
                                     type: 'button',
-                                    className: 'mj-hour-encode-app__events-toggle' + (!showAllEvents ? ' is-active' : ''),
+                                    className: 'mj-hour-encode-app__events-toggle' + (showAllEvents ? ' is-active' : ''),
                                     onClick: function(event) {
                                         event.preventDefault();
                                         setShowAllEvents(function(prev) { return !prev; });
@@ -8724,7 +8761,7 @@
                                         h('path', { d: !showAllEvents ? 'M5 8l2 2 4-4' : 'M4.5 8h7' })
                                     ]),
                                     h('span', null, showAllEvents ? (config.labels.showAllEvents || 'Tous les événements') : (config.labels.showMyEvents || 'Mes événements'))
-                                ])
+                                ]) : null
                             ]),
                         ]);
                         var mobileDayPickerSection = isMobileLayout && activeMobileDayData ? h('div', { className: 'mj-hour-encode-app__mobile-day-picker' }, [
@@ -8748,6 +8785,31 @@
                                     handleMobileDayStep(1);
                                 }
                             }, '>'),
+                            h('div', { className: 'mj-hour-encode-app__mobile-day-actions' }, [
+                                h('button', {
+                                    type: 'button',
+                                    className: 'mj-hour-encode-app__today-btn',
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        handleToday();
+                                    }
+                                }, config.labels.today),
+                                h('button', {
+                                    type: 'button',
+                                    className: 'mj-hour-encode-app__events-toggle' + (showAllEvents ? ' is-active' : ''),
+                                    onClick: function(event) {
+                                        event.preventDefault();
+                                        setShowAllEvents(function(prev) { return !prev; });
+                                    },
+                                    title: showAllEvents ? (config.labels.showAllEvents || 'Tous les événements') : (config.labels.showMyEvents || 'Mes événements')
+                                }, [
+                                    h('svg', { width: '16', height: '16', viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
+                                        h('circle', { cx: '8', cy: '8', r: '6.5' }),
+                                        h('path', { d: !showAllEvents ? 'M5 8l2 2 4-4' : 'M4.5 8h7' })
+                                    ]),
+                                    h('span', null, showAllEvents ? (config.labels.showAllEvents || 'Tous les événements') : (config.labels.showMyEvents || 'Mes événements'))
+                                ])
+                            ]),
                             h('div', { className: 'mj-hour-encode-app__mobile-day-count' }, [
                                 h('span', { className: 'mj-hour-encode-app__mobile-day-count-label' }, config.labels.mobileDaysViewLabel || 'Vue'),
                                 h('div', {
