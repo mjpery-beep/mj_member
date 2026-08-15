@@ -75,8 +75,8 @@ class MjRequestRooms extends MjTools implements CrudRepositoryInterface
                 'name' => $name,
                 'description' => isset($data['description']) ? self::sanitize_description($data['description']) : '',
                 'capacity' => isset($data['capacity']) ? max(0, (int) $data['capacity']) : 0,
-                'options_json' => isset($data['options_json']) ? wp_json_encode($data['options_json']) : wp_json_encode(array()),
-                'materials_json' => isset($data['materials_json']) ? wp_json_encode($data['materials_json']) : wp_json_encode(array()),
+                'options_json' => isset($data['options_json']) ? wp_json_encode(self::normalizeCatalogItems($data['options_json'])) : wp_json_encode(array()),
+                'materials_json' => isset($data['materials_json']) ? wp_json_encode(self::normalizeCatalogItems($data['materials_json'])) : wp_json_encode(array()),
                 'photo_ids_json' => isset($data['photo_ids_json']) ? wp_json_encode($data['photo_ids_json']) : wp_json_encode(array()),
                 'plan_id' => isset($data['plan_id']) ? (int) $data['plan_id'] : 0,
                 'is_active' => isset($data['is_active']) ? (!empty($data['is_active']) ? 1 : 0) : 1,
@@ -118,11 +118,11 @@ class MjRequestRooms extends MjTools implements CrudRepositoryInterface
             $formats[] = '%d';
         }
         if (isset($data['options_json'])) {
-            $updates['options_json'] = wp_json_encode($data['options_json']);
+            $updates['options_json'] = wp_json_encode(self::normalizeCatalogItems($data['options_json']));
             $formats[] = '%s';
         }
         if (isset($data['materials_json'])) {
-            $updates['materials_json'] = wp_json_encode($data['materials_json']);
+            $updates['materials_json'] = wp_json_encode(self::normalizeCatalogItems($data['materials_json']));
             $formats[] = '%s';
         }
         if (isset($data['photo_ids_json'])) {
@@ -224,5 +224,43 @@ class MjRequestRooms extends MjTools implements CrudRepositoryInterface
         }
 
         return '📍';
+    }
+
+    /**
+     * @param mixed $items
+     * @return array<int,array{title:string,emoji:string,photo_id:int}>
+     */
+    private static function normalizeCatalogItems($items): array
+    {
+        if (!is_array($items)) {
+            return array();
+        }
+
+        $result = array();
+        foreach ($items as $item) {
+            $title = '';
+            $emoji = '';
+            $photoId = 0;
+
+            if (is_scalar($item) || (is_object($item) && method_exists($item, '__toString'))) {
+                $title = sanitize_text_field((string) $item);
+            } elseif (is_array($item)) {
+                $title = sanitize_text_field((string) ($item['title'] ?? ($item['label'] ?? '')));
+                $emoji = self::sanitize_emoji((string) ($item['emoji'] ?? ''));
+                $photoId = (int) ($item['photo_id'] ?? ($item['photoId'] ?? 0));
+            }
+
+            if ($title === '') {
+                continue;
+            }
+
+            $result[] = array(
+                'title' => $title,
+                'emoji' => $emoji,
+                'photo_id' => max(0, $photoId),
+            );
+        }
+
+        return $result;
     }
 }

@@ -34,6 +34,7 @@ if (!defined('ABSPATH')) {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-dynfields" data-tab-target="dynfields" role="tab" aria-controls="mj-tab-dynfields" aria-selected="false">📊 Données dynamiques</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-webpush" data-tab-target="webpush" role="tab" aria-controls="mj-tab-webpush" aria-selected="false">🔔 Web Push</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-widgets" data-tab-target="widgets" role="tab" aria-controls="mj-tab-widgets" aria-selected="false">🧩 Widgets</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-debug" data-tab-target="debug" role="tab" aria-controls="mj-tab-debug" aria-selected="false">🛠️ Debug</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-mileage" data-tab-target="mileage" role="tab" aria-controls="mj-tab-mileage" aria-selected="false">🚗 Frais kilométriques</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-fixtures" data-tab-target="fixtures" role="tab" aria-controls="mj-tab-fixtures" aria-selected="false">🧪 Fixtures</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-updates" data-tab-target="updates" role="tab" aria-controls="mj-tab-updates" aria-selected="false">🔄 Mises à jour</button>
@@ -2352,6 +2353,62 @@ if (!defined('ABSPATH')) {
                             updateCounter();
                         })();
                         </script>
+                    </div>
+
+                    <?php
+                    $current_user_id = function_exists('get_current_user_id') ? (int) get_current_user_id() : 0;
+                    $debug_widget_zones_option = $current_user_id > 0 ? get_user_meta($current_user_id, 'mj_member_debug_widget_zones', true) : array();
+                    $debug_widget_zones_adminbar_option = $current_user_id > 0 ? get_user_meta($current_user_id, 'mj_member_debug_widget_zones_adminbar', true) : array();
+                    if (!is_array($debug_widget_zones_option)) {
+                        $debug_widget_zones_option = array();
+                    }
+                    if (!is_array($debug_widget_zones_adminbar_option)) {
+                        $debug_widget_zones_adminbar_option = array();
+                    }
+                    $debug_widget_zone_labels = function_exists('mj_member_get_widget_debug_zone_label')
+                        ? array(
+                            'elementor' => mj_member_get_widget_debug_zone_label('elementor'),
+                            'mj-member' => mj_member_get_widget_debug_zone_label('mj-member'),
+                            'supertool' => mj_member_get_widget_debug_zone_label('supertool'),
+                        )
+                        : array(
+                            'elementor' => __('Widget Elementor', 'mj-member'),
+                            'mj-member' => __('Widget mj-member', 'mj-member'),
+                            'supertool' => __('Widget supertool', 'mj-member'),
+                        );
+                    ?>
+                    <div id="mj-tab-debug" class="mj-settings-tabs__panel" data-tab="debug" role="tabpanel" aria-labelledby="mj-tab-button-debug" aria-hidden="true">
+                        <div style="background:#fff7ed; border-left:4px solid #f59e0b; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
+                            <h2 style="margin:0 0 8px 0;">🛠️ Debug front</h2>
+                            <p style="margin:0; color:#475569;">
+                                Affiche un badge sur les widgets front pour identifier rapidement leur nom et leur zone d'origine.
+                            </p>
+                        </div>
+
+                        <div style="max-width:760px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:18px 20px;">
+                            <p style="margin-top:0; color:#334155;">
+                                Sélectionnez les familles de widgets à afficher dans le front. Les badges sont visibles uniquement quand l'option correspondante est cochée.
+                            </p>
+                            <fieldset style="border:0; padding:0; margin:0;">
+                                <legend style="font-weight:700; margin-bottom:10px;">Zones à afficher</legend>
+                                <div style="display:grid; gap:12px;">
+                                    <?php foreach ($debug_widget_zone_labels as $zone_key => $zone_label) : ?>
+                                        <label style="display:flex; gap:10px; align-items:flex-start; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px;">
+                                            <input type="checkbox" name="mj_member_debug_widget_zones[]" value="<?php echo esc_attr($zone_key); ?>" <?php checked(in_array($zone_key, $debug_widget_zones_option, true)); ?> style="margin-top:2px;" />
+                                            <span>
+                                                <strong><?php echo esc_html($zone_label); ?></strong><br>
+                                                <span style="color:#64748b; font-size:13px;">Affiche le nom du widget et son origine sur le front.</span>
+                                                <br>
+                                                <label style="display:inline-flex; gap:8px; align-items:center; margin-top:8px; color:#334155; font-size:13px;">
+                                                    <input type="checkbox" name="mj_member_debug_widget_zones_adminbar[]" value="<?php echo esc_attr($zone_key); ?>" <?php checked(in_array($zone_key, $debug_widget_zones_adminbar_option, true)); ?> />
+                                                    Afficher dans la barre admin
+                                                </label>
+                                            </span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </fieldset>
+                        </div>
                     </div>
 
                     <!-- Mileage Tab -->

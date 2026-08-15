@@ -372,6 +372,20 @@ class MjRoles
     }
 
     /**
+     * Rôles WordPress autorisés à utiliser l'inventaire MJ.
+     *
+     * @return string[]
+     */
+    public static function getWordPressInventoryRoles(): array
+    {
+        return apply_filters('mj_member_inventory_capability_roles', [
+            'administrator',
+            'animateur',
+            'coordinateur',
+        ]);
+    }
+
+    /**
      * Rôles WordPress pour la gestion des heures
      * @return string[]
      */

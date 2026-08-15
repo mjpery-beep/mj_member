@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Classes;
 
+use Mj\Member\Classes\Crud\MjInventory;
 use Mj\Member\Core\Config;
 use WP_Error;
 
@@ -285,6 +286,101 @@ final class MjOpenAIClient
             'model' => $usedModel,
             'usage' => $usageData,
         );
+    }
+
+    /**
+     * Analyse une photo d'objet et retourne les champs du formulaire inventaire.
+     *
+     * @param string $imagePath Chemin absolu de l'image temporaire.
+     * @param array<int,object|array> $categories Catégories disponibles.
+     * @return array<string,mixed>|WP_Error
+     */
+    public function analyzeInventoryPhoto(string $imagePath, array $categories = array())
+    {
+        if (!$this->isEnabled() || !is_readable($imagePath) || !function_exists('imagecreatefromstring')) {
+            return new WP_Error('mj_inventory_ai_unavailable', __('Analyse IA indisponible.', 'mj-member'));
+        }
+
+        $raw = file_get_contents($imagePath);
+        $source = $raw === false ? false : imagecreatefromstring($raw);
+        if (!$source) {
+            return new WP_Error('mj_inventory_ai_image', __('Image invalide.', 'mj-member'));
+        }
+        $source = $this->correctImageOrientation($source, $imagePath);
+        $width = imagesx($source);
+        $height = imagesy($source);
+        // 512px max côté + qualité 70 : suffisant pour l'identification d'objet, réduit fortement le coût en tokens.
+        $scale = min(1, 512 / max($width, $height));
+        $target = imagecreatetruecolor(max(1, (int) ($width * $scale)), max(1, (int) ($height * $scale)));
+        imagecopyresampled($target, $source, 0, 0, 0, 0, imagesx($target), imagesy($target), $width, $height);
+        imagedestroy($source);
+        ob_start();
+        imagejpeg($target, null, 70);
+        $encoded = base64_encode((string) ob_get_clean());
+        imagedestroy($target);
+
+        $categoryLines = array();
+        foreach ($categories as $category) {
+            $category = (array) $category;
+            $categoryLines[] = sprintf('%d: %s', (int) ($category['id'] ?? 0), sanitize_text_field((string) ($category['name'] ?? '')));
+        }
+        $categoryText = $categoryLines ? implode(', ', $categoryLines) : '(aucune catégorie existante)';
+        $payload = array(
+            'model' => 'gpt-4o',
+            'response_format' => array('type' => 'json_object'),
+            'messages' => array(
+                array('role' => 'system', 'content' => 'Tu es un assistant chargé de cataloguer du matériel pour une maison de jeunes. Retourne uniquement un objet JSON valide avec les clés name, description, status, category_id, new_category_name, new_category_icon, safety_note_long et safety_note_short. status doit être exactement good, damaged ou broken selon l état visible de l objet. Vérifie d abord si une catégorie existante correspond à l objet et utilise son category_id. Ne propose new_category_name et new_category_icon que si aucune catégorie existante ne correspond. N invente pas de marque, de modèle ou de danger non visible.'),
+                array('role' => 'user', 'content' => array(
+                    array('type' => 'text', 'text' => 'Identifie cet objet. Catégories disponibles: ' . $categoryText),
+                    array('type' => 'image_url', 'image_url' => array('url' => 'data:image/jpeg;base64,' . $encoded, 'detail' => 'low')),
+                )),
+            ),
+            'max_tokens' => 800,
+            'temperature' => 0.2,
+        );
+        $response = wp_remote_post(self::TEXT_ENDPOINT, array(
+            'headers' => array('Authorization' => 'Bearer ' . $this->apiKey, 'Content-Type' => 'application/json'),
+            'body' => wp_json_encode($payload),
+            'timeout' => 45,
+        ));
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        $body = wp_remote_retrieve_body($response);
+        $decoded = json_decode($body, true);
+        $content = $decoded['choices'][0]['message']['content'] ?? '';
+        $content = preg_replace('/^```(?:json)?\s*|\s*```$/', '', (string) $content);
+        $result = json_decode(trim((string) $content), true);
+        if (!is_array($result)) {
+            return new WP_Error('mj_inventory_ai_response', __('Réponse IA invalide.', 'mj-member'));
+        }
+        return array(
+            'name' => sanitize_text_field((string) ($result['name'] ?? '')),
+            'description' => sanitize_textarea_field((string) ($result['description'] ?? '')),
+            'status' => isset(MjInventory::STATUSES[$result['status'] ?? '']) ? (string) $result['status'] : 'good',
+            'category_id' => !empty($result['category_id']) ? absint($result['category_id']) : null,
+            'new_category_name' => sanitize_text_field((string) ($result['new_category_name'] ?? '')),
+            'new_category_icon' => sanitize_text_field((string) ($result['new_category_icon'] ?? '')),
+            'safety_note_long' => sanitize_textarea_field((string) ($result['safety_note_long'] ?? '')),
+            'safety_note_short' => sanitize_text_field((string) ($result['safety_note_short'] ?? '')),
+        );
+    }
+
+    private function correctImageOrientation($image, string $path)
+    {
+        if (!function_exists('exif_read_data') || !function_exists('imagerotate')) {
+            return $image;
+        }
+        $exif = @exif_read_data($path);
+        $orientation = (int) ($exif['Orientation'] ?? 1);
+        if ($orientation === 3) {
+            $image = imagerotate($image, 180, 0);
+        } elseif ($orientation === 6) {
+            $image = imagerotate($image, -90, 0);
+        } elseif ($orientation === 8) {
+            $image = imagerotate($image, 90, 0);
+        }
+        return $image;
     }
 
     /**

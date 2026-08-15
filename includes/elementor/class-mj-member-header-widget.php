@@ -1179,9 +1179,9 @@ $this->add_control('nextcloud_label', array(
         // Rôle de l'utilisateur pour l'en-tête du panneau Mon Compte
         $acc_member_role_label = '';
         if ($is_logged_in && !$is_preview && $member && isset($member->role) && $member->role !== '') {
-            $acc_member_role_label = strtoupper(MjRoles::getRoleLabel(sanitize_key((string) $member->role)));
+            $acc_member_role_label = MjRoles::getRoleLabel(sanitize_key((string) $member->role));
         } elseif ($is_preview) {
-            $acc_member_role_label = strtoupper(MjRoles::getRoleLabel(MjRoles::ANIMATEUR));
+            $acc_member_role_label = MjRoles::getRoleLabel(MjRoles::ANIMATEUR);
         }
 
         AssetsManager::requirePackage('header-widget');

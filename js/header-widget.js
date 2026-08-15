@@ -785,7 +785,7 @@
         dropdown.setAttribute('aria-hidden', 'false');
         dropdown.classList.add('mj-header-dropdown--open');
 
-        if (!skipOverlay) {
+        if (!skipOverlay && !this.el.classList.contains('mj-header--sticky')) {
             var overlay = this.el.querySelector('.mj-header-overlay');
             if (overlay) overlay.classList.add('mj-header-overlay--active');
         }
@@ -828,9 +828,6 @@
         this.el.querySelectorAll('[data-mj-header-trigger]').forEach(function (t) {
             t.setAttribute('aria-expanded', 'false');
         });
-
-        var overlay = this.el.querySelector('.mj-header-overlay');
-        if (overlay) overlay.classList.remove('mj-header-overlay--active');
 
         this._unlockScroll();
 

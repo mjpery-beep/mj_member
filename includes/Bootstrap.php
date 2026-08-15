@@ -71,6 +71,7 @@ final class Bootstrap
         'includes/core/ajax/front/leave_requests_ajax.php',
         'includes/core/ajax/front/expenses_ajax.php',
         'includes/core/ajax/front/employee_documents_ajax.php',
+        'includes/core/ajax/front/inventory_ajax.php',
         'includes/core/ajax/front/work_schedules_ajax.php',
         'includes/core/ajax/front/mileage_ajax.php',
         'includes/core/ajax/front/request_management_ajax.php',

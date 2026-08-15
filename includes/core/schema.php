@@ -1163,6 +1163,78 @@ function mj_member_get_mileage_table_name() {
     return $cached;
 }
 
+function mj_member_get_inventory_categories_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_inventory_categories';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_inventory_locations_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_inventory_locations';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_inventory_items_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_inventory_items';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_inventory_borrow_history_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_inventory_borrow_history';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
 function mj_member_ensure_auxiliary_tables() {
     global $wpdb;
     if ( ! function_exists('dbDelta') ) {
@@ -1334,6 +1406,79 @@ function mj_member_ensure_auxiliary_tables() {
         KEY published_by_idx (published_by)
     ) $charset_collate;";
     dbDelta($sql_social_pub);
+
+    $inventory_categories_table = mj_member_get_inventory_categories_table_name();
+    $sql_inventory_categories = "CREATE TABLE IF NOT EXISTS $inventory_categories_table (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        name varchar(191) NOT NULL,
+        icon varchar(120) DEFAULT NULL,
+        sort_order int NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY idx_sort_order (sort_order),
+        KEY idx_name (name)
+    ) $charset_collate;";
+    dbDelta($sql_inventory_categories);
+
+    $inventory_locations_table = mj_member_get_inventory_locations_table_name();
+    $sql_inventory_locations = "CREATE TABLE IF NOT EXISTS $inventory_locations_table (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        name varchar(191) NOT NULL,
+        icon varchar(120) DEFAULT NULL,
+        description text DEFAULT NULL,
+        sort_order int NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY idx_sort_order (sort_order),
+        KEY idx_name (name)
+    ) $charset_collate;";
+    dbDelta($sql_inventory_locations);
+
+    $inventory_items_table = mj_member_get_inventory_items_table_name();
+    $sql_inventory_items = "CREATE TABLE IF NOT EXISTS $inventory_items_table (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        slug varchar(191) NOT NULL,
+        name varchar(191) NOT NULL,
+        description text DEFAULT NULL,
+        status enum('good','damaged','broken') NOT NULL DEFAULT 'good',
+        category_id bigint(20) unsigned DEFAULT NULL,
+        location_id bigint(20) unsigned DEFAULT NULL,
+        safety_note_long text DEFAULT NULL,
+        safety_note_short varchar(255) DEFAULT NULL,
+        photo_path varchar(255) DEFAULT NULL,
+        thumbnail longtext DEFAULT NULL,
+        borrowed_by bigint(20) unsigned DEFAULT NULL,
+        borrowed_at datetime DEFAULT NULL,
+        created_by bigint(20) unsigned DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY uniq_slug (slug),
+        KEY idx_status (status),
+        KEY idx_category (category_id),
+        KEY idx_location (location_id),
+        KEY idx_borrowed_by (borrowed_by),
+        KEY idx_created_by (created_by)
+    ) $charset_collate;";
+    dbDelta($sql_inventory_items);
+
+    $inventory_history_table = mj_member_get_inventory_borrow_history_table_name();
+    $sql_inventory_history = "CREATE TABLE IF NOT EXISTS $inventory_history_table (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        item_id bigint(20) unsigned NOT NULL,
+        borrowed_by bigint(20) unsigned NOT NULL,
+        borrowed_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        returned_at datetime DEFAULT NULL,
+        returned_by bigint(20) unsigned DEFAULT NULL,
+        PRIMARY KEY  (id),
+        KEY idx_item (item_id),
+        KEY idx_borrowed_by (borrowed_by),
+        KEY idx_returned_by (returned_by),
+        KEY idx_returned_at (returned_at)
+    ) $charset_collate;";
+    dbDelta($sql_inventory_history);
 }
 
 function mj_member_seed_email_templates() {
@@ -6388,6 +6533,7 @@ function mj_member_ensure_request_management_tables() {
         slot_day tinyint(1) unsigned NOT NULL DEFAULT 0,
         slot_start varchar(5) NOT NULL DEFAULT '',
         slot_end varchar(5) NOT NULL DEFAULT '',
+        slots_json longtext DEFAULT NULL,
         room_options_json longtext DEFAULT NULL,
         materials_json longtext DEFAULT NULL,
         status_note text DEFAULT NULL,
@@ -6452,6 +6598,8 @@ function mj_member_ensure_request_management_tables() {
         allows_date tinyint(1) NOT NULL DEFAULT 0,
         allows_multiple_dates tinyint(1) NOT NULL DEFAULT 0,
         requires_animateur tinyint(1) NOT NULL DEFAULT 0,
+        visibility_mode varchar(20) NOT NULL DEFAULT 'public',
+        allowed_roles_json longtext DEFAULT NULL,
         is_active tinyint(1) NOT NULL DEFAULT 1,
         sort_order int(11) NOT NULL DEFAULT 0,
         created_at datetime DEFAULT CURRENT_TIMESTAMP,
@@ -6549,6 +6697,8 @@ function mj_member_ensure_request_management_tables() {
                 'allows_date' => 1,
                 'allows_multiple_dates' => 1,
                 'requires_animateur' => 1,
+                'visibility_mode' => 'public',
+                'allowed_roles_json' => wp_json_encode(array()),
                 'is_active' => 1,
                 'sort_order' => 10,
             ),
@@ -6563,6 +6713,8 @@ function mj_member_ensure_request_management_tables() {
                 'allows_date' => 1,
                 'allows_multiple_dates' => 1,
                 'requires_animateur' => 1,
+                'visibility_mode' => 'public',
+                'allowed_roles_json' => wp_json_encode(array()),
                 'is_active' => 1,
                 'sort_order' => 20,
             ),
@@ -6577,6 +6729,8 @@ function mj_member_ensure_request_management_tables() {
                 'allows_date' => 1,
                 'allows_multiple_dates' => 1,
                 'requires_animateur' => 1,
+                'visibility_mode' => 'public',
+                'allowed_roles_json' => wp_json_encode(array()),
                 'is_active' => 1,
                 'sort_order' => 30,
             ),
@@ -6591,6 +6745,8 @@ function mj_member_ensure_request_management_tables() {
                 'allows_date' => 1,
                 'allows_multiple_dates' => 0,
                 'requires_animateur' => 1,
+                'visibility_mode' => 'public',
+                'allowed_roles_json' => wp_json_encode(array()),
                 'is_active' => 1,
                 'sort_order' => 40,
             ),
@@ -6605,6 +6761,8 @@ function mj_member_ensure_request_management_tables() {
                 'allows_date' => 1,
                 'allows_multiple_dates' => 0,
                 'requires_animateur' => 1,
+                'visibility_mode' => 'public',
+                'allowed_roles_json' => wp_json_encode(array()),
                 'is_active' => 1,
                 'sort_order' => 50,
             ),
@@ -6619,6 +6777,8 @@ function mj_member_ensure_request_management_tables() {
                 'allows_date' => 1,
                 'allows_multiple_dates' => 0,
                 'requires_animateur' => 1,
+                'visibility_mode' => 'public',
+                'allowed_roles_json' => wp_json_encode(array()),
                 'is_active' => 1,
                 'sort_order' => 60,
             ),
@@ -6633,6 +6793,8 @@ function mj_member_ensure_request_management_tables() {
                 'allows_date' => 1,
                 'allows_multiple_dates' => 1,
                 'requires_animateur' => 1,
+                'visibility_mode' => 'public',
+                'allowed_roles_json' => wp_json_encode(array()),
                 'is_active' => 1,
                 'sort_order' => 70,
             ),
@@ -6647,6 +6809,8 @@ function mj_member_ensure_request_management_tables() {
                 'allows_date' => 1,
                 'allows_multiple_dates' => 0,
                 'requires_animateur' => 0,
+                'visibility_mode' => 'public',
+                'allowed_roles_json' => wp_json_encode(array()),
                 'is_active' => 1,
                 'sort_order' => 80,
             ),
@@ -6656,10 +6820,13 @@ function mj_member_ensure_request_management_tables() {
             $wpdb->insert(
                 $types,
                 $type,
-                array('%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d')
+                array('%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%s', '%s', '%d', '%d')
             );
         }
     }
+
+    $wpdb->query("UPDATE {$types} SET visibility_mode = 'public' WHERE visibility_mode IS NULL OR visibility_mode = ''");
+    $wpdb->query("UPDATE {$types} SET allowed_roles_json = '[]' WHERE allowed_roles_json IS NULL");
 
     $typesWithoutEmoji = $wpdb->get_results("SELECT id, type_key, label FROM {$types} WHERE emoji = '' OR emoji IS NULL");
     if (is_array($typesWithoutEmoji)) {

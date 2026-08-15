@@ -53,6 +53,46 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
         return in_array($status, self::statuses(), true) ? $status : self::STATUS_PENDING;
     }
 
+    /**
+     * @param mixed $slots
+     * @return array<int,array{date:string,start:string,end:string}>
+     */
+    private static function normalize_slots($slots): array
+    {
+        if (is_string($slots)) {
+            $decoded = json_decode($slots, true);
+            $slots = is_array($decoded) ? $decoded : array();
+        }
+
+        if (!is_array($slots)) {
+            return array();
+        }
+
+        $result = array();
+        foreach ($slots as $slot) {
+            if (!is_array($slot)) {
+                continue;
+            }
+
+            $date = isset($slot['date']) ? sanitize_text_field((string) $slot['date']) : '';
+            if ($date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                continue;
+            }
+
+            $result[] = array(
+                'date' => $date,
+                'start' => isset($slot['start']) ? sanitize_text_field((string) $slot['start']) : '',
+                'end' => isset($slot['end']) ? sanitize_text_field((string) $slot['end']) : '',
+            );
+        }
+
+        usort($result, static function ($a, $b) {
+            return strcmp($a['date'] . $a['start'], $b['date'] . $b['start']);
+        });
+
+        return $result;
+    }
+
     public static function get_all(array $args = array())
     {
         global $wpdb;
@@ -198,6 +238,12 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
             return new WP_Error('missing_type', __('Le type de demande est requis.', 'mj-member'));
         }
 
+        $slots = self::normalize_slots($data['slots'] ?? array());
+        $firstSlot = $slots[0] ?? array('date' => '', 'start' => '', 'end' => '');
+        $weekStart = isset($data['week_start']) ? sanitize_text_field((string) $data['week_start']) : '';
+        $slotStart = isset($data['slot_start']) ? sanitize_text_field((string) $data['slot_start']) : $firstSlot['start'];
+        $slotEnd = isset($data['slot_end']) ? sanitize_text_field((string) $data['slot_end']) : $firstSlot['end'];
+
         $insert = array(
             'member_id' => $memberId,
             'assigned_to_member_id' => isset($data['assigned_to_member_id']) ? (int) $data['assigned_to_member_id'] : 0,
@@ -208,10 +254,11 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
             'title' => $title,
             'description' => isset($data['description']) ? sanitize_textarea_field((string) $data['description']) : '',
             'age_range' => isset($data['age_range']) ? sanitize_text_field((string) $data['age_range']) : '',
-            'week_start' => isset($data['week_start']) ? sanitize_text_field((string) $data['week_start']) : '',
+            'week_start' => $weekStart,
             'slot_day' => isset($data['slot_day']) ? max(0, min(6, (int) $data['slot_day'])) : 0,
-            'slot_start' => isset($data['slot_start']) ? sanitize_text_field((string) $data['slot_start']) : '',
-            'slot_end' => isset($data['slot_end']) ? sanitize_text_field((string) $data['slot_end']) : '',
+            'slot_start' => $slotStart,
+            'slot_end' => $slotEnd,
+            'slots_json' => wp_json_encode($slots),
             'room_options_json' => isset($data['room_options_json']) ? wp_json_encode($data['room_options_json']) : wp_json_encode(array()),
             'materials_json' => isset($data['materials_json']) ? wp_json_encode($data['materials_json']) : wp_json_encode(array()),
             'status_note' => isset($data['status_note']) ? sanitize_textarea_field((string) $data['status_note']) : '',
@@ -219,14 +266,7 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
             'updated_at' => current_time('mysql'),
         );
 
-        $ok = $wpdb->insert(
-            $table,
-            $insert,
-            array(
-                '%d', '%d', '%s', '%s', '%d', '%d', '%s', '%s', '%s',
-                '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s',
-            )
-        );
+        $ok = $wpdb->insert($table, $insert);
 
         if ($ok === false) {
             return new WP_Error('db_insert_failed', __('Impossible de créer la demande.', 'mj-member'));
@@ -303,6 +343,23 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
             $formats[] = '%s';
         }
 
+        if (isset($data['slots'])) {
+            $slots = self::normalize_slots($data['slots']);
+            $firstSlot = $slots[0] ?? array('date' => '', 'start' => '', 'end' => '');
+            $updates['slots_json'] = wp_json_encode($slots);
+            $formats[] = '%s';
+
+            if (!isset($data['slot_start'])) {
+                $updates['slot_start'] = $firstSlot['start'];
+                $formats[] = '%s';
+            }
+
+            if (!isset($data['slot_end'])) {
+                $updates['slot_end'] = $firstSlot['end'];
+                $formats[] = '%s';
+            }
+        }
+
         if (isset($data['room_options_json'])) {
             $updates['room_options_json'] = wp_json_encode($data['room_options_json']);
             $formats[] = '%s';
@@ -331,6 +388,35 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
         }
 
         return true;
+    }
+
+    /**
+     * @return array<int,array{date:string,start:string,end:string}>
+     */
+    public static function get_slots(object $request): array
+    {
+        $slots = self::normalize_slots($request->slots_json ?? '');
+        if (!empty($slots)) {
+            return $slots;
+        }
+
+        $date = '';
+        if (!empty($request->week_start) && isset($request->slot_day)) {
+            $base = strtotime((string) $request->week_start);
+            if ($base !== false) {
+                $date = wp_date('Y-m-d', $base + ((int) $request->slot_day * DAY_IN_SECONDS));
+            }
+        }
+
+        if ($date === '' && empty($request->slot_start) && empty($request->slot_end)) {
+            return array();
+        }
+
+        return array(array(
+            'date' => $date,
+            'start' => (string) ($request->slot_start ?? ''),
+            'end' => (string) ($request->slot_end ?? ''),
+        ));
     }
 
     public static function delete($id)

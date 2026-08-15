@@ -37,17 +37,17 @@ final class RequestRoomsPage
         $editRoom = $editId > 0 ? MjRequestRooms::find($editId) : null;
 
         ?>
-        <div class="wrap mj-request-admin">
-            <h1 class="wp-heading-inline"><?php esc_html_e('MJ Request - Salles', 'mj-member'); ?></h1>
-            <a href="<?php echo esc_url(add_query_arg(array('page' => self::slug()), admin_url('admin.php'))); ?>" class="page-title-action"><?php esc_html_e('Ajouter', 'mj-member'); ?></a>
+        <div class="wrap mj-request-admin mj-request-rooms-admin">
+            <h1 class="wp-heading-inline mj-request-rooms-admin__title"><?php esc_html_e('MJ Request - Salles', 'mj-member'); ?></h1>
+            <a href="<?php echo esc_url(add_query_arg(array('page' => self::slug()), admin_url('admin.php'))); ?>" class="page-title-action mj-request-rooms-admin__add"><?php esc_html_e('Ajouter', 'mj-member'); ?></a>
             <hr class="wp-header-end">
 
             <?php self::renderNotice($notice); ?>
 
             <?php self::renderForm($editRoom); ?>
 
-            <h2><?php esc_html_e('Salles existantes', 'mj-member'); ?></h2>
-            <table class="wp-list-table widefat fixed striped">
+            <h2 class="mj-request-rooms-admin__section-title"><?php esc_html_e('Salles existantes', 'mj-member'); ?></h2>
+            <table class="wp-list-table widefat fixed striped mj-request-rooms-admin__table">
                 <thead>
                     <tr>
                         <th style="width:20%;"><?php esc_html_e('Nom', 'mj-member'); ?></th>
@@ -66,14 +66,8 @@ final class RequestRoomsPage
                     <?php else : ?>
                         <?php foreach ($rooms as $room) : ?>
                             <?php
-                            $options = json_decode((string) ($room->options_json ?? '[]'), true);
-                            $materials = json_decode((string) ($room->materials_json ?? '[]'), true);
-                            if (!is_array($options)) {
-                                $options = array();
-                            }
-                            if (!is_array($materials)) {
-                                $materials = array();
-                            }
+                            $options = self::normalizeCatalogItems(json_decode((string) ($room->options_json ?? '[]'), true));
+                            $materials = self::normalizeCatalogItems(json_decode((string) ($room->materials_json ?? '[]'), true));
                             $editUrl = add_query_arg(
                                 array(
                                     'page' => self::slug(),
@@ -86,13 +80,13 @@ final class RequestRoomsPage
                                 <td><strong><?php echo esc_html(self::emojiLabel(isset($room->emoji) ? (string) $room->emoji : '', (string) $room->name)); ?></strong></td>
                                 <td><?php echo esc_html(self::descriptionExcerpt((string) $room->description)); ?></td>
                                 <td><?php echo (int) $room->capacity; ?></td>
-                                <td><?php echo esc_html(implode(', ', array_map('strval', $options))); ?></td>
-                                <td><?php echo esc_html(implode(', ', array_map('strval', $materials))); ?></td>
+                                <td><?php echo esc_html(self::catalogSummary($options)); ?></td>
+                                <td><?php echo esc_html(self::catalogSummary($materials)); ?></td>
                                 <td><?php echo (int) $room->sort_order; ?></td>
                                 <td><?php echo !empty($room->is_active) ? esc_html__('Actif', 'mj-member') : esc_html__('Inactif', 'mj-member'); ?></td>
                                 <td>
                                     <a class="button button-small" href="<?php echo esc_url($editUrl); ?>"><?php esc_html_e('Modifier', 'mj-member'); ?></a>
-                                    <form method="post" style="display:inline-block;margin-left:6px;" onsubmit="return confirm('<?php echo esc_js(__('Supprimer cette salle ?', 'mj-member')); ?>');">
+                                    <form method="post" class="mj-request-rooms-admin__inline-form" onsubmit="return confirm('<?php echo esc_js(__('Supprimer cette salle ?', 'mj-member')); ?>');">
                                         <?php wp_nonce_field('mj_request_rooms_manage', 'mj_request_rooms_nonce'); ?>
                                         <input type="hidden" name="mj_request_rooms_action" value="delete">
                                         <input type="hidden" name="room_id" value="<?php echo (int) $room->id; ?>">
@@ -120,17 +114,28 @@ final class RequestRoomsPage
 
         $options = array();
         $materials = array();
+        $photoIds = array();
         if ($isEdit) {
             $decodedOptions = json_decode((string) ($room->options_json ?? '[]'), true);
             $decodedMaterials = json_decode((string) ($room->materials_json ?? '[]'), true);
-            $options = is_array($decodedOptions) ? $decodedOptions : array();
-            $materials = is_array($decodedMaterials) ? $decodedMaterials : array();
+            $decodedPhotoIds = json_decode((string) ($room->photo_ids_json ?? '[]'), true);
+            $options = self::normalizeCatalogItems($decodedOptions);
+            $materials = self::normalizeCatalogItems($decodedMaterials);
+            if (is_array($decodedPhotoIds)) {
+                foreach ($decodedPhotoIds as $photoId) {
+                    $id = (int) $photoId;
+                    if ($id > 0) {
+                        $photoIds[$id] = $id;
+                    }
+                }
+                $photoIds = array_values($photoIds);
+            }
         }
 
         ?>
-        <div class="postbox" style="max-width: 980px; padding: 12px 16px; margin: 0 0 16px 0;">
-            <h2 style="margin-top:0;"><?php echo $isEdit ? esc_html__('Modifier la salle', 'mj-member') : esc_html__('Ajouter une salle', 'mj-member'); ?></h2>
-            <form method="post">
+        <div class="postbox mj-request-rooms-admin__formbox">
+            <h2 class="mj-request-rooms-admin__form-title"><?php echo $isEdit ? esc_html__('Modifier la salle', 'mj-member') : esc_html__('Ajouter une salle', 'mj-member'); ?></h2>
+            <form method="post" class="mj-request-rooms-admin__form">
                 <?php wp_nonce_field('mj_request_rooms_manage', 'mj_request_rooms_nonce'); ?>
                 <input type="hidden" name="mj_request_rooms_action" value="save">
                 <?php if ($isEdit) : ?>
@@ -164,12 +169,16 @@ final class RequestRoomsPage
                             <td><input id="mj-request-room-capacity" name="capacity" type="number" min="0" value="<?php echo (int) $capacity; ?>"></td>
                         </tr>
                         <tr>
-                            <th scope="row"><label for="mj-request-room-options"><?php esc_html_e('Options (CSV)', 'mj-member'); ?></label></th>
-                            <td><input id="mj-request-room-options" name="options_csv" type="text" class="regular-text" value="<?php echo esc_attr(implode(', ', array_map('strval', $options))); ?>"></td>
+                            <th scope="row"><?php esc_html_e('Options', 'mj-member'); ?></th>
+                            <td><?php self::renderCatalogField('options_items', $options, __('Ajouter une option', 'mj-member')); ?></td>
                         </tr>
                         <tr>
-                            <th scope="row"><label for="mj-request-room-materials"><?php esc_html_e('Matériel (CSV)', 'mj-member'); ?></label></th>
-                            <td><input id="mj-request-room-materials" name="materials_csv" type="text" class="regular-text" value="<?php echo esc_attr(implode(', ', array_map('strval', $materials))); ?>"></td>
+                            <th scope="row"><?php esc_html_e('Matériel', 'mj-member'); ?></th>
+                            <td><?php self::renderCatalogField('materials_items', $materials, __('Ajouter un matériel', 'mj-member')); ?></td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><?php esc_html_e('Images', 'mj-member'); ?></th>
+                            <td><?php self::renderPhotoField($photoIds); ?></td>
                         </tr>
                         <tr>
                             <th scope="row"><label for="mj-request-room-sort-order"><?php esc_html_e('Ordre', 'mj-member'); ?></label></th>
@@ -182,7 +191,7 @@ final class RequestRoomsPage
                     </tbody>
                 </table>
 
-                <p>
+                <p class="mj-request-rooms-admin__form-actions">
                     <button type="submit" class="button button-primary"><?php echo $isEdit ? esc_html__('Mettre à jour', 'mj-member') : esc_html__('Ajouter', 'mj-member'); ?></button>
                 </p>
             </form>
@@ -223,8 +232,9 @@ final class RequestRoomsPage
             'name' => sanitize_text_field(wp_unslash((string) ($_POST['name'] ?? ''))),
             'description' => wp_unslash((string) ($_POST['description'] ?? '')),
             'capacity' => (int) ($_POST['capacity'] ?? 0),
-            'options_json' => self::parseCsv((string) ($_POST['options_csv'] ?? '')),
-            'materials_json' => self::parseCsv((string) ($_POST['materials_csv'] ?? '')),
+            'options_json' => self::parseCatalogItems(isset($_POST['options_items']) ? $_POST['options_items'] : array()),
+            'materials_json' => self::parseCatalogItems(isset($_POST['materials_items']) ? $_POST['materials_items'] : array()),
+            'photo_ids_json' => self::parseIdsCsv((string) ($_POST['photo_ids_csv'] ?? '')),
             'sort_order' => (int) ($_POST['sort_order'] ?? 0),
             'is_active' => isset($_POST['is_active']) ? 1 : 0,
         );
@@ -265,6 +275,95 @@ final class RequestRoomsPage
     }
 
     /**
+     * @param mixed $items
+     * @return array<int,array{title:string,emoji:string,photo_id:int}>
+     */
+    private static function normalizeCatalogItems($items): array
+    {
+        if (!is_array($items)) {
+            return array();
+        }
+
+        $out = array();
+        foreach ($items as $item) {
+            $title = '';
+            $emoji = '';
+            $photoId = 0;
+
+            if (is_scalar($item) || (is_object($item) && method_exists($item, '__toString'))) {
+                $title = sanitize_text_field((string) $item);
+            } elseif (is_array($item)) {
+                $title = sanitize_text_field((string) ($item['title'] ?? ($item['label'] ?? '')));
+                $emoji = self::sanitizeEmoji((string) ($item['emoji'] ?? ''));
+                $photoId = (int) ($item['photo_id'] ?? ($item['photoId'] ?? 0));
+            }
+
+            if ($title === '') {
+                continue;
+            }
+
+            $out[] = array(
+                'title' => $title,
+                'emoji' => $emoji,
+                'photo_id' => max(0, $photoId),
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param mixed $rows
+     * @return array<int,array{title:string,emoji:string,photo_id:int}>
+     */
+    private static function parseCatalogItems($rows): array
+    {
+        if (!is_array($rows)) {
+            return array();
+        }
+
+        $normalized = array();
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $title = sanitize_text_field(wp_unslash((string) ($row['title'] ?? '')));
+            if ($title === '') {
+                continue;
+            }
+
+            $emoji = self::sanitizeEmoji(wp_unslash((string) ($row['emoji'] ?? '')));
+            $photoId = (int) ($row['photo_id'] ?? 0);
+
+            $normalized[] = array(
+                'title' => $title,
+                'emoji' => $emoji,
+                'photo_id' => max(0, $photoId),
+            );
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @return array<int,int>
+     */
+    private static function parseIdsCsv(string $value): array
+    {
+        $parts = array_map('trim', explode(',', wp_unslash($value)));
+        $ids = array();
+        foreach ($parts as $part) {
+            $id = (int) $part;
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_values($ids);
+    }
+
+    /**
      * @param array{message:string,type:string}|null $notice
      */
     private static function renderNotice(?array $notice): void
@@ -283,8 +382,24 @@ final class RequestRoomsPage
             wp_enqueue_editor();
         }
 
+        if (function_exists('wp_enqueue_media')) {
+            wp_enqueue_media();
+        }
+
         wp_enqueue_style('mj-member-event-form');
         wp_enqueue_style('mj-member-registration-manager');
+
+        $stylePath = Config::path() . 'css/request-rooms-admin.css';
+        $styleVersion = file_exists($stylePath) ? (string) filemtime($stylePath) : Config::version();
+
+        wp_register_style(
+            'mj-member-request-rooms-admin',
+            Config::url() . 'css/request-rooms-admin.css',
+            array('mj-member-event-form'),
+            $styleVersion
+        );
+        wp_enqueue_style('mj-member-request-rooms-admin');
+
         wp_enqueue_script('mj-member-preact');
         wp_enqueue_script('mj-member-preact-hooks');
         wp_enqueue_script('mj-member-regmgr-emoji-picker');
@@ -302,6 +417,116 @@ final class RequestRoomsPage
 
         wp_localize_script('mj-member-request-admin-emoji', 'mjRequestAdminEmoji', self::emojiStrings());
         wp_enqueue_script('mj-member-request-admin-emoji');
+
+        $mediaScriptPath = Config::path() . 'includes/js/admin-request-room-media.js';
+        $mediaScriptVersion = file_exists($mediaScriptPath) ? (string) filemtime($mediaScriptPath) : Config::version();
+
+        wp_register_script(
+            'mj-member-request-admin-room-media',
+            Config::url() . 'includes/js/admin-request-room-media.js',
+            array('jquery'),
+            $mediaScriptVersion,
+            true
+        );
+
+        wp_localize_script('mj-member-request-admin-room-media', 'mjRequestRoomMedia', self::mediaStrings());
+        wp_enqueue_script('mj-member-request-admin-room-media');
+
+        $catalogScriptPath = Config::path() . 'includes/js/admin-request-room-catalog.js';
+        $catalogScriptVersion = file_exists($catalogScriptPath) ? (string) filemtime($catalogScriptPath) : Config::version();
+
+        wp_register_script(
+            'mj-member-request-admin-room-catalog',
+            Config::url() . 'includes/js/admin-request-room-catalog.js',
+            array('jquery', 'mj-member-request-admin-room-media', 'mj-member-request-admin-emoji'),
+            $catalogScriptVersion,
+            true
+        );
+
+        wp_localize_script('mj-member-request-admin-room-catalog', 'mjRequestRoomCatalog', self::catalogStrings());
+        wp_enqueue_script('mj-member-request-admin-room-catalog');
+    }
+
+    /**
+     * @param array<int,int> $photoIds
+     */
+    private static function renderPhotoField(array $photoIds): void
+    {
+        $csv = implode(',', array_map('strval', $photoIds));
+        ?>
+        <div class="mj-request-room-media" data-room-media-field>
+            <input type="hidden" id="mj-request-room-photo-ids" name="photo_ids_csv" value="<?php echo esc_attr($csv); ?>" data-room-media-input>
+            <p class="mj-request-room-media__actions">
+                <button type="button" class="button" data-room-media-select><?php esc_html_e('Sélectionner des images', 'mj-member'); ?></button>
+                <button type="button" class="button" data-room-media-clear><?php esc_html_e('Vider', 'mj-member'); ?></button>
+            </p>
+            <div class="mj-request-room-media__preview" data-room-media-preview>
+                <?php foreach ($photoIds as $photoId) : ?>
+                    <?php
+                    $thumb = wp_get_attachment_image_url((int) $photoId, 'thumbnail');
+                    $full = wp_get_attachment_image_url((int) $photoId, 'full');
+                    $url = $thumb ?: $full;
+                    if (!$url) {
+                        continue;
+                    }
+                    ?>
+                    <span class="mj-request-room-media__item" data-room-media-id="<?php echo (int) $photoId; ?>">
+                        <img src="<?php echo esc_url($url); ?>" alt="" class="mj-request-room-media__thumb" />
+                        <button type="button" class="button button-small" data-room-media-remove="<?php echo (int) $photoId; ?>">×</button>
+                    </span>
+                <?php endforeach; ?>
+            </div>
+            <p class="description"><?php esc_html_e('Vous pouvez sélectionner plusieurs images pour la salle.', 'mj-member'); ?></p>
+        </div>
+        <?php
+    }
+
+    /**
+     * @param array<int,array{title:string,emoji:string,photo_id:int}> $items
+     */
+    private static function renderCatalogField(string $fieldName, array $items, string $addLabel): void
+    {
+        $rows = !empty($items) ? $items : array(array('title' => '', 'emoji' => '', 'photo_id' => 0));
+        ?>
+        <div class="mj-request-room-catalog" data-room-catalog-field data-base-name="<?php echo esc_attr($fieldName); ?>">
+            <div data-room-catalog-rows>
+                <?php foreach ($rows as $index => $item) : ?>
+                    <?php
+                    $title = sanitize_text_field((string) ($item['title'] ?? ''));
+                    $emoji = self::sanitizeEmoji((string) ($item['emoji'] ?? ''));
+                    $photoId = (int) ($item['photo_id'] ?? 0);
+                    $thumb = $photoId > 0 ? wp_get_attachment_image_url($photoId, 'thumbnail') : '';
+                    ?>
+                    <div class="mj-request-room-catalog__row" data-room-catalog-row>
+                        <label class="mj-request-room-catalog__label">
+                            <span class="screen-reader-text"><?php esc_html_e('Titre', 'mj-member'); ?></span>
+                            <input type="text" class="regular-text" name="<?php echo esc_attr($fieldName . '[' . $index . '][title]'); ?>" value="<?php echo esc_attr($title); ?>" placeholder="<?php esc_attr_e('Titre', 'mj-member'); ?>" data-room-catalog-title>
+                        </label>
+                        <label class="mj-request-room-catalog__label">
+                            <span class="screen-reader-text"><?php esc_html_e('Emoji', 'mj-member'); ?></span>
+                            <span class="mj-request-room-catalog__emoji" data-room-catalog-emoji-field>
+                                <span class="mj-request-room-catalog__emoji-picker" data-room-catalog-emoji-root></span>
+                                <input type="text" class="small-text" name="<?php echo esc_attr($fieldName . '[' . $index . '][emoji]'); ?>" value="<?php echo esc_attr($emoji); ?>" placeholder="<?php esc_attr_e('Emoji', 'mj-member'); ?>" maxlength="16" data-room-catalog-emoji-input>
+                            </span>
+                        </label>
+                        <div class="mj-request-room-catalog__photo-actions">
+                            <input type="hidden" name="<?php echo esc_attr($fieldName . '[' . $index . '][photo_id]'); ?>" value="<?php echo (int) $photoId; ?>" data-room-catalog-photo-id>
+                            <button type="button" class="button" data-room-catalog-photo-select><?php esc_html_e('Photo', 'mj-member'); ?></button>
+                            <button type="button" class="button" data-room-catalog-photo-clear><?php esc_html_e('Retirer', 'mj-member'); ?></button>
+                        </div>
+                        <button type="button" class="button mj-request-room-catalog__remove" data-room-catalog-remove><?php esc_html_e('Supprimer', 'mj-member'); ?></button>
+                        <div class="mj-request-room-catalog__preview<?php echo $thumb ? '' : ' is-empty'; ?>" data-room-catalog-photo-preview>
+                            <?php if ($thumb) : ?>
+                                <img src="<?php echo esc_url($thumb); ?>" alt="" class="mj-request-room-catalog__thumb" />
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <p class="mj-request-room-catalog__add-wrap"><button type="button" class="button" data-room-catalog-add><?php echo esc_html($addLabel); ?></button></p>
+            <p class="description"><?php esc_html_e('Chaque entrée peut contenir un titre, un emoji et une photo.', 'mj-member'); ?></p>
+        </div>
+        <?php
     }
 
     private static function renderEmojiField(string $fieldName, string $value, string $inputId, string $hintId): void
@@ -350,6 +575,72 @@ final class RequestRoomsPage
             'eventEmojiSearchNoResult' => __('Aucun emoji ne correspond à votre recherche.', 'mj-member'),
             'eventEmojiAllCategory' => __('Tout', 'mj-member'),
         );
+    }
+
+    private static function mediaStrings(): array
+    {
+        return array(
+            'title' => __('Sélectionner des images de salle', 'mj-member'),
+            'button' => __('Utiliser ces images', 'mj-member'),
+            'select' => __('Sélectionner des images', 'mj-member'),
+            'clear' => __('Vider', 'mj-member'),
+        );
+    }
+
+    private static function catalogStrings(): array
+    {
+        return array(
+            'selectPhotoTitle' => __('Sélectionner une photo', 'mj-member'),
+            'selectPhotoButton' => __('Utiliser cette photo', 'mj-member'),
+            'emptyTitlePlaceholder' => __('Titre', 'mj-member'),
+            'emptyEmojiPlaceholder' => __('Emoji', 'mj-member'),
+            'photoButton' => __('Photo', 'mj-member'),
+            'clearButton' => __('Retirer', 'mj-member'),
+            'removeButton' => __('Supprimer', 'mj-member'),
+            'emojiPickerPlaceholder' => __('Ex : 🎯', 'mj-member'),
+            'emojiPickerLabel' => __('Choisir', 'mj-member'),
+            'emojiPickerClose' => __('Fermer', 'mj-member'),
+            'emojiPickerClear' => __('Effacer', 'mj-member'),
+            'emojiPickerSuggestions' => __('Suggestions', 'mj-member'),
+            'emojiPickerSearchPlaceholder' => __('Rechercher un emoji', 'mj-member'),
+            'emojiPickerSearchNoResult' => __('Aucun emoji ne correspond à votre recherche.', 'mj-member'),
+            'emojiPickerAllCategory' => __('Tout', 'mj-member'),
+        );
+    }
+
+    /**
+     * @param array<int,array{title:string,emoji:string,photo_id:int}> $items
+     */
+    private static function catalogSummary(array $items): string
+    {
+        $labels = array();
+        foreach ($items as $item) {
+            $title = isset($item['title']) ? (string) $item['title'] : '';
+            if ($title === '') {
+                continue;
+            }
+
+            $labels[] = self::emojiLabel(isset($item['emoji']) ? (string) $item['emoji'] : '', $title);
+        }
+
+        return implode(', ', $labels);
+    }
+
+    private static function sanitizeEmoji(string $value): string
+    {
+        $candidate = wp_check_invalid_utf8($value);
+        $candidate = wp_strip_all_tags((string) $candidate, false);
+        $candidate = preg_replace('/[\x00-\x1F\x7F]+/', '', (string) $candidate);
+        if (!is_string($candidate)) {
+            return '';
+        }
+
+        $candidate = trim($candidate);
+        if ($candidate === '') {
+            return '';
+        }
+
+        return trim(wp_html_excerpt($candidate, 16, ''));
     }
 
     private static function emojiLabel(string $emoji, string $label): string

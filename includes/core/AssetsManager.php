@@ -386,6 +386,8 @@ final class AssetsManager
         self::registerStyle('mj-member-idea-box', 'css/idea-box.css', array('mj-member-components'));
         self::registerStyle('mj-member-documents-manager', 'css/documents-manager.css', array('mj-member-components'));
         self::registerStyle('mj-member-badges-overview', 'css/badges-overview.css', array('mj-member-components'));
+        self::registerStyle('mj-member-inventory-manager', 'css/inventory-manager.css', array('mj-member-components'));
+        self::registerScript('mj-member-inventory-manager', 'js/elementor/inventory-manager.js', array('mj-member-utils'));
 
         if (function_exists('register_block_type')) {
             self::registerScript(
@@ -897,6 +899,12 @@ final class AssetsManager
                 } elseif (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\MileageController')) {
                     \Mj\Member\Core\Ajax\Front\MileageController::localize();
                 }
+                break;
+
+            case 'inventory-manager':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-inventory-manager');
+                wp_enqueue_script('mj-member-inventory-manager');
                 break;
 
             case 'team-hierarchy':

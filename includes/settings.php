@@ -638,6 +638,23 @@ function mj_settings_page() {
             : array();
         update_option('mj_member_disabled_widgets', $disabled_widgets);
 
+        $current_user_id = get_current_user_id();
+        if ($current_user_id > 0) {
+            $debug_widget_zones = isset($_POST['mj_member_debug_widget_zones']) && is_array($_POST['mj_member_debug_widget_zones'])
+                ? array_values(array_unique(array_filter(array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_member_debug_widget_zones'])), static function ($zone) {
+                    return in_array($zone, array('elementor', 'mj-member', 'supertool'), true);
+                })))
+                : array();
+            $debug_widget_zones_adminbar = isset($_POST['mj_member_debug_widget_zones_adminbar']) && is_array($_POST['mj_member_debug_widget_zones_adminbar'])
+                ? array_values(array_unique(array_filter(array_map('sanitize_key', array_map('wp_unslash', $_POST['mj_member_debug_widget_zones_adminbar'])), static function ($zone) {
+                    return in_array($zone, array('elementor', 'mj-member', 'supertool'), true);
+                })))
+                : array();
+
+            update_user_meta($current_user_id, 'mj_member_debug_widget_zones', $debug_widget_zones);
+            update_user_meta($current_user_id, 'mj_member_debug_widget_zones_adminbar', $debug_widget_zones_adminbar);
+        }
+
         $widget_titles_post = isset($_POST['mj_member_widget_titles']) && is_array($_POST['mj_member_widget_titles'])
             ? $_POST['mj_member_widget_titles']
             : array();

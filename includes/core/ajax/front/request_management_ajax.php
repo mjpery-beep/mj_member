@@ -43,7 +43,7 @@ final class RequestManagementController implements AjaxHandlerInterface
 
         $rooms = self::formatRooms(MjRequestRooms::get_all());
         $animateurs = self::formatAnimateurs();
-        $requestTypes = self::formatRequestTypes(MjRequestTypes::get_active());
+        $requestTypes = self::formatRequestTypes(self::filterRequestTypesForActor(MjRequestTypes::get_active(), $actor));
 
         wp_localize_script('mj-member-request-management', 'mjRequestManagement', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -83,7 +83,7 @@ final class RequestManagementController implements AjaxHandlerInterface
             'mine' => self::enrichRequests(MjRequests::get_all(array('member_id' => $actor['member_id'], 'limit' => 200))),
             'staff' => $actor['is_staff'] ? self::enrichRequests(MjRequests::get_all(array('limit' => 300))) : array(),
             'rooms' => self::formatRooms(MjRequestRooms::get_all()),
-            'requestTypes' => self::formatRequestTypes(MjRequestTypes::get_active()),
+            'requestTypes' => self::formatRequestTypes(self::filterRequestTypesForActor(MjRequestTypes::get_active(), $actor)),
             'animateurs' => self::formatAnimateurs(),
         ));
     }
@@ -95,7 +95,7 @@ final class RequestManagementController implements AjaxHandlerInterface
             return;
         }
 
-        $payload = $this->sanitizeRequestPayload($_POST);
+        $payload = $this->sanitizeRequestPayload($_POST, $actor);
         if (is_wp_error($payload)) {
             wp_send_json_error(array('message' => $payload->get_error_message()), 400);
         }
@@ -141,7 +141,7 @@ final class RequestManagementController implements AjaxHandlerInterface
             wp_send_json_error(array('message' => __('Seules les demandes en attente peuvent être éditées.', 'mj-member')), 400);
         }
 
-        $payload = $this->sanitizeRequestPayload($_POST);
+        $payload = $this->sanitizeRequestPayload($_POST, $actor);
         if (is_wp_error($payload)) {
             wp_send_json_error(array('message' => $payload->get_error_message()), 400);
         }
@@ -315,7 +315,7 @@ final class RequestManagementController implements AjaxHandlerInterface
         return $actor;
     }
 
-    private function sanitizeRequestPayload(array $input)
+    private function sanitizeRequestPayload(array $input, array $actor)
     {
         $roomOptionsRaw = isset($input['room_options_json']) ? wp_unslash((string) $input['room_options_json']) : '[]';
         $materialsRaw = isset($input['materials_json']) ? wp_unslash((string) $input['materials_json']) : '[]';
@@ -336,6 +336,10 @@ final class RequestManagementController implements AjaxHandlerInterface
             return new \WP_Error('invalid_request_type', __('Type de demande invalide.', 'mj-member'));
         }
 
+        if (!self::isActorAllowedForType($actor, $typeConfig)) {
+            return new \WP_Error('request_type_forbidden', __('Ce type de demande n\'est pas autorisé pour votre rôle.', 'mj-member'));
+        }
+
         $assignedToMemberId = isset($input['assigned_to_member_id']) ? (int) $input['assigned_to_member_id'] : 0;
         if (!empty($typeConfig->requires_animateur) && $assignedToMemberId <= 0) {
             return new \WP_Error('missing_animateur', __('Un animateur est requis pour ce type de demande.', 'mj-member'));
@@ -347,6 +351,20 @@ final class RequestManagementController implements AjaxHandlerInterface
         $slotDay = isset($input['slot_day']) ? (int) $input['slot_day'] : 0;
         $slotStart = isset($input['slot_start']) ? sanitize_text_field(wp_unslash((string) $input['slot_start'])) : '';
         $slotEnd = isset($input['slot_end']) ? sanitize_text_field(wp_unslash((string) $input['slot_end'])) : '';
+
+        $slotsRaw = isset($input['slots_json']) ? wp_unslash((string) $input['slots_json']) : '[]';
+        $slots = json_decode($slotsRaw, true);
+        if (!is_array($slots)) {
+            $slots = array();
+        }
+        if (empty($slots) && empty($typeConfig->allows_multiple_dates) && $weekStart !== '') {
+            $base = strtotime($weekStart);
+            $slots = array(array(
+                'date' => $base !== false ? wp_date('Y-m-d', $base + ($slotDay * DAY_IN_SECONDS)) : '',
+                'start' => $slotStart,
+                'end' => $slotEnd,
+            ));
+        }
 
         if (empty($typeConfig->allows_location)) {
             $roomId = 0;
@@ -363,6 +381,9 @@ final class RequestManagementController implements AjaxHandlerInterface
             $slotDay = 0;
             $slotStart = '';
             $slotEnd = '';
+            $slots = array();
+        } elseif (empty($typeConfig->allows_multiple_dates) && count($slots) > 1) {
+            $slots = array($slots[0]);
         }
 
         return array(
@@ -377,6 +398,7 @@ final class RequestManagementController implements AjaxHandlerInterface
             'slot_day' => $slotDay,
             'slot_start' => $slotStart,
             'slot_end' => $slotEnd,
+            'slots' => $slots,
             'room_options_json' => $roomOptions,
             'materials_json' => $materials,
         );
@@ -399,11 +421,47 @@ final class RequestManagementController implements AjaxHandlerInterface
                     'allowsDate' => !empty($type->allows_date),
                     'allowsMultipleDates' => !empty($type->allows_multiple_dates),
                     'requiresAnimateur' => !empty($type->requires_animateur),
+                    'visibilityMode' => MjRequestTypes::normalize_visibility_mode((string) ($type->visibility_mode ?? 'public')),
+                    'allowedRoles' => MjRequestTypes::decode_allowed_roles((string) ($type->allowed_roles_json ?? '[]')),
                 ),
             );
         }
 
         return $result;
+    }
+
+    private static function filterRequestTypesForActor(array $types, array $actor): array
+    {
+        $filtered = array();
+        foreach ($types as $type) {
+            if (!is_object($type) || empty($type->is_active)) {
+                continue;
+            }
+
+            if (!self::isActorAllowedForType($actor, $type)) {
+                continue;
+            }
+
+            $filtered[] = $type;
+        }
+
+        return $filtered;
+    }
+
+    private static function isActorAllowedForType(array $actor, object $type): bool
+    {
+        $mode = MjRequestTypes::normalize_visibility_mode((string) ($type->visibility_mode ?? 'public'));
+        if ($mode !== 'restricted') {
+            return true;
+        }
+
+        $allowedRoles = MjRequestTypes::decode_allowed_roles((string) ($type->allowed_roles_json ?? '[]'));
+        if (empty($allowedRoles)) {
+            return false;
+        }
+
+        $actorRole = MjRoles::normalize((string) ($actor['role'] ?? ''));
+        return in_array($actorRole, $allowedRoles, true);
     }
 
     private function persistUploadedMedia(int $requestId, string $fieldName)
@@ -520,6 +578,16 @@ final class RequestManagementController implements AjaxHandlerInterface
             'slotDay' => (int) $request->slot_day,
             'slotStart' => (string) $request->slot_start,
             'slotEnd' => (string) $request->slot_end,
+            'slots' => array_map(
+                static function ($slot) {
+                    return array(
+                        'date' => (string) $slot['date'],
+                        'start' => (string) $slot['start'],
+                        'end' => (string) $slot['end'],
+                    );
+                },
+                MjRequests::get_slots($request)
+            ),
             'roomOptions' => json_decode((string) $request->room_options_json, true) ?: array(),
             'materials' => json_decode((string) $request->materials_json, true) ?: array(),
             'statusNote' => (string) $request->status_note,
@@ -551,6 +619,11 @@ final class RequestManagementController implements AjaxHandlerInterface
                     $photoIds = array();
                 }
 
+                $optionsRaw = json_decode((string) $room->options_json, true);
+                $materialsRaw = json_decode((string) $room->materials_json, true);
+                $optionsDetailed = self::normalizeRoomCatalogItems($optionsRaw);
+                $materialsDetailed = self::normalizeRoomCatalogItems($materialsRaw);
+
                 $photoUrls = array();
                 foreach ($photoIds as $photoId) {
                     $url = wp_get_attachment_url((int) $photoId);
@@ -566,14 +639,65 @@ final class RequestManagementController implements AjaxHandlerInterface
                     'description' => (string) $room->description,
                     'descriptionHtml' => wp_kses_post((string) $room->description),
                     'capacity' => (int) $room->capacity,
-                    'options' => json_decode((string) $room->options_json, true) ?: array(),
-                    'materials' => json_decode((string) $room->materials_json, true) ?: array(),
+                    'options' => array_map(static function ($entry) {
+                        return (string) $entry['title'];
+                    }, $optionsDetailed),
+                    'materials' => array_map(static function ($entry) {
+                        return (string) $entry['title'];
+                    }, $materialsDetailed),
+                    'optionsDetailed' => $optionsDetailed,
+                    'materialsDetailed' => $materialsDetailed,
                     'photoUrls' => $photoUrls,
                     'planId' => (int) $room->plan_id,
                 );
             },
             $rooms
         );
+    }
+
+    /**
+     * @param mixed $items
+     * @return array<int,array{title:string,emoji:string,photoId:int,photoUrl:string}>
+     */
+    private static function normalizeRoomCatalogItems($items): array
+    {
+        if (!is_array($items)) {
+            return array();
+        }
+
+        $result = array();
+        foreach ($items as $item) {
+            $title = '';
+            $emoji = '';
+            $photoId = 0;
+
+            if (is_scalar($item) || (is_object($item) && method_exists($item, '__toString'))) {
+                $title = sanitize_text_field((string) $item);
+            } elseif (is_array($item)) {
+                $title = sanitize_text_field((string) ($item['title'] ?? ($item['label'] ?? '')));
+                $emoji = sanitize_text_field((string) ($item['emoji'] ?? ''));
+                $photoId = (int) ($item['photo_id'] ?? ($item['photoId'] ?? 0));
+            }
+
+            if ($title === '') {
+                continue;
+            }
+
+            $url = '';
+            if ($photoId > 0) {
+                $attachmentUrl = wp_get_attachment_image_url($photoId, 'thumbnail');
+                $url = $attachmentUrl ? (string) $attachmentUrl : '';
+            }
+
+            $result[] = array(
+                'title' => $title,
+                'emoji' => $emoji,
+                'photoId' => max(0, $photoId),
+                'photoUrl' => $url,
+            );
+        }
+
+        return $result;
     }
 
     private static function formatAnimateurs(): array

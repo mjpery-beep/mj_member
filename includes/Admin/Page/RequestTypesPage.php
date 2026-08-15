@@ -4,6 +4,7 @@ namespace Mj\Member\Admin\Page;
 
 use Mj\Member\Admin\RequestGuard;
 use Mj\Member\Classes\Crud\MjRequestTypes;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
@@ -96,6 +97,7 @@ final class RequestTypesPage
                             if (!empty($type->requires_animateur)) {
                                 $flags[] = __('Animateur requis', 'mj-member');
                             }
+                            $flags[] = self::accessSummary($type);
                             ?>
                             <tr>
                                 <td><code><?php echo esc_html((string) $type->type_key); ?></code></td>
@@ -130,6 +132,10 @@ final class RequestTypesPage
         $label = $isEdit ? (string) ($type->label ?? '') : '';
         $description = $isEdit ? (string) ($type->description ?? '') : '';
         $sortOrder = $isEdit ? (int) ($type->sort_order ?? 0) : 0;
+        $visibilityMode = MjRequestTypes::normalize_visibility_mode($isEdit ? (string) ($type->visibility_mode ?? 'public') : 'public');
+        $allowedRoles = MjRequestTypes::decode_allowed_roles($isEdit ? (string) ($type->allowed_roles_json ?? '[]') : '[]');
+        $roleLabels = MjRoles::getRoleLabels();
+        $selectableRoles = array(MjRoles::ANIMATEUR, MjRoles::COORDINATEUR, MjRoles::BENEVOLE, MjRoles::TUTEUR);
 
         ?>
         <div class="postbox" style="max-width: 980px; padding: 12px 16px; margin: 0 0 16px 0;">
@@ -195,6 +201,39 @@ final class RequestTypesPage
                             </td>
                         </tr>
                         <tr>
+                            <th scope="row"><?php esc_html_e('Accès au type', 'mj-member'); ?></th>
+                            <td>
+                                <fieldset>
+                                    <label>
+                                        <input type="radio" name="visibility_mode" value="public" <?php checked($visibilityMode, 'public'); ?> data-access-mode-radio>
+                                        <?php esc_html_e('Public (tout le monde)', 'mj-member'); ?>
+                                    </label>
+                                    <br>
+                                    <label>
+                                        <input type="radio" name="visibility_mode" value="restricted" <?php checked($visibilityMode, 'restricted'); ?> data-access-mode-radio>
+                                        <?php esc_html_e('Restreint (rôles autorisés)', 'mj-member'); ?>
+                                    </label>
+                                </fieldset>
+
+                                <div data-allowed-roles-panel style="margin-top:10px; padding:10px; border:1px solid #d5dbe1; border-radius:6px; background:#fff;">
+                                    <?php foreach ($selectableRoles as $roleKey) : ?>
+                                        <label style="display:inline-block; min-width:190px; margin:0 12px 8px 0;">
+                                            <input
+                                                type="checkbox"
+                                                name="allowed_roles[]"
+                                                value="<?php echo esc_attr($roleKey); ?>"
+                                                <?php checked(in_array($roleKey, $allowedRoles, true)); ?>
+                                            >
+                                            <?php echo esc_html($roleLabels[$roleKey] ?? ucfirst($roleKey)); ?>
+                                        </label>
+                                    <?php endforeach; ?>
+                                    <p class="description" style="margin-top:4px;">
+                                        <?php esc_html_e('Ces rôles pourront soumettre ce type de demande.', 'mj-member'); ?>
+                                    </p>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
                             <th scope="row"><?php esc_html_e('Statut', 'mj-member'); ?></th>
                             <td><label><input name="is_active" type="checkbox" value="1" <?php checked($isEdit ? !empty($type->is_active) : true); ?>> <?php esc_html_e('Actif', 'mj-member'); ?></label></td>
                         </tr>
@@ -205,6 +244,40 @@ final class RequestTypesPage
                     <button type="submit" class="button button-primary"><?php echo $isEdit ? esc_html__('Mettre à jour', 'mj-member') : esc_html__('Ajouter', 'mj-member'); ?></button>
                 </p>
             </form>
+
+            <script>
+                (function () {
+                    var root = document.currentScript ? document.currentScript.closest('.postbox') : null;
+                    if (!root) {
+                        root = document.querySelector('.mj-request-admin .postbox');
+                    }
+                    if (!root) {
+                        return;
+                    }
+
+                    var radios = root.querySelectorAll('[data-access-mode-radio]');
+                    var panel = root.querySelector('[data-allowed-roles-panel]');
+                    if (!radios.length || !panel) {
+                        return;
+                    }
+
+                    function sync() {
+                        var mode = 'public';
+                        radios.forEach(function (radio) {
+                            if (radio.checked) {
+                                mode = radio.value;
+                            }
+                        });
+                        panel.style.display = mode === 'restricted' ? 'block' : 'none';
+                    }
+
+                    radios.forEach(function (radio) {
+                        radio.addEventListener('change', sync);
+                    });
+
+                    sync();
+                })();
+            </script>
         </div>
         <?php
     }
@@ -247,9 +320,20 @@ final class RequestTypesPage
             'allows_date' => isset($_POST['allows_date']) ? 1 : 0,
             'allows_multiple_dates' => isset($_POST['allows_multiple_dates']) ? 1 : 0,
             'requires_animateur' => isset($_POST['requires_animateur']) ? 1 : 0,
+            'visibility_mode' => sanitize_key(wp_unslash((string) ($_POST['visibility_mode'] ?? 'public'))),
+            'allowed_roles' => isset($_POST['allowed_roles']) && is_array($_POST['allowed_roles']) ? array_map(
+                static function ($role) {
+                    return sanitize_key(wp_unslash((string) $role));
+                },
+                $_POST['allowed_roles']
+            ) : array(),
             'sort_order' => (int) ($_POST['sort_order'] ?? 0),
             'is_active' => isset($_POST['is_active']) ? 1 : 0,
         );
+
+        if (($payload['visibility_mode'] ?? 'public') === 'restricted' && empty($payload['allowed_roles'])) {
+            return array('message' => __('Veuillez sélectionner au moins un rôle autorisé pour un accès restreint.', 'mj-member'), 'type' => 'error');
+        }
 
         $typeId = (int) ($_POST['type_id'] ?? 0);
         if ($typeId > 0) {
@@ -372,5 +456,30 @@ final class RequestTypesPage
     private static function descriptionExcerpt(string $description): string
     {
         return wp_trim_words(wp_strip_all_tags($description), 18);
+    }
+
+    private static function accessSummary(object $type): string
+    {
+        $mode = MjRequestTypes::normalize_visibility_mode((string) ($type->visibility_mode ?? 'public'));
+        if ($mode !== 'restricted') {
+            return __('Accès: Public', 'mj-member');
+        }
+
+        $roles = MjRequestTypes::decode_allowed_roles((string) ($type->allowed_roles_json ?? '[]'));
+        if (empty($roles)) {
+            return __('Accès: Restreint', 'mj-member');
+        }
+
+        $labels = MjRoles::getRoleLabels();
+        $roleLabels = array();
+        foreach ($roles as $role) {
+            $roleLabels[] = $labels[$role] ?? ucfirst($role);
+        }
+
+        return sprintf(
+            /* translators: %s list of role labels */
+            __('Accès: %s', 'mj-member'),
+            implode(', ', $roleLabels)
+        );
     }
 }
