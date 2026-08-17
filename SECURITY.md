@@ -25,6 +25,9 @@ Nous assurons les correctifs de securite sur la derniere version majeure du plug
 - Examinez regulierement les comptes membres et les journaux (`wp-content/debug.log` ou solutions equivalent).
 - Mettez en place des sauvegardes et surveillez les modifications des tables `mj_*` via les outils de la plateforme d'hebergement.
 
+## Audit interne des failles
+Pour une liste à jour des failles connues et points de vigilance identifiés, consultez `docs/security-findings.md`.
+
 ## Contact d'urgence
 En cas de faille critique affectant des donnees sensibles ou un usage malveillant en cours, ajoutez "[SECURITE]" dans l'objet de votre message pour prioriser le traitement.
 
