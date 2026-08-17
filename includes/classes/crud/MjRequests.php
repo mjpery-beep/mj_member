@@ -93,6 +93,32 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
         return $result;
     }
 
+    /**
+     * @param mixed $ids
+     * @return array<int,int>
+     */
+    private static function normalize_member_ids($ids): array
+    {
+        if (is_string($ids)) {
+            $decoded = json_decode($ids, true);
+            $ids = is_array($decoded) ? $decoded : array();
+        }
+
+        if (!is_array($ids)) {
+            return array();
+        }
+
+        $result = array();
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id > 0 && !in_array($id, $result, true)) {
+                $result[] = $id;
+            }
+        }
+
+        return $result;
+    }
+
     public static function get_all(array $args = array())
     {
         global $wpdb;
@@ -244,9 +270,12 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
         $slotStart = isset($data['slot_start']) ? sanitize_text_field((string) $data['slot_start']) : $firstSlot['start'];
         $slotEnd = isset($data['slot_end']) ? sanitize_text_field((string) $data['slot_end']) : $firstSlot['end'];
 
+        $memberIds = self::normalize_member_ids($data['assigned_member_ids'] ?? array());
+        $assignedToMemberId = isset($data['assigned_to_member_id']) ? (int) $data['assigned_to_member_id'] : ($memberIds[0] ?? 0);
+
         $insert = array(
             'member_id' => $memberId,
-            'assigned_to_member_id' => isset($data['assigned_to_member_id']) ? (int) $data['assigned_to_member_id'] : 0,
+            'assigned_to_member_id' => $assignedToMemberId,
             'request_type' => $requestType,
             'status' => self::normalize_status((string) ($data['status'] ?? self::STATUS_PENDING)),
             'room_id' => isset($data['room_id']) ? (int) $data['room_id'] : 0,
@@ -259,6 +288,7 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
             'slot_start' => $slotStart,
             'slot_end' => $slotEnd,
             'slots_json' => wp_json_encode($slots),
+            'assigned_member_ids_json' => wp_json_encode($memberIds),
             'room_options_json' => isset($data['room_options_json']) ? wp_json_encode($data['room_options_json']) : wp_json_encode(array()),
             'materials_json' => isset($data['materials_json']) ? wp_json_encode($data['materials_json']) : wp_json_encode(array()),
             'status_note' => isset($data['status_note']) ? sanitize_textarea_field((string) $data['status_note']) : '',
@@ -291,6 +321,17 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
         if (isset($data['assigned_to_member_id'])) {
             $updates['assigned_to_member_id'] = (int) $data['assigned_to_member_id'];
             $formats[] = '%d';
+        }
+
+        if (isset($data['assigned_member_ids'])) {
+            $memberIds = self::normalize_member_ids($data['assigned_member_ids']);
+            $updates['assigned_member_ids_json'] = wp_json_encode($memberIds);
+            $formats[] = '%s';
+
+            if (!isset($data['assigned_to_member_id'])) {
+                $updates['assigned_to_member_id'] = $memberIds[0] ?? 0;
+                $formats[] = '%d';
+            }
         }
 
         if (isset($data['status'])) {
@@ -417,6 +458,20 @@ class MjRequests extends MjTools implements CrudRepositoryInterface
             'start' => (string) ($request->slot_start ?? ''),
             'end' => (string) ($request->slot_end ?? ''),
         ));
+    }
+
+    /**
+     * @return array<int,int>
+     */
+    public static function get_assigned_member_ids(object $request): array
+    {
+        $ids = self::normalize_member_ids($request->assigned_member_ids_json ?? '');
+        if (!empty($ids)) {
+            return $ids;
+        }
+
+        $legacyId = isset($request->assigned_to_member_id) ? (int) $request->assigned_to_member_id : 0;
+        return $legacyId > 0 ? array($legacyId) : array();
     }
 
     public static function delete($id)

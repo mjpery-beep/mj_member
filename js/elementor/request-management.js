@@ -191,6 +191,12 @@
             dayIso: '',
             allDay: false,
         });
+        var [rangeDraft, setRangeDraft] = useState({
+            start: '',
+            end: '',
+            startTime: '14:00',
+            endTime: '16:00',
+        });
 
         var [form, setForm] = useState({
             requestType: '',
@@ -205,7 +211,7 @@
             title: '',
             description: '',
             ageRange: '12-15',
-            assignedToMemberId: 0,
+            assignedMemberIds: [],
         });
 
         var [files, setFiles] = useState([]);
@@ -310,8 +316,8 @@
         var allowLocation = typeOption('allowsLocation', true);
         var allowMaterials = typeOption('allowsMaterials', true);
         var allowDate = typeOption('allowsDate', true);
-        var allowMultipleDates = typeOption('allowsMultipleDates', false);
-        var requiresAnimateur = typeOption('requiresAnimateur', false);
+        // Une demande peut toujours contenir plusieurs dates avec des plages horaires distinctes.
+        var allowMultipleDates = allowDate;
 
         var slotDatesIndex = useMemo(function () {
             var index = Object.create(null);
@@ -476,7 +482,8 @@
                 title: form.title,
                 description: form.description,
                 age_range: form.ageRange,
-                assigned_to_member_id: form.assignedToMemberId || 0,
+                assigned_to_member_id: (form.assignedMemberIds && form.assignedMemberIds[0]) || 0,
+                assigned_member_ids_json: JSON.stringify(form.assignedMemberIds || []),
             };
 
             return post('mj_request_management_create', payload, files)
@@ -502,7 +509,7 @@
                         title: '',
                         description: '',
                         ageRange: '12-15',
-                        assignedToMemberId: 0,
+                        assignedMemberIds: [],
                     });
                     if (!isStaff) {
                         return Promise.resolve();
@@ -690,6 +697,53 @@
             });
         }
 
+        function patchRangeDraft(key, value) {
+            setRangeDraft(function (prev) {
+                var copy = Object.assign({}, prev);
+                copy[key] = value;
+                return copy;
+            });
+        }
+
+        function addDateRange() {
+            var startDate = parseIsoDate(rangeDraft.start);
+            var endDate = parseIsoDate(rangeDraft.end);
+            if (!startDate || !endDate || endDate.getTime() < startDate.getTime()) {
+                return;
+            }
+
+            var start = rangeDraft.startTime || '14:00';
+            var end = rangeDraft.endTime || '16:00';
+            var entries = [];
+            var cursor = new Date(startDate.getTime());
+            while (cursor.getTime() <= endDate.getTime()) {
+                entries.push({ date: isoDate(cursor), start: start, end: end });
+                cursor.setDate(cursor.getDate() + 1);
+            }
+
+            if (!entries.length) {
+                return;
+            }
+
+            setForm(function (prev) {
+                var list = Array.isArray(prev.slots) ? prev.slots.slice() : [];
+                entries.forEach(function (entry) {
+                    var idx = list.findIndex(function (slot) { return slot.date === entry.date; });
+                    if (idx >= 0) {
+                        list[idx] = entry;
+                    } else {
+                        list.push(entry);
+                    }
+                });
+                list.sort(function (a, b) { return a.date.localeCompare(b.date); });
+                var copy = Object.assign({}, prev);
+                copy.slots = list;
+                return copy;
+            });
+
+            setRangeDraft({ start: '', end: '', startTime: start, endTime: end });
+        }
+
         function toggleAllDay(enabled) {
             setDayPlanner(function (prev) {
                 return {
@@ -764,6 +818,11 @@
 
             mainTab === 'compose' && h('div', { class: 'mj-request-management__grid mj-request-management__tab-panel', key: 'compose-grid' }, [
                 h('div', { class: 'mj-request-management__wizard' }, [
+                    currentStep.key !== 'essential' && (form.title || selectedType) && h('div', { class: 'mj-request-management__summary-bar', key: 'summary-bar' }, [
+                        selectedType && h('span', { class: 'mj-request-management__summary-type' }, withEmoji(selectedType.emoji, selectedType.label || '')),
+                        form.title && h('strong', { class: 'mj-request-management__summary-title' }, form.title),
+                    ]),
+
                     currentStep.key === 'essential' && h('div', { class: 'mj-request-management__step-panel mj-request-management__content-enter', key: 'step-1' }, [
                         h('label', null, [
                             h('span', null, 'TITRE DE LA DEMANDE *'),
@@ -878,16 +937,75 @@
 
                     currentStep.key === 'date' && h('div', { class: 'mj-request-management__step-panel mj-request-management__content-enter', key: 'step-3' }, [
                         h('h2', null, 'Plage horaire'),
-                        allowDate ? h('div', { class: 'mj-request-management__month-nav' }, [
-                            h('button', {
-                                type: 'button',
-                                onClick: function () { setCalendarMonth(addMonths(calendarMonth, -1)); },
-                            }, '◀'),
-                            h('strong', null, calendarMonthLabel),
-                            h('button', {
-                                type: 'button',
-                                onClick: function () { setCalendarMonth(addMonths(calendarMonth, 1)); },
-                            }, '▶'),
+
+                        allowDate ? h('div', { class: 'mj-regmgr-occurrence' }, [
+                            h('div', { class: 'mj-regmgr-occurrence__header' }, [
+                                h('div', { class: 'mj-regmgr-occurrence__header-main' }, [
+                                    h('div', { class: 'mj-regmgr-occurrence__heading' }, [
+                                        h('h2', null, 'Dates de la demande'),
+                                        h('span', { class: 'mj-regmgr-occurrence__subheading' }, calendarMonthLabel),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-occurrence__header-controls' }, [
+                                        h('div', { class: 'mj-regmgr-occurrence__nav' }, [
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-regmgr-occurrence__nav-button',
+                                                'aria-label': 'Mois précédent',
+                                                onClick: function () { setCalendarMonth(addMonths(calendarMonth, -1)); },
+                                            }, [h('span', { class: 'mj-regmgr-occurrence__nav-icon', 'aria-hidden': true }, '‹')]),
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-regmgr-occurrence__nav-button',
+                                                'aria-label': 'Mois suivant',
+                                                onClick: function () { setCalendarMonth(addMonths(calendarMonth, 1)); },
+                                            }, [h('span', { class: 'mj-regmgr-occurrence__nav-icon', 'aria-hidden': true }, '›')]),
+                                        ]),
+                                    ]),
+                                ]),
+                            ]),
+
+                            h('div', { class: 'mj-regmgr-occurrence__body' }, [
+                                h('div', { class: 'mj-regmgr-occurrence__calendar' }, [
+                                    h('div', { class: 'mj-regmgr-occurrence__months' }, [
+                                        h('div', { class: 'mj-regmgr-occurrence__month' }, [
+                                            h('div', { class: 'mj-regmgr-occurrence__month-header' }, calendarMonthLabel),
+                                            h('div', { class: 'mj-regmgr-occurrence__weekdays' }, ['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(function (dayKey, dayKeyIndex) {
+                                                return h('div', { key: 'weekday-' + dayKeyIndex, class: 'mj-regmgr-occurrence__weekday' }, dayKey);
+                                            })),
+                                            (function () {
+                                                var weeks = [];
+                                                for (var i = 0; i < calendarDays.length; i += 7) {
+                                                    weeks.push(calendarDays.slice(i, i + 7));
+                                                }
+                                                return weeks.map(function (week, weekIndex) {
+                                                    return h('div', { key: 'week-' + weekIndex, class: 'mj-regmgr-occurrence__week' }, week.map(function (day) {
+                                                        var hasOccurrence = allowMultipleDates ? !!slotDatesIndex[day.iso] : day.isSelected;
+                                                        var dayCls = 'mj-regmgr-occurrence__day';
+                                                        if (day.outside) {
+                                                            dayCls += ' mj-regmgr-occurrence__day--muted';
+                                                        }
+                                                        if (day.isToday) {
+                                                            dayCls += ' mj-regmgr-occurrence__day--today';
+                                                        }
+                                                        if (hasOccurrence) {
+                                                            dayCls += ' mj-regmgr-occurrence__day--selected mj-regmgr-occurrence__day--with-occurrence';
+                                                        }
+
+                                                        return h('button', {
+                                                            key: day.iso,
+                                                            type: 'button',
+                                                            class: dayCls,
+                                                            onClick: function () { openPlannerForIso(day.iso); },
+                                                        }, [
+                                                            h('span', { class: 'mj-regmgr-occurrence__day-number' }, String(day.dayNumber)),
+                                                        ]);
+                                                    }));
+                                                });
+                                            })(),
+                                        ]),
+                                    ]),
+                                ]),
+                            ]),
                         ]) : h('p', { class: 'mj-request-management__type-desc' }, 'Ce type de demande ne nécessite pas de créneau horaire.'),
 
                         allowDate && !allowMultipleDates && h('div', { class: 'mj-request-management__range-meta' }, [
@@ -895,32 +1013,50 @@
                             h('span', null, selectedSlotLabel + ' · ' + form.slotStart + ' → ' + form.slotEnd),
                         ]),
 
-                        allowDate && h('div', { class: 'mj-request-management__mini-calendar' }, [
-                            h('div', { class: 'mj-request-management__mini-weekdays' }, ['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(function (dayKey) {
-                                return h('span', { class: 'mj-request-management__mini-weekday' }, dayKey);
-                            })),
-                            h('div', { class: 'mj-request-management__mini-grid' }, calendarDays.map(function (day) {
-                                var cls = 'mj-request-management__mini-day';
-                                if (day.outside) {
-                                    cls += ' is-outside';
-                                }
-                                if (day.isToday) {
-                                    cls += ' is-today';
-                                }
-                                if (allowMultipleDates) {
-                                    if (slotDatesIndex[day.iso]) {
-                                        cls += ' is-selected';
-                                    }
-                                } else if (day.isSelected) {
-                                    cls += ' is-selected';
-                                }
-
-                                return h('button', {
-                                    type: 'button',
-                                    class: cls,
-                                    onClick: function () { openPlannerForIso(day.iso); },
-                                }, String(day.dayNumber));
-                            })),
+                        allowDate && allowMultipleDates && h('div', { class: 'mj-request-management__range-picker' }, [
+                            h('p', null, 'Ajouter une plage de dates'),
+                            h('div', { class: 'mj-request-management__range-picker-grid' }, [
+                                h('label', null, [
+                                    h('span', null, 'Du'),
+                                    h('input', {
+                                        type: 'date',
+                                        value: rangeDraft.start,
+                                        onChange: function (evt) { patchRangeDraft('start', evt.target.value || ''); },
+                                    }),
+                                ]),
+                                h('label', null, [
+                                    h('span', null, 'Au'),
+                                    h('input', {
+                                        type: 'date',
+                                        value: rangeDraft.end,
+                                        onChange: function (evt) { patchRangeDraft('end', evt.target.value || ''); },
+                                    }),
+                                ]),
+                                h('label', null, [
+                                    h('span', null, 'Début'),
+                                    h('input', {
+                                        type: 'time',
+                                        step: '900',
+                                        value: rangeDraft.startTime,
+                                        onChange: function (evt) { patchRangeDraft('startTime', evt.target.value || rangeDraft.startTime); },
+                                    }),
+                                ]),
+                                h('label', null, [
+                                    h('span', null, 'Fin'),
+                                    h('input', {
+                                        type: 'time',
+                                        step: '900',
+                                        value: rangeDraft.endTime,
+                                        onChange: function (evt) { patchRangeDraft('endTime', evt.target.value || rangeDraft.endTime); },
+                                    }),
+                                ]),
+                            ]),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-request-management__range-picker-add',
+                                disabled: !rangeDraft.start || !rangeDraft.end,
+                                onClick: addDateRange,
+                            }, 'Ajouter la plage'),
                         ]),
 
                         allowDate && allowMultipleDates && h('div', { class: 'mj-request-management__slots-list' }, [
@@ -948,43 +1084,53 @@
                             }),
                         ]),
 
-                        allowDate && dayPlanner.open && h('div', { class: 'mj-request-management__planner-backdrop' }, [
-                            h('div', { class: 'mj-request-management__planner-modal' }, [
-                                h('header', { class: 'mj-request-management__planner-header' }, [
-                                    h('h3', null, 'Encoder la demande'),
-                                    h('button', { type: 'button', onClick: closePlanner }, '✕'),
+                        allowDate && dayPlanner.open && h('div', { class: 'mj-regmgr-modal' }, [
+                            h('div', {
+                                class: 'mj-regmgr-modal__overlay',
+                                onClick: closePlanner,
+                            }),
+                            h('div', { class: 'mj-regmgr-modal__container mj-regmgr-modal__container--small' }, [
+                                h('div', { class: 'mj-regmgr-modal__header' }, [
+                                    h('h2', { class: 'mj-regmgr-modal__title' }, allowMultipleDates ? 'Ajoute une occurrence' : 'Encoder la demande'),
+                                    h('button', { type: 'button', class: 'mj-regmgr-modal__close', onClick: closePlanner }, '✕'),
                                 ]),
-                                h('p', { class: 'mj-request-management__planner-subtitle' }, selectedSlotLabel),
-                                h('div', { class: 'mj-request-management__planner-grid' }, [
-                                    h('label', { class: 'mj-request-management__check mj-request-management__check--all-day' }, [
-                                        h('input', {
-                                            type: 'checkbox',
-                                            checked: !!dayPlanner.allDay,
-                                            onChange: function (evt) { toggleAllDay(!!evt.target.checked); },
-                                        }),
-                                        h('span', null, 'Toute la journée'),
-                                    ]),
-                                    !dayPlanner.allDay && h('label', null, [
-                                        h('span', null, 'Début'),
-                                        h('input', {
-                                            type: 'time',
-                                            step: '900',
-                                            value: form.slotStart,
-                                            onChange: function (evt) { updateTimeRange(evt.target.value || form.slotStart, form.slotEnd); },
-                                        }),
-                                    ]),
-                                    !dayPlanner.allDay && h('label', null, [
-                                        h('span', null, 'Fin'),
-                                        h('input', {
-                                            type: 'time',
-                                            step: '900',
-                                            value: form.slotEnd,
-                                            onChange: function (evt) { updateTimeRange(form.slotStart, evt.target.value || form.slotEnd); },
-                                        }),
+                                h('div', { class: 'mj-regmgr-modal__body' }, [
+                                    h('div', { class: 'mj-regmgr-occurrence__card' }, [
+                                        h('p', { class: 'mj-regmgr-occurrence__subheading' }, selectedSlotLabel),
+                                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label mj-request-management__check' }, [
+                                                h('input', {
+                                                    type: 'checkbox',
+                                                    checked: !!dayPlanner.allDay,
+                                                    onChange: function (evt) { toggleAllDay(!!evt.target.checked); },
+                                                }),
+                                                h('span', null, 'Toute la journée'),
+                                            ]),
+                                        ]),
+                                        !dayPlanner.allDay && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, 'Début'),
+                                            h('input', {
+                                                type: 'time',
+                                                class: 'mj-regmgr-occurrence__input',
+                                                step: '900',
+                                                value: form.slotStart,
+                                                onChange: function (evt) { updateTimeRange(evt.target.value || form.slotStart, form.slotEnd); },
+                                            }),
+                                        ]),
+                                        !dayPlanner.allDay && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                                            h('label', { class: 'mj-regmgr-occurrence__label' }, 'Fin'),
+                                            h('input', {
+                                                type: 'time',
+                                                class: 'mj-regmgr-occurrence__input',
+                                                step: '900',
+                                                value: form.slotEnd,
+                                                onChange: function (evt) { updateTimeRange(form.slotStart, evt.target.value || form.slotEnd); },
+                                            }),
+                                        ]),
                                     ]),
                                 ]),
-                                h('div', { class: 'mj-request-management__planner-actions' }, [
-                                    h('button', { type: 'button', onClick: closePlanner }, allowMultipleDates ? 'Ajouter cette date' : 'Valider'),
+                                h('div', { class: 'mj-regmgr-modal__footer' }, [
+                                    h('button', { type: 'button', class: 'mj-btn mj-btn--primary', onClick: closePlanner }, allowMultipleDates ? 'Ajouter cette date' : 'Valider'),
                                 ]),
                             ]),
                         ]),
@@ -1012,15 +1158,20 @@
                             ]),
                         ]),
                         h('label', null, [
-                            h('span', null, requiresAnimateur ? 'Animateur référent (obligatoire)' : 'Animateur référent (optionnel)'),
-                            h('select', {
-                                value: String(form.assignedToMemberId || 0),
-                                onChange: function (evt) { patchForm('assignedToMemberId', Number(evt.target.value || 0)); },
-                            }, [
-                                h('option', { value: '0' }, 'Aucun'),
-                            ].concat(animateurs.map(function (a) {
-                                return h('option', { value: String(a.id) }, a.name + (a.role ? ' (' + a.role + ')' : ''));
-                            }))),
+                            h('span', null, 'Animateur référent (optionnel)'),
+                            animateurs.length === 0
+                                ? h('p', { class: 'mj-request-management__type-desc' }, 'Aucun animateur disponible.')
+                                : h('div', { class: 'mj-request-management__choices-grid' }, animateurs.map(function (a) {
+                                    var checked = (form.assignedMemberIds || []).indexOf(a.id) >= 0;
+                                    return h('label', { class: 'mj-request-management__check mj-request-management__check--compact' }, [
+                                        h('input', {
+                                            type: 'checkbox',
+                                            checked: checked,
+                                            onChange: function () { toggleStringItem('assignedMemberIds', a.id); },
+                                        }),
+                                        h('span', { class: 'mj-request-management__check-text' }, a.name + (a.role ? ' (' + a.role + ')' : '')),
+                                    ]);
+                                })),
                         ]),
                         h('label', null, [
                             h('span', null, 'Images'),
@@ -1073,7 +1224,7 @@
                         isLastStep && h('button', {
                             type: 'button',
                             class: 'mj-request-management__nav-btn is-next',
-                            disabled: saving || !form.title || !form.requestType || (requiresAnimateur && !form.assignedToMemberId),
+                            disabled: saving || !form.title || !form.requestType,
                             onClick: submitRequest,
                         }, '→'),
                     ]),

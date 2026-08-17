@@ -217,6 +217,39 @@
     font-size: 1.08rem;
 }
 
+.mj-request-management__summary-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--rm-accent) 30%, #ffffff);
+    background: color-mix(in srgb, var(--rm-accent-soft) 58%, #ffffff);
+}
+
+.mj-request-management__summary-type {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 1px solid color-mix(in srgb, var(--rm-accent) 40%, #dbe5ef);
+    color: #184969;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.mj-request-management__summary-title {
+    color: #184969;
+    font-size: 0.94rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .mj-request-management__type-grid,
 .mj-request-management__rooms {
     display: grid;
@@ -536,6 +569,36 @@
     margin: 6px 0 12px;
     color: #496379;
     font-size: 0.9rem;
+}
+
+.mj-request-management__range-picker {
+    margin-top: 12px;
+    padding: 10px 11px;
+    border-radius: 12px;
+    border: 1px solid #d7e3ee;
+    background: linear-gradient(120deg, rgba(54, 106, 255, 0.06), rgba(104, 154, 255, 0.02));
+}
+
+.mj-request-management__range-picker > p:first-child {
+    margin: 0 0 8px;
+    font-weight: 700;
+    font-size: 0.86rem;
+    color: #234158;
+}
+
+.mj-request-management__range-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.mj-request-management__range-picker-grid label {
+    margin: 0;
+}
+
+.mj-request-management__range-picker-add {
+    width: 100%;
 }
 
 .mj-request-management__slots-list {
@@ -964,11 +1027,16 @@
 
 .mj-request-management .mj-request-management__actions button:last-child,
 .mj-request-management .mj-request-management__status-actions button:first-child,
-.mj-request-management .mj-request-management__room-card.is-active {
+.mj-request-management .mj-request-management__room-card.is-active,
+.mj-request-management .mj-request-management__mini-day.is-selected {
     border-color: transparent !important;
     background: linear-gradient(135deg, color-mix(in srgb, var(--rm-accent-strong) 92%, #ffffff) 0%, var(--rm-accent) 100%) !important;
     color: #ffffff !important;
     font-weight: 700 !important;
+}
+
+.mj-request-management .mj-request-management__mini-day.is-today:not(.is-selected) {
+    border-color: color-mix(in srgb, var(--rm-accent) 48%, #dbe6f0) !important;
 }
 
 .mj-request-management .mj-request-management__actions button:disabled,
@@ -1045,6 +1113,7 @@
     .mj-request-management__type-grid,
     .mj-request-management__rooms,
     .mj-request-management__choices-grid,
+    .mj-request-management__range-picker-grid,
     .mj-request-management__status-actions,
     .mj-request-management__timeline {
         grid-template-columns: 1fr;

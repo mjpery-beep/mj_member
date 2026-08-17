@@ -825,6 +825,7 @@ final class AssetsManager
             case 'request-management':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-hour-encode');
+                wp_enqueue_style('mj-member-registration-manager');
                 wp_enqueue_style('mj-member-request-management');
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');

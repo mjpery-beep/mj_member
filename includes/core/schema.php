@@ -6534,6 +6534,7 @@ function mj_member_ensure_request_management_tables() {
         slot_start varchar(5) NOT NULL DEFAULT '',
         slot_end varchar(5) NOT NULL DEFAULT '',
         slots_json longtext DEFAULT NULL,
+        assigned_member_ids_json longtext DEFAULT NULL,
         room_options_json longtext DEFAULT NULL,
         materials_json longtext DEFAULT NULL,
         status_note text DEFAULT NULL,

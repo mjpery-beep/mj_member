@@ -340,10 +340,16 @@ final class RequestManagementController implements AjaxHandlerInterface
             return new \WP_Error('request_type_forbidden', __('Ce type de demande n\'est pas autorisé pour votre rôle.', 'mj-member'));
         }
 
-        $assignedToMemberId = isset($input['assigned_to_member_id']) ? (int) $input['assigned_to_member_id'] : 0;
-        if (!empty($typeConfig->requires_animateur) && $assignedToMemberId <= 0) {
-            return new \WP_Error('missing_animateur', __('Un animateur est requis pour ce type de demande.', 'mj-member'));
+        $assignedMemberIdsRaw = isset($input['assigned_member_ids_json']) ? wp_unslash((string) $input['assigned_member_ids_json']) : '[]';
+        $assignedMemberIds = json_decode($assignedMemberIdsRaw, true);
+        if (!is_array($assignedMemberIds)) {
+            $assignedMemberIds = array();
         }
+        $assignedMemberIds = array_values(array_unique(array_map('absint', $assignedMemberIds)));
+        $assignedMemberIds = array_values(array_filter($assignedMemberIds, static function ($id) {
+            return $id > 0;
+        }));
+        $assignedToMemberId = $assignedMemberIds[0] ?? 0;
 
         $roomId = isset($input['room_id']) ? (int) $input['room_id'] : 0;
         $isOutdoor = !empty($input['is_outdoor']) ? 1 : 0;
@@ -357,7 +363,7 @@ final class RequestManagementController implements AjaxHandlerInterface
         if (!is_array($slots)) {
             $slots = array();
         }
-        if (empty($slots) && empty($typeConfig->allows_multiple_dates) && $weekStart !== '') {
+        if (empty($slots) && $weekStart !== '') {
             $base = strtotime($weekStart);
             $slots = array(array(
                 'date' => $base !== false ? wp_date('Y-m-d', $base + ($slotDay * DAY_IN_SECONDS)) : '',
@@ -382,12 +388,11 @@ final class RequestManagementController implements AjaxHandlerInterface
             $slotStart = '';
             $slotEnd = '';
             $slots = array();
-        } elseif (empty($typeConfig->allows_multiple_dates) && count($slots) > 1) {
-            $slots = array($slots[0]);
         }
 
         return array(
             'assigned_to_member_id' => $assignedToMemberId,
+            'assigned_member_ids' => $assignedMemberIds,
             'request_type' => $requestType,
             'room_id' => $roomId,
             'is_outdoor' => $isOutdoor,
@@ -560,12 +565,23 @@ final class RequestManagementController implements AjaxHandlerInterface
             );
         }
 
+        $assignedMemberIds = MjRequests::get_assigned_member_ids($request);
+        $assignedNames = array();
+        foreach ($assignedMemberIds as $assignedId) {
+            $assignedMember = MjMembers::getById($assignedId);
+            if ($assignedMember) {
+                $assignedNames[] = trim((string) $assignedMember->first_name . ' ' . (string) $assignedMember->last_name);
+            }
+        }
+
         return array(
             'id' => (int) $request->id,
             'memberId' => (int) $request->member_id,
             'memberName' => $member ? trim((string) $member->first_name . ' ' . (string) $member->last_name) : '',
             'assignedToMemberId' => (int) $request->assigned_to_member_id,
             'assignedToName' => $assignee ? trim((string) $assignee->first_name . ' ' . (string) $assignee->last_name) : '',
+            'assignedMemberIds' => $assignedMemberIds,
+            'assignedNames' => $assignedNames,
             'requestType' => (string) $request->request_type,
             'status' => (string) $request->status,
             'statusLabel' => MjRequests::get_status_labels()[(string) $request->status] ?? (string) $request->status,
