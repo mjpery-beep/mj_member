@@ -38,6 +38,7 @@ if (!$inventoryAllowed) {
             <button type="button" class="mj-inventory__button" data-action="add-location">Ajouter une localisation</button>
         </div>
     </div>
+    <div class="mj-inventory__taxonomy-manager" data-taxonomies></div>
     <div class="mj-inventory__grid" data-items></div>
     <dialog class="mj-inventory__dialog" data-dialog>
         <form method="dialog" class="mj-inventory__form" data-form enctype="multipart/form-data">
@@ -46,13 +47,43 @@ if (!$inventoryAllowed) {
             <input type="hidden" name="id">
             <label>Nom<input required name="name"></label>
             <label>Description<textarea name="description"></textarea></label>
-            <label>Photo<input type="file" name="photo" accept="image/*" data-photo></label>
+            <fieldset class="mj-inventory__photo-upload">
+                <legend>Photos</legend>
+                <div class="mj-inventory__photo-upload-grid">
+                    <div class="mj-inventory__photo-slot">
+                        <strong>Photo principale</strong>
+                        <label class="mj-inventory__upload-trigger"><input type="file" name="photo" accept="image/*" data-photo><span>Choisir une photo</span></label>
+                        <div class="mj-inventory__photo-previews" data-cover-preview></div>
+                    </div>
+                    <div class="mj-inventory__photo-slot">
+                        <strong>Galerie</strong>
+                        <label class="mj-inventory__upload-trigger"><input type="file" name="photos[]" accept="image/*" multiple data-photos><span>Ajouter des photos</span></label>
+                        <div class="mj-inventory__photo-previews" data-photos-preview></div>
+                    </div>
+                </div>
+            </fieldset>
             <button type="button" class="mj-inventory__button" data-action="analyze">Analyser avec l'IA</button>
+            <label>Quantité<input type="number" name="quantity" min="1" step="1" value="1"></label>
             <label>État<select name="status"><option value="good">Bon état</option><option value="damaged">Abîmé</option><option value="broken">Cassé</option></select></label>
             <label>Catégorie<select name="category_id" data-form-category></select></label>
             <label>Localisation<select name="location_id" data-form-location></select></label>
             <label>Note de sécurité courte<input name="safety_note_short"></label>
             <label>Note de sécurité<textarea name="safety_note_long"></textarea></label>
+            <button type="submit" class="mj-inventory__button mj-inventory__button--primary">Enregistrer</button>
+        </form>
+    </dialog>
+    <dialog class="mj-inventory__dialog mj-inventory__detail-dialog" data-detail-dialog>
+        <div class="mj-inventory__detail" data-detail-content></div>
+    </dialog>
+    <dialog class="mj-inventory__dialog mj-inventory__taxonomy-dialog" data-taxonomy-dialog>
+        <form method="dialog" class="mj-inventory__form" data-taxonomy-form>
+            <button type="button" class="mj-inventory__close" data-action="close-taxonomy" aria-label="Fermer">×</button>
+            <h3 data-taxonomy-title>Nouvelle catégorie</h3>
+            <input type="hidden" name="id">
+            <input type="hidden" name="type">
+            <label>Nom<input required name="name"></label>
+            <label>Emoji<input type="hidden" name="icon" data-taxonomy-icon><span data-taxonomy-emoji-picker></span></label>
+            <label data-location-description>Description<textarea name="description"></textarea></label>
             <button type="submit" class="mj-inventory__button mj-inventory__button--primary">Enregistrer</button>
         </form>
     </dialog>

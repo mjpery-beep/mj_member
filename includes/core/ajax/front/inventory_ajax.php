@@ -16,7 +16,7 @@ final class InventoryController implements AjaxHandlerInterface
 {
     public function registerHooks(): void
     {
-        foreach (array('list_items', 'get_item', 'create_item', 'update_item', 'delete_item', 'get_item_photo', 'borrow_item', 'return_item', 'list_categories', 'create_category', 'delete_category', 'list_locations', 'create_location', 'delete_location', 'analyze_photo') as $action) {
+        foreach (array('list_items', 'get_item', 'create_item', 'update_item', 'delete_item', 'delete_photo', 'get_item_photo', 'borrow_item', 'return_item', 'list_categories', 'create_category', 'update_category', 'delete_category', 'list_locations', 'create_location', 'update_location', 'delete_location', 'analyze_photo') as $action) {
             add_action('wp_ajax_mj_inventory_' . $action, array($this, $action));
             add_action('wp_ajax_nopriv_mj_inventory_' . $action, array($this, $action));
         }
@@ -51,7 +51,11 @@ final class InventoryController implements AjaxHandlerInterface
     {
         $this->verify();
         $item = MjInventory::get(absint($_REQUEST['id'] ?? 0));
-        $item ? wp_send_json_success(array('item' => $this->formatItem($item))) : wp_send_json_error(array('message' => __('Objet introuvable.', 'mj-member')), 404);
+        $item ? wp_send_json_success(array(
+            'item' => $this->formatItem($item),
+            'history' => $this->formatRows(MjInventory::borrowHistory((int) $item->id)),
+            'photos' => $this->formatRows(MjInventory::photos((int) $item->id)),
+        )) : wp_send_json_error(array('message' => __('Objet introuvable.', 'mj-member')), 404);
     }
 
     public function create_item(): void
@@ -72,6 +76,9 @@ final class InventoryController implements AjaxHandlerInterface
             $data = array_merge($data, $photo);
         }
         $id = MjInventory::create($data);
+        if ($id && !MjInventory::addPhotos($id, $slug, $this->additionalPhotoFiles())) {
+            wp_send_json_error(array('message' => __('Une photo supplémentaire est invalide.', 'mj-member')), 400);
+        }
         $id ? wp_send_json_success(array('item' => $this->formatItem(MjInventory::get($id)))) : wp_send_json_error(array('message' => __('Création impossible.', 'mj-member')), 500);
     }
 
@@ -92,7 +99,15 @@ final class InventoryController implements AjaxHandlerInterface
             $data = array_merge($data, $photo);
         }
         if (!MjInventory::update($id, $data)) {
-            wp_send_json_error(array('message' => __('Modification impossible.', 'mj-member')), 500);
+            $databaseError = MjInventory::lastDatabaseError();
+            $message = __('Modification impossible.', 'mj-member');
+            if ($databaseError !== '') {
+                $message .= ' ' . $databaseError;
+            }
+            wp_send_json_error(array('message' => $message), 500);
+        }
+        if (!MjInventory::addPhotos($id, (string) $item->slug, $this->additionalPhotoFiles())) {
+            wp_send_json_error(array('message' => __('Une photo supplémentaire est invalide.', 'mj-member')), 400);
         }
         wp_send_json_success(array('item' => $this->formatItem(MjInventory::get($id))));
     }
@@ -101,6 +116,14 @@ final class InventoryController implements AjaxHandlerInterface
     {
         $this->verify();
         MjInventory::delete(absint($_POST['id'] ?? 0)) ? wp_send_json_success() : wp_send_json_error(array('message' => __('Suppression impossible.', 'mj-member')), 404);
+    }
+
+    public function delete_photo(): void
+    {
+        $this->verify();
+        $itemId = absint($_POST['id'] ?? 0);
+        $photoId = absint($_POST['photo_id'] ?? 0);
+        MjInventory::deletePhoto($itemId, $photoId) ? wp_send_json_success() : wp_send_json_error(array('message' => __('Suppression de la photo impossible.', 'mj-member')), 404);
     }
 
     public function get_item_photo(): void
@@ -151,6 +174,20 @@ final class InventoryController implements AjaxHandlerInterface
         $id ? wp_send_json_success(array('id' => $id)) : wp_send_json_error(array('message' => __('Création impossible.', 'mj-member')), 400);
     }
 
+    public function update_category(): void
+    {
+        $this->verify();
+        $updated = MjInventory::updateCategory(absint($_POST['id'] ?? 0), (string) ($_POST['name'] ?? ''), (string) ($_POST['icon'] ?? ''));
+        $updated ? wp_send_json_success() : wp_send_json_error(array('message' => __('Modification impossible.', 'mj-member')), 400);
+    }
+
+    public function update_location(): void
+    {
+        $this->verify();
+        $updated = MjInventory::updateLocation(absint($_POST['id'] ?? 0), (string) ($_POST['name'] ?? ''), (string) ($_POST['icon'] ?? ''), (string) ($_POST['description'] ?? ''));
+        $updated ? wp_send_json_success() : wp_send_json_error(array('message' => __('Modification impossible.', 'mj-member')), 400);
+    }
+
     public function delete_category(): void { $this->deleteTaxonomy('categories'); }
     public function delete_location(): void { $this->deleteTaxonomy('locations'); }
 
@@ -169,7 +206,7 @@ final class InventoryController implements AjaxHandlerInterface
         if (empty($_FILES['photo']['tmp_name'])) {
             wp_send_json_error(array('message' => __('Photo manquante.', 'mj-member')), 400);
         }
-        $result = (new MjOpenAIClient())->analyzeInventoryPhoto($_FILES['photo']['tmp_name'], MjInventory::categories());
+        $result = (new MjOpenAIClient())->analyzeInventoryPhoto($_FILES['photo']['tmp_name'], MjInventory::categories(), MjInventory::locations());
         if (is_wp_error($result)) {
             wp_send_json_error(array('message' => $result->get_error_message()), 502);
         }
@@ -192,6 +229,24 @@ final class InventoryController implements AjaxHandlerInterface
                 $result['category_id'] = null;
             }
         }
+        $locationIds = array_map(static function ($location): int {
+            return (int) ((array) $location)['id'];
+        }, MjInventory::locations());
+        if (empty($result['location_id']) || !in_array((int) $result['location_id'], $locationIds, true)) {
+            $newLocationName = sanitize_text_field((string) ($result['new_location_name'] ?? ''));
+            if ($newLocationName !== '') {
+                $existingLocationId = 0;
+                foreach (MjInventory::locations() as $location) {
+                    if (strcasecmp($newLocationName, (string) ((array) $location)['name']) === 0) {
+                        $existingLocationId = (int) ((array) $location)['id'];
+                        break;
+                    }
+                }
+                $result['location_id'] = $existingLocationId ?: MjInventory::createLocation($newLocationName, (string) ($result['new_location_icon'] ?? ''));
+            } else {
+                $result['location_id'] = null;
+            }
+        }
         wp_send_json_success($result);
     }
 
@@ -201,16 +256,39 @@ final class InventoryController implements AjaxHandlerInterface
         foreach (array('name', 'description', 'status', 'safety_note_long', 'safety_note_short') as $key) {
             $data[$key] = sanitize_textarea_field(wp_unslash($_POST[$key] ?? ''));
         }
+        $data['quantity'] = max(1, absint($_POST['quantity'] ?? 1));
         foreach (array('category_id', 'location_id') as $key) {
             $data[$key] = absint($_POST[$key] ?? 0) ?: null;
         }
         return $data;
     }
 
+    private function additionalPhotoFiles(): array
+    {
+        if (empty($_FILES['photos']) || !is_array($_FILES['photos']['name'] ?? null)) {
+            return array();
+        }
+        $files = array();
+        foreach ($_FILES['photos']['name'] as $index => $name) {
+            if (($name === '' || $name === null) && (int) ($_FILES['photos']['error'][$index] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+            $files[] = array(
+                'name' => $name,
+                'type' => $_FILES['photos']['type'][$index] ?? '',
+                'tmp_name' => $_FILES['photos']['tmp_name'][$index] ?? '',
+                'error' => $_FILES['photos']['error'][$index] ?? UPLOAD_ERR_NO_FILE,
+                'size' => $_FILES['photos']['size'][$index] ?? 0,
+            );
+        }
+        return $files;
+    }
+
     private function formatItem($item): array
     {
         $data = (array) $item;
         $data['id'] = (int) $data['id'];
+        $data['quantity'] = max(1, (int) $data['quantity']);
         $data['category_id'] = $data['category_id'] ? (int) $data['category_id'] : null;
         $data['location_id'] = $data['location_id'] ? (int) $data['location_id'] : null;
         $data['borrowed_by'] = $data['borrowed_by'] ? (int) $data['borrowed_by'] : null;

@@ -64,6 +64,25 @@ final class MjInventory extends MjTools
         return $result === false ? 0 : (int) $wpdb->insert_id;
     }
 
+    public static function updateCategory(int $id, string $name, string $icon = ''): bool
+    {
+        global $wpdb;
+        return $wpdb->update(self::table('categories'), array(
+            'name' => sanitize_text_field($name),
+            'icon' => sanitize_text_field($icon),
+        ), array('id' => $id), array('%s', '%s'), array('%d')) !== false;
+    }
+
+    public static function updateLocation(int $id, string $name, string $icon = '', string $description = ''): bool
+    {
+        global $wpdb;
+        return $wpdb->update(self::table('locations'), array(
+            'name' => sanitize_text_field($name),
+            'icon' => sanitize_text_field($icon),
+            'description' => sanitize_textarea_field($description),
+        ), array('id' => $id), array('%s', '%s', '%s'), array('%d')) !== false;
+    }
+
     public static function list(array $filters = array()): array
     {
         global $wpdb;
@@ -105,8 +124,78 @@ final class MjInventory extends MjTools
     public static function get(int $id): ?object
     {
         global $wpdb;
-        $row = $wpdb->get_row($wpdb->prepare('SELECT i.*, c.name AS category_name, l.name AS location_name FROM ' . self::table('items') . ' i LEFT JOIN ' . self::table('categories') . ' c ON c.id=i.category_id LEFT JOIN ' . self::table('locations') . ' l ON l.id=i.location_id WHERE i.id=%d LIMIT 1', $id));
+        $row = $wpdb->get_row($wpdb->prepare('SELECT i.*, c.name AS category_name, c.icon AS category_icon, l.name AS location_name, l.icon AS location_icon FROM ' . self::table('items') . ' i LEFT JOIN ' . self::table('categories') . ' c ON c.id=i.category_id LEFT JOIN ' . self::table('locations') . ' l ON l.id=i.location_id WHERE i.id=%d LIMIT 1', $id));
         return $row ?: null;
+    }
+
+    public static function borrowHistory(int $itemId): array
+    {
+        global $wpdb;
+        $history = self::table('borrow_history');
+        $users = $wpdb->users;
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT h.*, borrower.display_name AS borrower_name, returner.display_name AS returner_name
+             FROM {$history} h
+             LEFT JOIN {$users} borrower ON borrower.ID = h.borrowed_by
+             LEFT JOIN {$users} returner ON returner.ID = h.returned_by
+             WHERE h.item_id = %d ORDER BY h.borrowed_at DESC",
+            $itemId
+        ));
+        return is_array($rows) ? $rows : array();
+    }
+
+    public static function photos(int $itemId): array
+    {
+        global $wpdb;
+        $rows = $wpdb->get_results($wpdb->prepare('SELECT id, file_name, thumbnail, created_at FROM ' . self::table('photos') . ' WHERE item_id=%d ORDER BY created_at ASC, id ASC', $itemId));
+        return is_array($rows) ? $rows : array();
+    }
+
+    public static function addPhotos(int $itemId, string $slug, array $files): bool
+    {
+        global $wpdb;
+        $success = true;
+        foreach ($files as $file) {
+            $photo = self::saveAdditionalPhoto($slug, $file);
+            if ($photo === false) {
+                $success = false;
+                continue;
+            }
+            $inserted = $wpdb->insert(self::table('photos'), array(
+                'item_id' => $itemId,
+                'file_name' => $photo['file_name'],
+                'thumbnail' => $photo['thumbnail'],
+            ), array('%d', '%s', '%s'));
+            $success = $success && $inserted !== false;
+        }
+        return $success;
+    }
+
+    public static function deletePhoto(int $itemId, int $photoId = 0): bool
+    {
+        global $wpdb;
+        $item = self::get($itemId);
+        if (!$item) {
+            return false;
+        }
+        $directory = self::uploadDir((string) $item->slug);
+        if ($photoId <= 0) {
+            $cover = $directory . 'cover.jpg';
+            if (is_file($cover) && !unlink($cover)) {
+                return false;
+            }
+            return $wpdb->update(self::table('items'), array('photo_path' => null, 'thumbnail' => null), array('id' => $itemId), array('%s', '%s'), array('%d')) !== false;
+        }
+
+        $photo = $wpdb->get_row($wpdb->prepare('SELECT file_name FROM ' . self::table('photos') . ' WHERE id=%d AND item_id=%d', $photoId, $itemId));
+        if (!$photo) {
+            return false;
+        }
+        $path = $directory . basename((string) $photo->file_name);
+        if (is_file($path) && !unlink($path)) {
+            return false;
+        }
+        return $wpdb->delete(self::table('photos'), array('id' => $photoId, 'item_id' => $itemId), array('%d', '%d')) !== false;
     }
 
     public static function create(array $data): int
@@ -122,6 +211,12 @@ final class MjInventory extends MjTools
         global $wpdb;
         $cleanData = self::cleanItem($data, false);
         return $wpdb->update(self::table('items'), $cleanData, array('id' => $id), self::itemFormats($cleanData), array('%d')) !== false;
+    }
+
+    public static function lastDatabaseError(): string
+    {
+        global $wpdb;
+        return isset($wpdb->last_error) ? sanitize_text_field((string) $wpdb->last_error) : '';
     }
 
     public static function delete(int $id): bool
@@ -214,6 +309,27 @@ final class MjInventory extends MjTools
         return array('photo_path' => 'data/inventory/' . $slug . '/cover.jpg', 'thumbnail' => $thumbnail);
     }
 
+    private static function saveAdditionalPhoto(string $slug, array $file): array|false
+    {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || empty($file['tmp_name'])) {
+            return false;
+        }
+        $type = wp_check_filetype_and_ext($file['tmp_name'], $file['name']);
+        if (empty($type['type']) || strpos((string) $type['type'], 'image/') !== 0) {
+            return false;
+        }
+        $source = imagecreatefromstring((string) file_get_contents($file['tmp_name']));
+        if (!$source || !function_exists('imagejpeg')) {
+            return false;
+        }
+        $fileName = 'photo-' . wp_generate_uuid4() . '.jpg';
+        $path = self::ensureUploadDir($slug) . $fileName;
+        imagejpeg($source, $path, 88);
+        $thumbnail = self::thumbnailBase64($source);
+        imagedestroy($source);
+        return array('file_name' => $fileName, 'thumbnail' => $thumbnail);
+    }
+
     private static function thumbnailBase64($source): string
     {
         $width = imagesx($source);
@@ -244,20 +360,22 @@ final class MjInventory extends MjTools
     private static function cleanItem(array $data, bool $includeDefaults = true): array
     {
         $result = array();
-        $fields = array('slug', 'name', 'description', 'status', 'category_id', 'location_id', 'safety_note_long', 'safety_note_short', 'photo_path', 'thumbnail', 'borrowed_by', 'borrowed_at', 'created_by');
+        $fields = array('slug', 'name', 'description', 'quantity', 'status', 'category_id', 'location_id', 'safety_note_long', 'safety_note_short', 'photo_path', 'thumbnail', 'borrowed_by', 'borrowed_at', 'created_by');
         foreach ($fields as $field) {
             if (!$includeDefaults && !array_key_exists($field, $data)) {
                 continue;
             }
             $value = $data[$field] ?? null;
-            $result[$field] = in_array($field, array('category_id', 'location_id', 'borrowed_by', 'created_by'), true) ? ($value === null ? null : absint($value)) : ($field === 'status' ? (isset(self::STATUSES[$value]) ? $value : 'good') : ($value === null ? null : sanitize_textarea_field((string) $value)));
+            $result[$field] = $field === 'quantity'
+                ? max(1, absint($value ?: 1))
+                : (in_array($field, array('category_id', 'location_id', 'borrowed_by', 'created_by'), true) ? ($value === null ? null : absint($value)) : ($field === 'status' ? (isset(self::STATUSES[$value]) ? $value : 'good') : ($value === null ? null : sanitize_textarea_field((string) $value))));
         }
         return $result;
     }
 
     private static function itemFormats(array $data): array
     {
-        $integerFields = array('category_id', 'location_id', 'borrowed_by', 'created_by');
+        $integerFields = array('quantity', 'category_id', 'location_id', 'borrowed_by', 'created_by');
         $formats = array();
         foreach (array_keys($data) as $field) {
             $formats[] = in_array($field, $integerFields, true) ? '%d' : '%s';

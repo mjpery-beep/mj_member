@@ -292,10 +292,11 @@ final class MjOpenAIClient
      * Analyse une photo d'objet et retourne les champs du formulaire inventaire.
      *
      * @param string $imagePath Chemin absolu de l'image temporaire.
-     * @param array<int,object|array> $categories Catégories disponibles.
+    * @param array<int,object|array> $categories Catégories disponibles.
+    * @param array<int,object|array> $locations Localisations disponibles.
      * @return array<string,mixed>|WP_Error
      */
-    public function analyzeInventoryPhoto(string $imagePath, array $categories = array())
+    public function analyzeInventoryPhoto(string $imagePath, array $categories = array(), array $locations = array())
     {
         if (!$this->isEnabled() || !is_readable($imagePath) || !function_exists('imagecreatefromstring')) {
             return new WP_Error('mj_inventory_ai_unavailable', __('Analyse IA indisponible.', 'mj-member'));
@@ -325,13 +326,19 @@ final class MjOpenAIClient
             $categoryLines[] = sprintf('%d: %s', (int) ($category['id'] ?? 0), sanitize_text_field((string) ($category['name'] ?? '')));
         }
         $categoryText = $categoryLines ? implode(', ', $categoryLines) : '(aucune catégorie existante)';
+        $locationLines = array();
+        foreach ($locations as $location) {
+            $location = (array) $location;
+            $locationLines[] = sprintf('%d: %s', (int) ($location['id'] ?? 0), sanitize_text_field((string) ($location['name'] ?? '')));
+        }
+        $locationText = $locationLines ? implode(', ', $locationLines) : '(aucune localisation existante)';
         $payload = array(
             'model' => 'gpt-4o',
             'response_format' => array('type' => 'json_object'),
             'messages' => array(
-                array('role' => 'system', 'content' => 'Tu es un assistant chargé de cataloguer du matériel pour une maison de jeunes. Retourne uniquement un objet JSON valide avec les clés name, description, status, category_id, new_category_name, new_category_icon, safety_note_long et safety_note_short. status doit être exactement good, damaged ou broken selon l état visible de l objet. Vérifie d abord si une catégorie existante correspond à l objet et utilise son category_id. Ne propose new_category_name et new_category_icon que si aucune catégorie existante ne correspond. N invente pas de marque, de modèle ou de danger non visible.'),
+                array('role' => 'system', 'content' => 'Tu es un assistant chargé de cataloguer du matériel pour une maison de jeunes. Retourne uniquement un objet JSON valide avec les clés name, description, status, category_id, new_category_name, new_category_icon, location_id, new_location_name, new_location_icon, safety_note_long et safety_note_short. status doit être exactement good, damaged ou broken selon l état visible de l objet. Vérifie d abord si une catégorie et une localisation existantes correspondent et utilise leurs IDs. Ne propose une nouvelle valeur avec son emoji que si aucune valeur existante ne correspond. N invente pas de marque, de modèle, de lieu ou de danger non visible.'),
                 array('role' => 'user', 'content' => array(
-                    array('type' => 'text', 'text' => 'Identifie cet objet. Catégories disponibles: ' . $categoryText),
+                    array('type' => 'text', 'text' => 'Identifie cet objet. Catégories disponibles: ' . $categoryText . '. Localisations disponibles: ' . $locationText),
                     array('type' => 'image_url', 'image_url' => array('url' => 'data:image/jpeg;base64,' . $encoded, 'detail' => 'low')),
                 )),
             ),
@@ -361,6 +368,9 @@ final class MjOpenAIClient
             'category_id' => !empty($result['category_id']) ? absint($result['category_id']) : null,
             'new_category_name' => sanitize_text_field((string) ($result['new_category_name'] ?? '')),
             'new_category_icon' => sanitize_text_field((string) ($result['new_category_icon'] ?? '')),
+            'location_id' => !empty($result['location_id']) ? absint($result['location_id']) : null,
+            'new_location_name' => sanitize_text_field((string) ($result['new_location_name'] ?? '')),
+            'new_location_icon' => sanitize_text_field((string) ($result['new_location_icon'] ?? '')),
             'safety_note_long' => sanitize_textarea_field((string) ($result['safety_note_long'] ?? '')),
             'safety_note_short' => sanitize_text_field((string) ($result['safety_note_short'] ?? '')),
         );

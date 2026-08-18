@@ -1235,6 +1235,18 @@ function mj_member_get_inventory_borrow_history_table_name() {
     return $cached;
 }
 
+function mj_member_get_inventory_photos_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_inventory_item_photos';
+    $cached = $candidate;
+    return $cached;
+}
+
 function mj_member_ensure_auxiliary_tables() {
     global $wpdb;
     if ( ! function_exists('dbDelta') ) {
@@ -1442,6 +1454,7 @@ function mj_member_ensure_auxiliary_tables() {
         slug varchar(191) NOT NULL,
         name varchar(191) NOT NULL,
         description text DEFAULT NULL,
+        quantity int unsigned NOT NULL DEFAULT 1,
         status enum('good','damaged','broken') NOT NULL DEFAULT 'good',
         category_id bigint(20) unsigned DEFAULT NULL,
         location_id bigint(20) unsigned DEFAULT NULL,
@@ -1463,6 +1476,9 @@ function mj_member_ensure_auxiliary_tables() {
         KEY idx_created_by (created_by)
     ) $charset_collate;";
     dbDelta($sql_inventory_items);
+    if (!mj_member_column_exists($inventory_items_table, 'quantity')) {
+        $wpdb->query("ALTER TABLE {$inventory_items_table} ADD COLUMN quantity int unsigned NOT NULL DEFAULT 1 AFTER description");
+    }
 
     $inventory_history_table = mj_member_get_inventory_borrow_history_table_name();
     $sql_inventory_history = "CREATE TABLE IF NOT EXISTS $inventory_history_table (
@@ -1479,6 +1495,18 @@ function mj_member_ensure_auxiliary_tables() {
         KEY idx_returned_at (returned_at)
     ) $charset_collate;";
     dbDelta($sql_inventory_history);
+
+    $inventory_photos_table = mj_member_get_inventory_photos_table_name();
+    $sql_inventory_photos = "CREATE TABLE IF NOT EXISTS $inventory_photos_table (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        item_id bigint(20) unsigned NOT NULL,
+        file_name varchar(191) NOT NULL,
+        thumbnail longtext DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY idx_item (item_id)
+    ) $charset_collate;";
+    dbDelta($sql_inventory_photos);
 }
 
 function mj_member_seed_email_templates() {

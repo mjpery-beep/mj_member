@@ -20,7 +20,7 @@ final class Config
         self::$pluginFile = $pluginFile;
 
         self::defineIfMissing('MJ_MEMBER_VERSION', '2.23.0');
-        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.89.0');
+        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.91.0');
         self::defineIfMissing('MJ_MEMBER_PATH', plugin_dir_path($pluginFile));
         self::defineIfMissing('MJ_MEMBER_URL', plugin_dir_url($pluginFile));
         self::defineIfMissing('MJ_MEMBER_CAPABILITY', 'mj_manage_members');

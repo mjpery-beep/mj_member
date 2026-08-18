@@ -387,7 +387,7 @@ final class AssetsManager
         self::registerStyle('mj-member-documents-manager', 'css/documents-manager.css', array('mj-member-components'));
         self::registerStyle('mj-member-badges-overview', 'css/badges-overview.css', array('mj-member-components'));
         self::registerStyle('mj-member-inventory-manager', 'css/inventory-manager.css', array('mj-member-components'));
-        self::registerScript('mj-member-inventory-manager', 'js/elementor/inventory-manager.js', array('mj-member-utils'));
+        self::registerScript('mj-member-inventory-manager', 'js/elementor/inventory-manager.js', array('mj-member-utils', 'mj-member-preact', 'mj-member-preact-hooks', 'mj-member-regmgr-emoji-picker'));
 
         if (function_exists('register_block_type')) {
             self::registerScript(
@@ -904,6 +904,7 @@ final class AssetsManager
 
             case 'inventory-manager':
                 wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-registration-manager');
                 wp_enqueue_style('mj-member-inventory-manager');
                 wp_enqueue_script('mj-member-inventory-manager');
                 break;
