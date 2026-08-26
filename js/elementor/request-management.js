@@ -17,7 +17,9 @@
 
     var BASE_STEPS = [
         { key: 'essential', label: 'L\'essentiel' },
+        { key: 'info', label: 'Titre & description' },
         { key: 'location', label: 'Lieu' },
+        { key: 'materials', label: 'Matériel' },
         { key: 'date', label: 'Date' },
         { key: 'details', label: 'Détails' },
     ];
@@ -220,6 +222,7 @@
         var requestTypes = cfg.requestTypes || [];
         var rooms = cfg.rooms || [];
         var animateurs = cfg.animateurs || [];
+        var materialsCatalog = cfg.materialsCatalog || [];
         var statusLabels = cfg.statusLabels || {};
         var isStaff = !!cfg.isStaff;
 
@@ -228,35 +231,6 @@
         var selectedTypeColor = selectedType && typeof selectedType.color === 'string' && selectedType.color
             ? selectedType.color
             : '#1F6FEB';
-        var materialOptionsCatalog = useMemo(function () {
-            var seen = Object.create(null);
-            var out = [];
-            (rooms || []).forEach(function (room) {
-                var source = Array.isArray(room.materialsDetailed) && room.materialsDetailed.length
-                    ? room.materialsDetailed
-                    : (room.materials || []);
-
-                source.forEach(function (item) {
-                    var title = '';
-                    var emoji = '';
-
-                    if (typeof item === 'string') {
-                        title = item.trim();
-                    } else if (item && typeof item === 'object') {
-                        title = String(item.title || '').trim();
-                        emoji = String(item.emoji || '').trim();
-                    }
-
-                    if (!title || seen[title]) {
-                        return;
-                    }
-
-                    seen[title] = true;
-                    out.push({ title: title, emoji: emoji });
-                });
-            });
-            return out;
-        }, [rooms]);
 
         function normalizeCatalogEntries(listDetailed, listFallback) {
             var out = [];
@@ -402,7 +376,10 @@
         var visibleSteps = useMemo(function () {
             return BASE_STEPS.filter(function (entry) {
                 if (entry.key === 'location') {
-                    return allowLocation || allowMaterials;
+                    return allowLocation;
+                }
+                if (entry.key === 'materials') {
+                    return allowMaterials;
                 }
                 return true;
             });
@@ -425,7 +402,10 @@
 
         function isStepValid(stepKey) {
             if (stepKey === 'essential') {
-                return form.requestType !== '' && !!String(form.title || '').trim();
+                return form.requestType !== '';
+            }
+            if (stepKey === 'info') {
+                return !!String(form.title || '').trim();
             }
             if (stepKey === 'location') {
                 if (!allowLocation) {
@@ -800,8 +780,10 @@
             staffList = staffList.filter(function (req) { return req.status === staffStatusFilter; });
         }
 
+        var showComposeBack = mainTab === 'compose' && step > 0;
+
         return h('div', { class: 'mj-request-management__shell' }, [
-            h('nav', { class: 'mj-request-management__main-tabs', key: 'main-tabs' }, mainTabs.map(function (tab) {
+            !showComposeBack && h('nav', { class: 'mj-request-management__main-tabs', key: 'main-tabs' }, mainTabs.map(function (tab) {
                 var cls = 'mj-request-management__main-tab';
                 if (tab.key === 'compose') {
                     cls += ' is-compose';
@@ -816,23 +798,21 @@
                 }, tab.label);
             })),
 
+            showComposeBack && h('button', {
+                type: 'button',
+                class: 'mj-request-management__back-btn',
+                key: 'back-btn',
+                onClick: function () { setStep(Math.max(0, step - 1)); },
+            }, ['← ', h('span', null, 'Retour')]),
+
             mainTab === 'compose' && h('div', { class: 'mj-request-management__grid mj-request-management__tab-panel', key: 'compose-grid' }, [
                 h('div', { class: 'mj-request-management__wizard' }, [
-                    currentStep.key !== 'essential' && (form.title || selectedType) && h('div', { class: 'mj-request-management__summary-bar', key: 'summary-bar' }, [
+                    currentStep.key !== 'essential' && currentStep.key !== 'info' && (form.title || selectedType) && h('div', { class: 'mj-request-management__summary-bar', key: 'summary-bar' }, [
                         selectedType && h('span', { class: 'mj-request-management__summary-type' }, withEmoji(selectedType.emoji, selectedType.label || '')),
                         form.title && h('strong', { class: 'mj-request-management__summary-title' }, form.title),
                     ]),
 
                     currentStep.key === 'essential' && h('div', { class: 'mj-request-management__step-panel mj-request-management__content-enter', key: 'step-1' }, [
-                        h('label', null, [
-                            h('span', null, 'TITRE DE LA DEMANDE *'),
-                            h('input', {
-                                type: 'text',
-                                value: form.title,
-                                placeholder: 'Nom de votre demande...',
-                                onInput: function (evt) { patchForm('title', evt.target.value || ''); },
-                            }),
-                        ]),
                         h('div', { class: 'mj-request-management__type-grid' }, requestTypes.map(function (type, index) {
                             var active = form.requestType === type.key;
                             return h('button', {
@@ -847,8 +827,28 @@
                         selectedType && renderRichDescription('mj-request-management__type-desc', selectedType.descriptionHtml || selectedType.description || ''),
                     ]),
 
+                    currentStep.key === 'info' && h('div', { class: 'mj-request-management__step-panel mj-request-management__content-enter', key: 'step-info' }, [
+                        h('h2', null, 'Titre & description'),
+                        h('label', null, [
+                            h('span', null, 'TITRE DE LA DEMANDE *'),
+                            h('input', {
+                                type: 'text',
+                                value: form.title,
+                                placeholder: 'Nom de votre demande...',
+                                onInput: function (evt) { patchForm('title', evt.target.value || ''); },
+                            }),
+                        ]),
+                        h('label', null, [
+                            h('span', null, 'Description'),
+                            h('textarea', {
+                                value: form.description,
+                                onInput: function (evt) { patchForm('description', evt.target.value || ''); },
+                            }),
+                        ]),
+                    ]),
+
                     currentStep.key === 'location' && h('div', { class: 'mj-request-management__step-panel mj-request-management__content-enter', key: 'step-2' }, [
-                        h('h2', null, 'Lieu & matériel'),
+                        h('h2', null, 'Lieu'),
                         allowLocation && h('label', { class: 'mj-request-management__check' }, [
                             h('input', {
                                 type: 'checkbox',
@@ -893,46 +893,33 @@
                                     })),
                                 ]);
                             })(),
-                            (function () {
-                                if (!allowMaterials) {
-                                    return null;
-                                }
-                                var roomMaterialEntries = normalizeCatalogEntries(selectedRoom.materialsDetailed, selectedRoom.materials || []);
-                                if (!roomMaterialEntries.length) {
-                                    return null;
-                                }
-                                return h('div', { class: 'mj-request-management__choices-group' }, [
-                                    h('p', null, 'Matériel'),
-                                    h('div', { class: 'mj-request-management__choices-grid' }, roomMaterialEntries.map(function (entry) {
-                                        var value = entry.title;
-                                        var checked = (form.materials || []).indexOf(value) >= 0;
-                                        return h('label', { class: 'mj-request-management__check mj-request-management__check--compact' }, [
-                                            h('input', {
-                                                type: 'checkbox',
-                                                checked: checked,
-                                                onChange: function () { toggleStringItem('materials', value); },
-                                            }),
-                                            h('span', { class: 'mj-request-management__check-text' }, withEmoji(entry.emoji, value)),
-                                        ]);
-                                    })),
-                                ]);
-                            })(),
                         ]),
-                        (allowMaterials && !allowLocation) && h('div', { class: 'mj-request-management__room-options' }, [
-                            h('p', null, 'Matériel'),
-                            h('div', { class: 'mj-request-management__choices-grid' }, materialOptionsCatalog.map(function (entry) {
-                                var value = entry.title;
-                                var checked = (form.materials || []).indexOf(value) >= 0;
-                                return h('label', { class: 'mj-request-management__check mj-request-management__check--compact' }, [
-                                    h('input', {
-                                        type: 'checkbox',
-                                        checked: checked,
-                                        onChange: function () { toggleStringItem('materials', value); },
-                                    }),
-                                    h('span', { class: 'mj-request-management__check-text' }, withEmoji(entry.emoji, value)),
-                                ]);
-                            })),
-                        ]),
+                    ]),
+
+                    currentStep.key === 'materials' && h('div', { class: 'mj-request-management__step-panel mj-request-management__content-enter', key: 'step-materials' }, [
+                        h('h2', null, 'Matériel'),
+                        materialsCatalog.length === 0 && h('p', { class: 'mj-request-management__type-desc' }, 'Aucun matériel disponible dans l\'inventaire.'),
+                        h('div', { class: 'mj-request-management__materials-grid' }, materialsCatalog.map(function (item) {
+                            var checked = (form.materials || []).indexOf(item.id) >= 0;
+                            var cls = 'mj-request-management__material-card' + (checked ? ' is-active' : '') + (item.available ? '' : ' is-unavailable');
+                            return h('label', { key: 'material-' + item.id, class: cls }, [
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: checked,
+                                    onChange: function () { toggleStringItem('materials', item.id); },
+                                }),
+                                item.thumbnail
+                                    ? h('img', { class: 'mj-request-management__material-thumb', src: item.thumbnail, alt: '' })
+                                    : h('span', { class: 'mj-request-management__material-thumb mj-request-management__material-thumb--empty' }, '📦'),
+                                h('div', { class: 'mj-request-management__material-body' }, [
+                                    h('strong', { class: 'mj-request-management__material-name' }, item.name),
+                                    item.categoryName ? h('span', { class: 'mj-request-management__material-category' }, withEmoji(item.categoryIcon, item.categoryName)) : null,
+                                    item.description ? h('p', { class: 'mj-request-management__material-desc' }, item.description) : null,
+                                    h('span', { class: 'mj-request-management__material-availability ' + (item.available ? 'is-available' : 'is-booked') },
+                                        item.available ? 'Disponible' : 'Actuellement emprunté'),
+                                ]),
+                            ]);
+                        })),
                     ]),
 
                     currentStep.key === 'date' && h('div', { class: 'mj-request-management__step-panel mj-request-management__content-enter', key: 'step-3' }, [
@@ -1138,13 +1125,6 @@
 
                     currentStep.key === 'details' && h('div', { class: 'mj-request-management__step-panel mj-request-management__content-enter', key: 'step-4' }, [
                         h('h2', null, 'Détails complémentaires'),
-                        h('label', null, [
-                            h('span', null, 'Description'),
-                            h('textarea', {
-                                value: form.description,
-                                onInput: function (evt) { patchForm('description', evt.target.value || ''); },
-                            }),
-                        ]),
                         h('label', null, [
                             h('span', null, 'Tranche d\'âge'),
                             h('select', {

@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Core\Ajax\Front;
 
+use Mj\Member\Classes\Crud\MjInventory;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjRequestMedia;
 use Mj\Member\Classes\Crud\MjRequestNotes;
@@ -44,6 +45,7 @@ final class RequestManagementController implements AjaxHandlerInterface
         $rooms = self::formatRooms(MjRequestRooms::get_all());
         $animateurs = self::formatAnimateurs();
         $requestTypes = self::formatRequestTypes(self::filterRequestTypesForActor(MjRequestTypes::get_active(), $actor));
+        $materialsCatalog = self::formatMaterialsCatalog();
 
         wp_localize_script('mj-member-request-management', 'mjRequestManagement', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -55,6 +57,7 @@ final class RequestManagementController implements AjaxHandlerInterface
             'requestTypes' => $requestTypes,
             'rooms' => $rooms,
             'animateurs' => $animateurs,
+            'materialsCatalog' => $materialsCatalog,
             'mine' => self::enrichRequests(MjRequests::get_all(array('member_id' => $actor['member_id'], 'limit' => 200))),
             'staff' => $actor['is_staff'] ? self::enrichRequests(MjRequests::get_all(array('limit' => 300))) : array(),
             'i18n' => array(
@@ -85,6 +88,7 @@ final class RequestManagementController implements AjaxHandlerInterface
             'rooms' => self::formatRooms(MjRequestRooms::get_all()),
             'requestTypes' => self::formatRequestTypes(self::filterRequestTypesForActor(MjRequestTypes::get_active(), $actor)),
             'animateurs' => self::formatAnimateurs(),
+            'materialsCatalog' => self::formatMaterialsCatalog(),
         ));
     }
 
@@ -329,6 +333,11 @@ final class RequestManagementController implements AjaxHandlerInterface
         if (!is_array($materials)) {
             $materials = array();
         }
+        // Les matériels sont référencés par identifiant d'objet d'inventaire.
+        $materials = array_values(array_unique(array_map('absint', $materials)));
+        $materials = array_values(array_filter($materials, static function ($id) {
+            return $id > 0;
+        }));
 
         $requestType = isset($input['request_type']) ? sanitize_text_field(wp_unslash((string) $input['request_type'])) : '';
         $typeConfig = MjRequestTypes::find_by_key($requestType);
@@ -739,5 +748,33 @@ final class RequestManagementController implements AjaxHandlerInterface
         }
 
         return $result;
+    }
+
+    /**
+     * Catalogue matériel (fiche + disponibilité) pour l'étape "Matériel" de la demande.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private static function formatMaterialsCatalog(): array
+    {
+        if (!class_exists(MjInventory::class)) {
+            return array();
+        }
+
+        $items = MjInventory::list();
+
+        return array_map(static function ($item) {
+            return array(
+                'id' => (int) $item->id,
+                'name' => (string) $item->name,
+                'description' => (string) $item->description,
+                'quantity' => max(1, (int) $item->quantity),
+                'status' => (string) $item->status,
+                'thumbnail' => isset($item->thumbnail) ? (string) $item->thumbnail : '',
+                'categoryName' => isset($item->category_name) ? (string) $item->category_name : '',
+                'categoryIcon' => isset($item->category_icon) ? (string) $item->category_icon : '',
+                'available' => empty($item->borrowed_by),
+            );
+        }, $items);
     }
 }
