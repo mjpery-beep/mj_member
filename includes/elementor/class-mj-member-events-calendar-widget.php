@@ -3039,7 +3039,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 $chip_type_key = 'misc';
                             }
                             $chip_is_known = isset($available_type_filters[$chip_type_key]) || $chip_type_key === 'closure';
-                            $chip_classes = array('mj-cal-mobile__chip');
+                            $chip_classes = array('mj-cal-mobile__event-title');
                             if (!empty($chip_event['is_cancelled'])) {
                                 $chip_classes[] = 'is-cancelled';
                             }
@@ -3047,7 +3047,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 $chip_classes[] = 'is-draft';
                             }
                             $chip_style = self::build_event_style_attribute($chip_event);
-                            echo '<div class="' . esc_attr(implode(' ', $chip_classes)) . '"' . $chip_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($chip_type_key) . '" data-calendar-type-known="' . ($chip_is_known ? '1' : '0') . '"></div>';
+                            $chip_title = isset($chip_event['title']) ? (string) $chip_event['title'] : '';
+                            echo '<span class="' . esc_attr(implode(' ', $chip_classes)) . '"' . $chip_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($chip_type_key) . '" data-calendar-type-known="' . ($chip_is_known ? '1' : '0') . '" title="' . esc_attr($chip_title) . '">' . esc_html($chip_title) . '</span>';
                         }
                         echo '</div>';
                     }

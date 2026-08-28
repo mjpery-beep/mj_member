@@ -15,6 +15,9 @@ if (!defined('ABSPATH')) {
 $template_data = isset($template_data) && is_array($template_data) ? $template_data : array();
 
 $event_id = isset($template_data['event_id']) ? (int) $template_data['event_id'] : 0;
+$occurrence_keys = isset($template_data['occurrence_keys']) && is_array($template_data['occurrence_keys'])
+    ? $template_data['occurrence_keys']
+    : array();
 $title = isset($template_data['title']) ? (string) $template_data['title'] : '';
 $display_title = !empty($template_data['display_title']);
 $max_occurrences = isset($template_data['max_occurrences']) ? max(1, (int) $template_data['max_occurrences']) : 20;
@@ -977,7 +980,7 @@ $date_debut = (string) $get_event_value('date_debut', '');
 $date_fin = (string) $get_event_value('date_fin', '');
 
 $occurrence_args = array(
-    'max' => $max_occurrences,
+    'max' => !empty($occurrence_keys) ? PHP_INT_MAX : $max_occurrences,
     'include_past' => (bool) $show_past,
 );
 
@@ -1059,6 +1062,32 @@ if (empty($occurrences) and $event_for_schedule) {
                 'is_past' => ($manual_start < current_time('timestamp')),
             );
         }
+    }
+}
+
+$selected_timestamps = array();
+foreach ($occurrence_keys as $occurrence_key) {
+    $parts = explode(':', (string) $occurrence_key, 2);
+    if (count($parts) !== 2 || (int) $parts[0] !== $event_id) {
+        continue;
+    }
+
+    $timestamp = (int) $parts[1];
+    if ($timestamp > 0) {
+        $selected_timestamps[$timestamp] = true;
+    }
+}
+
+if (!empty($selected_timestamps)) {
+    $occurrences = array_values(array_filter(
+        $occurrences,
+        static function (array $occurrence) use ($selected_timestamps): bool {
+            return isset($selected_timestamps[(int) ($occurrence['timestamp'] ?? 0)]);
+        }
+    ));
+
+    if (count($occurrences) > $max_occurrences) {
+        $occurrences = array_slice($occurrences, 0, $max_occurrences);
     }
 }
 

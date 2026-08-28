@@ -198,6 +198,95 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'tabs_icons_heading',
+            array(
+                'label' => __('Pictogrammes des onglets', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'condition' => array('show_tabs' => 'yes'),
+            )
+        );
+
+        $this->add_control(
+            'register_tab_icon',
+            array(
+                'label' => __('Pictogramme « Devenir membre »', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'dynamic' => array('active' => true),
+                'condition' => array('show_tabs' => 'yes'),
+            )
+        );
+
+        $this->add_control(
+            'register_tab_icon_alt',
+            array(
+                'label' => __('Texte alternatif du pictogramme', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'label_block' => true,
+                'condition' => array(
+                    'show_tabs' => 'yes',
+                    'register_tab_icon[id]!' => '',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'register_tab_icon_size',
+            array(
+                'label' => __('Taille du pictogramme « Devenir membre »', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 12, 'max' => 96),
+                ),
+                'default' => array('size' => 20, 'unit' => 'px'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-inscription-tab-button--register' => '--mj-tab-icon-size: {{SIZE}}{{UNIT}};',
+                ),
+                'condition' => array('show_tabs' => 'yes'),
+            )
+        );
+
+        $this->add_control(
+            'login_tab_icon',
+            array(
+                'label' => __('Pictogramme « Se connecter »', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'dynamic' => array('active' => true),
+                'condition' => array('show_tabs' => 'yes'),
+            )
+        );
+
+        $this->add_control(
+            'login_tab_icon_alt',
+            array(
+                'label' => __('Texte alternatif du pictogramme', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'label_block' => true,
+                'condition' => array(
+                    'show_tabs' => 'yes',
+                    'login_tab_icon[id]!' => '',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'login_tab_icon_size',
+            array(
+                'label' => __('Taille du pictogramme « Se connecter »', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 12, 'max' => 96),
+                ),
+                'default' => array('size' => 20, 'unit' => 'px'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-inscription-tab-button--login' => '--mj-tab-icon-size: {{SIZE}}{{UNIT}};',
+                ),
+                'condition' => array('show_tabs' => 'yes'),
+            )
+        );
+
+        $this->add_control(
             'login_show_title',
             array(
                 'label' => __('Afficher le titre', 'mj-member'),
@@ -787,6 +876,83 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
         $this->end_controls_section();
 
         $this->start_controls_section(
+            'section_style_tabs',
+            array(
+                'label' => __('Onglets', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_responsive_control(
+            'tab_button_min_height',
+            array(
+                'label' => __('Hauteur minimale', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array('px' => array('min' => 32, 'max' => 160)),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-inscription-tab-button' => 'min-height: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'tab_vertical_alignment',
+            array(
+                'label' => __('Alignement vertical', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'flex-start' => array('title' => __('Haut', 'mj-member'), 'icon' => 'eicon-v-align-top'),
+                    'center' => array('title' => __('Centré', 'mj-member'), 'icon' => 'eicon-v-align-middle'),
+                    'flex-end' => array('title' => __('Bas', 'mj-member'), 'icon' => 'eicon-v-align-bottom'),
+                ),
+                'default' => 'center',
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-inscription-tab-button' => 'align-items: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'tab_horizontal_alignment',
+            array(
+                'label' => __('Alignement horizontal', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'flex-start' => array('title' => __('Gauche', 'mj-member'), 'icon' => 'eicon-text-align-left'),
+                    'center' => array('title' => __('Centré', 'mj-member'), 'icon' => 'eicon-text-align-center'),
+                    'flex-end' => array('title' => __('Droite', 'mj-member'), 'icon' => 'eicon-text-align-right'),
+                ),
+                'default' => 'center',
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-inscription-tab-button' => 'justify-content: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Typography::get_type(),
+            array(
+                'name' => 'tab_label_typography',
+                'label' => __('Typographie du texte', 'mj-member'),
+                'selector' => '{{WRAPPER}} .mj-inscription-tab-label',
+            )
+        );
+
+        $this->add_control(
+            'tab_label_color',
+            array(
+                'label' => __('Couleur du texte', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-inscription-tab-label' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->end_controls_section();
+
+        $this->start_controls_section(
             'section_style_notices',
             array(
                 'label' => __('Messages système', 'mj-member'),
@@ -917,6 +1083,16 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
             'message_logged_out' => isset($settings['logged_out_message']) ? $settings['logged_out_message'] : '',
             'message_logged_in' => isset($settings['logged_in_message']) ? $settings['logged_in_message'] : '',
             'show_tabs' => !isset($settings['show_tabs']) || $settings['show_tabs'] === 'yes',
+            'tab_icons' => array(
+                'register' => array(
+                    'url' => !empty($settings['register_tab_icon']['url']) ? (string) $settings['register_tab_icon']['url'] : '',
+                    'alt' => !empty($settings['register_tab_icon_alt']) ? (string) $settings['register_tab_icon_alt'] : '',
+                ),
+                'login' => array(
+                    'url' => !empty($settings['login_tab_icon']['url']) ? (string) $settings['login_tab_icon']['url'] : '',
+                    'alt' => !empty($settings['login_tab_icon_alt']) ? (string) $settings['login_tab_icon_alt'] : '',
+                ),
+            ),
             'title' => $title_settings,
             'login_title' => $login_title_settings,
             'regulation' => $regulation_data,

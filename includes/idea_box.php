@@ -116,7 +116,10 @@ if (!function_exists('mj_member_idea_box_localize')) {
             'i18n' => array(
                 'loading' => __('Chargement des idées…', 'mj-member'),
                 'empty' => __('Aucune idée proposée pour le moment.', 'mj-member'),
+                'filteredEmpty' => __('Aucune idée réalisée pour le moment.', 'mj-member'),
                 'loadError' => __('Impossible de charger les idées.', 'mj-member'),
+                'filterAll' => __('Toutes les idées', 'mj-member'),
+                'filterDone' => __('Réalisé', 'mj-member'),
                 'submit' => __('Partager', 'mj-member'),
                 'titlePlaceholder' => __('Titre de votre idée', 'mj-member'),
                 'contentPlaceholder' => __('Décrivez votre idée…', 'mj-member'),
@@ -161,7 +164,7 @@ if (!function_exists('mj_member_ajax_idea_box_fetch')) {
         $memberRole = sanitize_key((string) $member->get('role', ''));
         $ideas = MjIdeas::get_with_votes(array(
             'statuses' => array(MjIdeas::STATUS_PUBLISHED, MjIdeas::STATUS_ARCHIVED),
-            'orderby' => 'vote_count',
+            'orderby' => 'created_at',
             'order' => 'DESC',
         ), $memberId, array('viewer_role' => $memberRole));
 

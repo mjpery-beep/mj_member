@@ -75,12 +75,17 @@ $type_emoji = static function ($type) {
 
     <div class="mj-notification-list-widget__header">
         <h2 class="mj-notification-list-widget__title"><?php echo esc_html((string) ($config['panelTitle'] ?? __('Notifications', 'mj-member'))); ?></h2>
-        <button type="button"
-                class="mj-notification-list-widget__mark-all"
-                data-notif-action="mark-all-read"
-                <?php echo empty($config['showMarkAllRead']) ? 'style="display:none;"' : ''; ?>>
-            <?php esc_html_e('Tout marquer comme lu', 'mj-member'); ?>
-        </button>
+        <div class="mj-notification-list-widget__header-actions">
+            <button type="button"
+                    class="mj-notification-list-widget__mark-all"
+                    data-notif-action="mark-all-read"
+                    <?php echo empty($config['showMarkAllRead']) ? 'style="display:none;"' : ''; ?>>
+                <?php esc_html_e('✅ Lu', 'mj-member'); ?>
+            </button>
+            <button type="button" class="mj-header-notif-delete-all" data-notif-action="archive-all">
+                <?php esc_html_e('🗑 Supprimer', 'mj-member'); ?>
+            </button>
+        </div>
     </div>
 
     <div class="mj-notification-list-widget__content" data-mj-notif-list>
@@ -122,9 +127,4 @@ $type_emoji = static function ($type) {
         <?php endif; ?>
     </div>
 
-    <div class="mj-notification-list-widget__footer">
-        <button type="button" class="mj-header-notif-delete-all" data-notif-action="archive-all">
-            <?php esc_html_e('Tout supprimer', 'mj-member'); ?>
-        </button>
-    </div>
 </div>

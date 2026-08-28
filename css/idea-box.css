@@ -26,6 +26,23 @@
     color: #424242;
 }
 
+.mj-idea-box__filter {
+    align-self: flex-start;
+    min-width: 12rem;
+    padding: 0.58rem 2.25rem 0.58rem 0.8rem;
+    border: 1px solid #93c5fd;
+    border-radius: 0.5rem;
+    background-color: #ffffff;
+    color: #0f172a;
+    font: inherit;
+    cursor: pointer;
+}
+
+.mj-idea-box__filter:focus-visible {
+    outline: 2px solid #22d3ee;
+    outline-offset: 2px;
+}
+
 .mj-idea-box__feedback {
     display: none;
     padding: 0.75rem 1rem;

@@ -136,7 +136,21 @@
             return fetch(ajaxUrl, fetchOptions)
                 .then(function (response) {
                     if (!response.ok) {
-                        throw new Error('HTTP ' + response.status);
+                        return response.json().then(function (result) {
+                            var message = result && result.data && result.data.message 
+                                ? result.data.message 
+                                : ('HTTP ' + response.status);
+                            var error = new Error(message);
+                            if (result && result.data) {
+                                error.data = result.data;
+                            }
+                            throw error;
+                        }).catch(function (parseErr) {
+                            if (parseErr && parseErr.message && parseErr.message !== ('HTTP ' + response.status) && parseErr.data) {
+                                throw parseErr;
+                            }
+                            throw new Error('HTTP ' + response.status);
+                        });
                     }
                     return response.json();
                 })
@@ -378,20 +392,28 @@
             /**
              * Envoie le contrat d'inscription par email
              */
-            sendRegistrationContract: function (registrationId, recipientType) {
-                return post('mj_regmgr_send_registration_contract', {
+            sendRegistrationContract: function (registrationId, recipientType, content) {
+                var payload = {
                     registrationId: registrationId,
                     recipientType: recipientType,
-                });
+                };
+                if (typeof content === 'string' && content !== '') {
+                    payload.content = content;
+                }
+                return post('mj_regmgr_send_registration_contract', payload);
             },
 
             /**
              * Génère puis retourne le contrat d'inscription d'une inscription en PDF.
              */
-            downloadRegistrationContractPdf: function (registrationId) {
-                return post('mj_regmgr_download_registration_contract_pdf', {
+            downloadRegistrationContractPdf: function (registrationId, content) {
+                var payload = {
                     registrationId: registrationId,
-                });
+                };
+                if (typeof content === 'string' && content !== '') {
+                    payload.content = content;
+                }
+                return post('mj_regmgr_download_registration_contract_pdf', payload);
             },
 
             /**

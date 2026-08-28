@@ -96,6 +96,7 @@
         this.state = {
             loading: !this.isPreview && this.hasAccess,
             ideas: this.isPreview ? this.normalizeIdeas(config.previewData && config.previewData.ideas) : [],
+            statusFilter: 'all',
             error: '',
             submitting: false,
         };
@@ -109,6 +110,7 @@
             title: null,
             intro: null,
             feedback: null,
+            filter: null,
             list: null,
             form: null,
             titleInput: null,
@@ -288,11 +290,8 @@
 
     IdeaBox.prototype.sortIdeas = function (ideas) {
         return ideas.sort(function (a, b) {
-            if (b.voteCount !== a.voteCount) {
-                return b.voteCount - a.voteCount;
-            }
-            var dateA = a.updatedAt || a.createdAt;
-            var dateB = b.updatedAt || b.createdAt;
+            var dateA = a.createdAt;
+            var dateB = b.createdAt;
             if (dateA && dateB) {
                 var parsedA = Date.parse(dateA.replace(' ', 'T')) || 0;
                 var parsedB = Date.parse(dateB.replace(' ', 'T')) || 0;
@@ -318,6 +317,22 @@
         header.appendChild(intro);
 
         inner.appendChild(header);
+
+    var filter = document.createElement('select');
+    filter.className = 'mj-idea-box__filter';
+    filter.setAttribute('aria-label', getString(this.i18n, 'filterLabel', 'Filtrer les idées'));
+
+    var allOption = document.createElement('option');
+    allOption.value = 'all';
+    allOption.textContent = getString(this.i18n, 'filterAll', 'Toutes les idées');
+    filter.appendChild(allOption);
+
+    var doneOption = document.createElement('option');
+    doneOption.value = 'archived';
+    doneOption.textContent = getString(this.i18n, 'filterDone', 'Réalisé');
+    filter.appendChild(doneOption);
+
+    inner.appendChild(filter);
 
         var feedback = document.createElement('div');
         feedback.className = 'mj-idea-box__feedback';
@@ -382,6 +397,7 @@
         this.dom.title = title;
         this.dom.intro = intro;
         this.dom.feedback = feedback;
+        this.dom.filter = filter;
         this.dom.list = list;
         this.dom.empty = empty;
 
@@ -454,11 +470,18 @@
         }
 
         var ideas = this.state.ideas;
+        if (this.state.statusFilter === 'archived') {
+            ideas = ideas.filter(function (idea) {
+                return idea.status === 'archived';
+            });
+        }
         if (!Array.isArray(ideas) || ideas.length === 0) {
             if (this.dom.empty) {
                 this.dom.empty.textContent = this.state.loading
                     ? getString(this.i18n, 'loading', 'Chargement des idées…')
-                    : getString(this.i18n, 'empty', 'Aucune idée proposée pour le moment.');
+                    : this.state.statusFilter === 'archived'
+                        ? getString(this.i18n, 'filteredEmpty', 'Aucune idée réalisée pour le moment.')
+                        : getString(this.i18n, 'empty', 'Aucune idée proposée pour le moment.');
                 this.dom.empty.style.display = '';
             }
             this.dom.list.innerHTML = '';
@@ -634,6 +657,13 @@
         if (this.dom.contentInput) {
             this.dom.contentInput.addEventListener('input', function () {
                 self.updateContentCounter();
+            });
+        }
+
+        if (this.dom.filter) {
+            this.dom.filter.addEventListener('change', function () {
+                self.state.statusFilter = self.dom.filter.value === 'archived' ? 'archived' : 'all';
+                self.renderIdeas();
             });
         }
 

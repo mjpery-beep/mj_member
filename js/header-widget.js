@@ -116,6 +116,11 @@
                 // Long press already triggered navigation — do nothing
                 if (longPressFired) return;
 
+                if (isDirectLink) {
+                    window.location.href = directHref;
+                    return;
+                }
+
                 // Short tap → toggle dropdown
                 if (self.activeDropdown === name) {
                     self._closeAll();

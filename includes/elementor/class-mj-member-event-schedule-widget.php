@@ -10,6 +10,7 @@ use Elementor\Group_Control_Box_Shadow;
 use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Core\Config;
 
 class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
@@ -60,6 +61,18 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
                 'options' => $event_options,
                 'default' => '',
                 'description' => __('Sélectionnez l\'événement dont vous souhaitez afficher l\'horaire.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'occurrence_keys',
+            array(
+                'label' => __('Dates à afficher', 'mj-member'),
+                'type' => Controls_Manager::SELECT2,
+                'multiple' => true,
+                'label_block' => true,
+                'options' => $this->get_occurrence_options(),
+                'description' => __('Facultatif : sélectionnez une ou plusieurs occurrences de l\'événement choisi.', 'mj-member'),
             )
         );
 
@@ -870,6 +883,58 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         return $options;
     }
 
+    private function get_occurrence_options() {
+        $options = array();
+
+        if (!class_exists(MjEvents::class) || !class_exists(MjEventSchedule::class)) {
+            return $options;
+        }
+
+        $events = MjEvents::get_all(array(
+            'statuses' => array('actif', 'brouillon'),
+            'orderby' => 'date_debut',
+            'order' => 'DESC',
+            'limit' => 200,
+        ));
+
+        foreach ($events as $event) {
+            $event_id = isset($event->id) ? (int) $event->id : 0;
+            if ($event_id <= 0) {
+                continue;
+            }
+
+            $event_title = isset($event->title) && $event->title !== ''
+                ? (string) $event->title
+                : __('(Sans titre)', 'mj-member');
+            $occurrences = MjEventSchedule::get_occurrences($event, array(
+                'max' => 200,
+                'include_past' => true,
+                'include_cancelled' => false,
+            ));
+
+            foreach ($occurrences as $occurrence) {
+                $timestamp = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
+                $start = isset($occurrence['start']) ? (string) $occurrence['start'] : '';
+                if ($timestamp <= 0 || $start === '') {
+                    continue;
+                }
+
+                $end = isset($occurrence['end']) ? (string) $occurrence['end'] : '';
+                $label = $event_title . ' - ' . wp_date('d/m/Y H:i', $timestamp);
+                if ($end !== '') {
+                    $end_timestamp = strtotime($end);
+                    if ($end_timestamp) {
+                        $label .= ' - ' . wp_date('H:i', $end_timestamp);
+                    }
+                }
+
+                $options[$event_id . ':' . $timestamp] = $label;
+            }
+        }
+
+        return $options;
+    }
+
     protected function render() {
         $settings = $this->get_settings_for_display();
         $this->apply_visibility_to_wrapper($settings, 'mj-event-schedule-widget');
@@ -881,6 +946,9 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         }
 
         $event_id = isset($settings['event_id']) ? (int) $settings['event_id'] : 0;
+        $occurrence_keys = isset($settings['occurrence_keys']) && is_array($settings['occurrence_keys'])
+            ? $settings['occurrence_keys']
+            : array();
         $title = isset($settings['title']) ? (string) $settings['title'] : '';
         $display_title = isset($settings['display_title']) && $settings['display_title'] === 'yes';
         $max_occurrences = isset($settings['max_occurrences']) ? max(1, (int) $settings['max_occurrences']) : 20;
@@ -905,6 +973,7 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
 
         $template_data = array(
             'event_id' => $event_id,
+            'occurrence_keys' => $occurrence_keys,
             'title' => $title,
             'display_title' => $display_title,
             'max_occurrences' => $max_occurrences,

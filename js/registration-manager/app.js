@@ -2363,6 +2363,7 @@
                 title: getString(strings, 'registrationDocPreviewTitle', "Aperçu du document d'inscription"),
                 html: htmlDoc,
                 registrationId: registration.id,
+                content: content,
             });
         }, [selectedEvent, eventDetails, regDocState, config, strings, showError, setRegDocPreviewState]);
 
@@ -2382,7 +2383,12 @@
 
             setRegDocPreviewDownloading(true);
 
-            api.downloadRegistrationContractPdf(registrationId)
+            var content = (regDocPreviewState && regDocPreviewState.content)
+                || regDocState.draft
+                || (eventDetails && eventDetails.registrationDocument)
+                || '';
+
+            api.downloadRegistrationContractPdf(registrationId, content)
                 .then(function (data) {
                     var fileName = data && typeof data.filename === 'string' && data.filename
                         ? data.filename
@@ -2436,7 +2442,12 @@
                 return Promise.resolve();
             }
 
-            return api.sendRegistrationContract(registration.id, recipientType)
+            var content = (regDocPreviewState && regDocPreviewState.content)
+                || regDocState.draft
+                || (eventDetails && eventDetails.registrationDocument)
+                || '';
+
+            return api.sendRegistrationContract(registration.id, recipientType, content)
                 .then(function (response) {
                     var status = response && response.contractEmailStatus ? response.contractEmailStatus : null;
                     if (status) {

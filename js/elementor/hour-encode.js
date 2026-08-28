@@ -6315,14 +6315,6 @@
 
                         hooks.useEffect(function() {
                             var currentMobileDayCount = Number(mobileDayCount || 1);
-
-                        hooks.useEffect(function() {
-                            if (!hasInitializedShowAllEventsPreference.current) {
-                                hasInitializedShowAllEventsPreference.current = true;
-                                return;
-                            }
-                            saveShowAllEventsPreference(showAllEvents);
-                        }, [showAllEvents]);
                             if (!Number.isFinite(currentMobileDayCount) || currentMobileDayCount < 1) {
                                 currentMobileDayCount = 1;
                             }

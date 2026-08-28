@@ -402,12 +402,12 @@
                     var dayCell = root.querySelector('.mj-cal-mobile__day[data-calendar-day="' + dayKey + '"]');
                     if (dayCell) {
                         var remainingEvents = tpl.content.querySelectorAll('.mj-member-events-calendar__mobile-event');
-                        var chips = toArray(dayCell.querySelectorAll('.mj-cal-mobile__chip'));
-                        // Rebuild chips to match remaining events
-                        if (chips.length > remainingEvents.length) {
-                            // Remove last chip (simplistic approach - works when only one deleted at a time)
-                            for (var c = chips.length - 1; c >= remainingEvents.length; c--) {
-                                chips[c].remove();
+                        var eventTitles = toArray(dayCell.querySelectorAll('.mj-cal-mobile__event-title'));
+                        // Rebuild mobile titles to match remaining events.
+                        if (eventTitles.length > remainingEvents.length) {
+                            // Remove the last item after an occurrence is deleted.
+                            for (var c = eventTitles.length - 1; c >= remainingEvents.length; c--) {
+                                eventTitles[c].remove();
                             }
                         }
                         if (!remainingEvents.length) {

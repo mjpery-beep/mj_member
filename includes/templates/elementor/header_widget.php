@@ -356,6 +356,13 @@ function mj_header_svg_icon(string $name): string {
 
         <?php elseif ($key === 'account' && $acc_enabled): ?>
         <div class="mj-header__action-item" style="order:<?php echo (int)$order; ?>">
+            <?php if (!$is_logged_in && !$is_preview): ?>
+            <a href="<?php echo esc_url($account_guest_redirect_url); ?>" class="mj-header__trigger" title="<?php echo esc_attr($acc_label_out); ?>">
+                <span class="mj-header__trigger-icon">
+                    <?php if ($acc_icon): echo '<img src="' . esc_url($acc_icon) . '" alt="" />'; else: echo mj_header_svg_icon('lock'); endif; ?>
+                </span>
+            </a>
+            <?php else: ?>
             <button type="button" class="mj-header__trigger" data-mj-header-trigger="account" aria-expanded="false" aria-haspopup="true" title="<?php echo esc_attr($is_logged_in ? $acc_label_in : $acc_label_out); ?>">
                 <span class="mj-header__trigger-icon <?php echo ($is_logged_in && $acc_avatar_url) ? 'mj-header__trigger-icon--avatar' : ''; ?>">
                     <?php if ($is_logged_in && $acc_avatar_url): echo '<img src="' . esc_url($acc_avatar_url) . '" alt="" class="mj-header__trigger-avatar" />';
@@ -478,6 +485,7 @@ function mj_header_svg_icon(string $name): string {
                 </div>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
         </div>
 
         <?php endif; ?>

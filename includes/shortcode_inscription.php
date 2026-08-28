@@ -1276,6 +1276,10 @@ if (!function_exists('mj_member_render_registration_form')) {
             'message_logged_out' => '',
             'message_logged_in' => __('Tu es déjà inscrit.', 'mj-member'),
             'show_tabs' => true,
+            'tab_icons' => array(
+                'register' => array('url' => '', 'alt' => ''),
+                'login' => array('url' => '', 'alt' => ''),
+            ),
             'title' => array(
                 'show' => true,
                 'text' => __('Inscription MJ', 'mj-member'),
@@ -1327,6 +1331,17 @@ if (!function_exists('mj_member_render_registration_form')) {
         $title_settings = is_array($args['title']) ? $args['title'] : array();
         $title_settings = wp_parse_args($title_settings, $title_defaults);
         $args['show_tabs'] = !empty($args['show_tabs']);
+        $tab_icon_defaults = array('url' => '', 'alt' => '');
+        $tab_icons = is_array($args['tab_icons'] ?? null) ? $args['tab_icons'] : array();
+        $args['tab_icons'] = array();
+        foreach (array('register', 'login') as $tab_key) {
+            $tab_icon = is_array($tab_icons[$tab_key] ?? null) ? $tab_icons[$tab_key] : array();
+            $tab_icon = wp_parse_args($tab_icon, $tab_icon_defaults);
+            $args['tab_icons'][$tab_key] = array(
+                'url' => esc_url_raw((string) $tab_icon['url']),
+                'alt' => sanitize_text_field((string) $tab_icon['alt']),
+            );
+        }
         $allowed_title_image_positions = array('inline-right', 'inline-left', 'above-center', 'above-right');
         $allowed_title_image_positions[] = 'above-left';
         $title_image_position = isset($title_settings['image_position']) ? (string) $title_settings['image_position'] : 'inline-right';
@@ -1548,11 +1563,21 @@ if (!function_exists('mj_member_render_registration_form')) {
             <?php if (!empty($args['show_tabs'])) : ?>
                 <!-- Tabs Navigation -->
                 <div class="mj-inscription-tabs-nav">
-                    <button type="button" class="mj-inscription-tab-button <?php echo $initial_tab === 'register' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="register" aria-selected="<?php echo $initial_tab === 'register' ? 'true' : 'false'; ?>">
-                        <?php esc_html_e('Devenir membre', 'mj-member'); ?>
+                    <button type="button" class="mj-inscription-tab-button mj-inscription-tab-button--register <?php echo $initial_tab === 'register' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="register" aria-selected="<?php echo $initial_tab === 'register' ? 'true' : 'false'; ?>">
+                        <?php if ($args['tab_icons']['register']['url'] !== '') : ?>
+                            <img class="mj-inscription-tab-icon" src="<?php echo esc_url($args['tab_icons']['register']['url']); ?>" alt="<?php echo esc_attr($args['tab_icons']['register']['alt']); ?>">
+                        <?php else : ?>
+                            <span class="mj-inscription-tab-emoji" aria-hidden="true">👹</span>
+                        <?php endif; ?>
+                        <span class="mj-inscription-tab-label"><?php esc_html_e('Devenir membre', 'mj-member'); ?></span>
                     </button>
-                    <button type="button" class="mj-inscription-tab-button <?php echo $initial_tab === 'login' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="login" aria-selected="<?php echo $initial_tab === 'login' ? 'true' : 'false'; ?>">
-                        <?php esc_html_e('Se connecter', 'mj-member'); ?>
+                    <button type="button" class="mj-inscription-tab-button mj-inscription-tab-button--login <?php echo $initial_tab === 'login' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="login" aria-selected="<?php echo $initial_tab === 'login' ? 'true' : 'false'; ?>">
+                        <?php if ($args['tab_icons']['login']['url'] !== '') : ?>
+                            <img class="mj-inscription-tab-icon" src="<?php echo esc_url($args['tab_icons']['login']['url']); ?>" alt="<?php echo esc_attr($args['tab_icons']['login']['alt']); ?>">
+                        <?php else : ?>
+                            <span class="mj-inscription-tab-emoji" aria-hidden="true">🔐</span>
+                        <?php endif; ?>
+                        <span class="mj-inscription-tab-label"><?php esc_html_e('Se connecter', 'mj-member'); ?></span>
                     </button>
                 </div>
             <?php endif; ?>
@@ -3005,7 +3030,8 @@ if (!function_exists('mj_member_render_registration_form')) {
             }
 
             .mj-inscription-tab-button {
-                flex: 1;
+                flex: 1 1 0;
+                min-width: 0;
                 padding: 14px 20px;
                 border: 1px solid transparent;
                 background: transparent;
@@ -3017,6 +3043,32 @@ if (!function_exists('mj_member_render_registration_form')) {
                 transition: all 0.3s ease;
                 border-radius: 12px;
                 text-align: center;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .mj-inscription-tab-label {
+                min-width: 0;
+                overflow-wrap: anywhere;
+            }
+
+            .mj-inscription-tab-icon,
+            .mj-inscription-tab-emoji {
+                display: inline-block;
+                width: var(--mj-tab-icon-size, 1.25em);
+                height: var(--mj-tab-icon-size, 1.25em);
+                margin-right: 0.4em;
+                vertical-align: -0.2em;
+            }
+
+            .mj-inscription-tab-icon {
+                object-fit: contain;
+            }
+
+            .mj-inscription-tab-emoji {
+                font-size: var(--mj-tab-icon-size, 1.25em);
+                line-height: 1;
             }
 
             .mj-inscription-tab-button:hover {
@@ -3141,6 +3193,23 @@ if (!function_exists('mj_member_render_registration_form')) {
                 .mj-inscription-tab-button {
                     padding: 12px 12px;
                     font-size: 14px;
+                    gap: 0.25em;
+                    flex-wrap: wrap;
+                }
+
+                .mj-inscription-tab-icon,
+                .mj-inscription-tab-emoji {
+                    max-width: 100%;
+                    margin-right: 0;
+                    flex: 0 0 auto;
+                }
+
+                .mj-inscription-tab-emoji {
+                    font-size: var(--mj-tab-icon-size, 1.25em);
+                }
+
+                .mj-inscription-tab-label {
+                    flex: 0 1 auto;
                 }
 
                 .mj-inscription-tab-button--active,

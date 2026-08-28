@@ -8506,6 +8506,11 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         $registration_document = isset($event->registration_document) ? (string) $event->registration_document : '';
+        if (isset($_POST['content']) && trim((string) $_POST['content']) !== '') {
+            $registration_document = trim((string) wp_unslash($_POST['content']));
+        } else {
+            $registration_document = wp_unslash($registration_document);
+        }
         if ($registration_document === '') {
             wp_send_json_error(array('message' => __('Aucun contrat n\'est configuré pour cet événement.', 'mj-member')), 400);
             return;
@@ -8695,6 +8700,11 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
 
             $registration_document = isset($event->registration_document) ? (string) $event->registration_document : '';
+            if (isset($_POST['content']) && trim((string) $_POST['content']) !== '') {
+                $registration_document = trim((string) wp_unslash($_POST['content']));
+            } else {
+                $registration_document = wp_unslash($registration_document);
+            }
             if ($registration_document === '') {
                 wp_send_json_error(array('message' => __('Aucun contrat n\'est configuré pour cet événement.', 'mj-member')), 400);
                 return;
@@ -8872,12 +8882,13 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return '';
         }
 
-        $replaced = $text;
+        $replaced = wp_unslash($text);
         foreach ($variables as $key => $value) {
-            $replaced = str_ireplace('[' . $key . ']', (string) $value, $replaced);
+            $val = wp_unslash((string) $value);
+            $replaced = str_ireplace('[' . $key . ']', $val, $replaced);
         }
 
-        return $replaced;
+        return wp_unslash($replaced);
     }
 
     /**
@@ -9297,7 +9308,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
      * Normalize HTML fragment for Dompdf rendering.
      */
     private function normalizeHtmlFragmentForPdf(string $html): string {
-        $html = trim($html);
+        $html = wp_unslash(trim($html));
         if ($html === '') {
             return '';
         }
