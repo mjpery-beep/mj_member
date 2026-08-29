@@ -63,6 +63,10 @@
     position: relative;
 }
 
+.mj-header--stuck .mj-header__inner {
+    height: var(--mj-header-stuck-height);
+}
+
 /* Espace flexible entre logo+nav et actions */
 .mj-header__spacer {
     flex: 1 1 auto;

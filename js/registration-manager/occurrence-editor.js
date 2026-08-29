@@ -2,11 +2,10 @@
  * Registration Manager - Occurrence Editor Module
  * Encapsule le panneau d'édition des occurrences et ses helpers.
  */
-
-(function (global) {
+ (function (global) {
     'use strict';
 
-    var preact = global.preact;
+     var preact = global.preact;
     var hooks = global.preactHooks;
     var Utils = global.MjRegMgrUtils;
     var Modals = global.MjRegMgrModals || {};
@@ -73,9 +72,34 @@
         var setLocalOccurrences = _localOccurrences[1];
         var localOccurrencesRef = useRef(localOccurrences);
 
+        var _archivedBatchIds = useState({});
+        var archivedBatchIds = _archivedBatchIds[0];
+        var setArchivedBatchIds = _archivedBatchIds[1];
+
+        var _showArchivedBatches = useState(false);
+        var showArchivedBatches = _showArchivedBatches[0];
+        var setShowArchivedBatches = _showArchivedBatches[1];
+
         useEffect(function () {
             setLocalOccurrences(normalizedOccurrences);
         }, [normalizedOccurrences]);
+
+        useEffect(function () {
+            var archivedIds = {};
+            var batches = event && Array.isArray(event.occurrenceGenerationBatches)
+                ? event.occurrenceGenerationBatches
+                : [];
+            batches.forEach(function (batch) {
+                if (!batch || String(batch.status || '').trim().toLowerCase() !== 'archived') {
+                    return;
+                }
+                var batchId = batch.batchId || batch.id || '';
+                if (batchId) {
+                    archivedIds[String(batchId)] = true;
+                }
+            });
+            setArchivedBatchIds(archivedIds);
+        }, [event && event.occurrenceGenerationBatches]);
 
         useEffect(function () {
             localOccurrencesRef.current = localOccurrences;
@@ -169,13 +193,16 @@
         var occurrencesByDate = useMemo(function () {
             var map = {};
             localOccurrences.forEach(function (occ) {
+                if (!occ || (!showArchivedBatches && archivedBatchIds[getOccurrenceBatchId(occ)])) {
+                    return;
+                }
                 if (!map[occ.date]) {
                     map[occ.date] = [];
                 }
                 map[occ.date].push(occ);
             });
             return map;
-        }, [localOccurrences]);
+        }, [localOccurrences, archivedBatchIds, showArchivedBatches]);
 
         var calendarContextFilter = useMemo(function () {
             return Array.isArray(calendarContextQuery.filter) ? calendarContextQuery.filter : [];
@@ -764,14 +791,18 @@
             });
         }, [batchModeHintsById]);
 
-        var generationHistory = (localBatches !== null
+        var allGenerationBatches = (localBatches !== null
             ? localBatches
             : (event && Array.isArray(event.occurrenceGenerationBatches)
                 ? event.occurrenceGenerationBatches
                 : [])
-        ).map(normalizeGenerationBatch).filter(function (batch) {
-            return batch && isOccurrenceBatchActive(batch.status);
+        );
+        var generationHistory = allGenerationBatches.map(normalizeGenerationBatch).filter(function (batch) {
+            return batch && (showArchivedBatches || isOccurrenceBatchActive(batch.status));
         });
+        var archivedBatchCount = allGenerationBatches.filter(function (batch) {
+            return batch && String(batch.status || '').trim().toLowerCase() === 'archived';
+        }).length;
 
         var batchConfigById = useMemo(function () {
             var map = {};
@@ -1155,7 +1186,7 @@
                 .then(function (data) {
                     setBatchProcessingId('');
                     var nextBatches = data && Array.isArray(data.occurrenceGenerationBatches)
-                        ? data.occurrenceGenerationBatches.filter(function (batch) { return batch && isOccurrenceBatchActive(batch.status); })
+                        ? data.occurrenceGenerationBatches
                         : null;
                     if (nextBatches) {
                         setLocalBatches(nextBatches);
@@ -1183,6 +1214,39 @@
                 });
         }, [apiPost, event, onBatchesUpdate]);
 
+        var handleArchiveBatch = useCallback(function (batchId) {
+            if (!apiPost || !event || !batchId) { return; }
+            setBatchProcessingId(batchId + ':archive');
+            apiPost('mj_regmgr_archive_occurrence_batch', { eventId: event.id, batchId: batchId })
+                .then(function (data) {
+                    setBatchProcessingId('');
+                    if (data && Array.isArray(data.occurrenceGenerationBatches)) {
+                        setLocalBatches(data.occurrenceGenerationBatches);
+                        setArchivedBatchIds(function (previousIds) {
+                            var nextIds = Object.assign({}, previousIds);
+                            data.occurrenceGenerationBatches.forEach(function (batch) {
+                                if (!batch || String(batch.status || '').trim().toLowerCase() !== 'archived') {
+                                    return;
+                                }
+                                var archivedBatchId = batch.batchId || batch.id || '';
+                                if (archivedBatchId) {
+                                    nextIds[String(archivedBatchId)] = true;
+                                }
+                            });
+                            return nextIds;
+                        });
+                        if (onBatchesUpdate) { onBatchesUpdate(data.occurrenceGenerationBatches); }
+                    }
+                })
+                .catch(function (err) {
+                    setBatchProcessingId('');
+                    if (typeof window !== 'undefined' && window.alert) {
+                        window.alert(err && err.message ? err.message : 'Erreur lors de l\'archivage du lot.');
+                    }
+                    console.warn('[MjRegMgr] archiveOccurrenceBatch error', err && err.message ? err.message : err);
+                });
+        }, [apiPost, event, onBatchesUpdate]);
+
         var handleToggleBatchScheduleFlag = useCallback(function (batchId, include) {
             if (!apiPost || !event) { return; }
             var eventId = event.id;
@@ -1191,9 +1255,7 @@
                 .then(function (data) {
                     setBatchProcessingId('');
                     if (data && Array.isArray(data.occurrenceGenerationBatches)) {
-                        var nextBatches = data.occurrenceGenerationBatches.filter(function (batch) {
-                            return batch && isOccurrenceBatchActive(batch.status);
-                        });
+                        var nextBatches = data.occurrenceGenerationBatches;
                         setLocalBatches(nextBatches);
                         if (onBatchesUpdate) { onBatchesUpdate(nextBatches); }
                     }
@@ -1212,9 +1274,7 @@
                 .then(function (data) {
                     setBatchProcessingId('');
                     if (data && Array.isArray(data.occurrenceGenerationBatches)) {
-                        var nextBatches = data.occurrenceGenerationBatches.filter(function (batch) {
-                            return batch && isOccurrenceBatchActive(batch.status);
-                        });
+                        var nextBatches = data.occurrenceGenerationBatches;
                         setLocalBatches(nextBatches);
                         if (onBatchesUpdate) { onBatchesUpdate(nextBatches); }
                     }
@@ -1306,9 +1366,7 @@
                         return next;
                     });
                     if (data && Array.isArray(data.occurrenceGenerationBatches)) {
-                        var nextBatches = data.occurrenceGenerationBatches.filter(function (batch) {
-                            return batch && isOccurrenceBatchActive(batch.status);
-                        });
+                        var nextBatches = data.occurrenceGenerationBatches;
                         setLocalBatches(nextBatches);
                         if (onBatchesUpdate) { onBatchesUpdate(nextBatches); }
                     }
@@ -1359,8 +1417,15 @@
                     flex: '1 1 auto',
                     minWidth: 0,
                 },
-                dangerouslySetInnerHTML: { __html: formatPreviewTextWithBoldWeekdays(selectedGlobalLotLines[0].text) },
-            }),
+            }, [
+                h('div', {
+                    dangerouslySetInnerHTML: { __html: formatPreviewTextWithBoldWeekdays(selectedGlobalLotLines[0].text) },
+                }),
+                selectedGlobalLotLines[0].dates && h('div', {
+                    class: 'mj-regmgr-occurrence__header-preview-dates',
+                    style: { color: '#475569', fontSize: '0.78rem', marginTop: '2px' },
+                }, selectedGlobalLotLines[0].dates),
+            ]),
             !selectedGlobalLotLines.length && hasSchedulePreviewHtml && h('div', {
                 class: 'mj-regmgr-occurrence__header-preview-text',
                 style: {
@@ -1384,6 +1449,15 @@
                 h('summary', { class: 'mj-regmgr-occurrence__fold-summary' }, [
                     h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
                         h('strong', null, getString(strings, 'occurrenceGenerationHistoryTitle', 'Lot d\'occurrences')),
+                        archivedBatchCount > 0 && h('button', {
+                            type: 'button',
+                            class: 'mj-regmgr-occurrence__archives-toggle',
+                            onClick: function (event) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setShowArchivedBatches(!showArchivedBatches);
+                            },
+                        }, showArchivedBatches ? 'Masquer les archives' : 'Afficher les archives'),
                     ]),
                     h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
                 ]),
@@ -1395,6 +1469,7 @@
                             return null;
                         }
                         var batchId = batch.batchId || '';
+                        var isArchived = String(batch.status || '').trim().toLowerCase() === 'archived';
                         var shortId = batchId;
                         var count = typeof batch.occurrencesCount === 'number' ? batch.occurrencesCount : 0;
                         var rawDate = typeof batch.createdAt === 'string' && batch.createdAt !== '' ? batch.createdAt : '';
@@ -1716,6 +1791,16 @@
                                             __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
                                         },
                                     })),
+                                    apiPost && !isArchived && h('button', {
+                                        type: 'button',
+                                        class: 'mj-regmgr-occurrence__batch-card__action mj-regmgr-occurrence__batch-card__action--archive',
+                                        disabled: isProcessing,
+                                        title: 'Archiver ce lot',
+                                        onClick: function (event) {
+                                            event.stopPropagation();
+                                            handleArchiveBatch(batchId);
+                                        },
+                                    }, 'Archiver'),
                                     apiPost && h('button', {
                                         type: 'button',
                                         class: 'mj-regmgr-occurrence__batch-card__action mj-regmgr-occurrence__batch-card__action--danger mj-regmgr-occurrence__batch-card__action--icon',
@@ -1766,7 +1851,7 @@
                                                     handleToggleBatchScheduleFlag(batchId, e.currentTarget.checked);
                                                 },
                                             }),
-                                            h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationAddToGlobalSchedule', 'Ajouter à l\'horaire global')),
+                                            h('span', { style: { fontWeight: 600, color: '#0f172a', lineHeight: 1.35 } }, getString(strings, 'occurrenceGenerationAddToGlobalSchedule', 'Afficher sur la page Evenement')),
                                         ]),
                                         h('label', { class: 'mj-regmgr-occurrence__history-item-flag mj-regmgr-occurrence__batch-card__flag', style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '16px', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(148, 163, 184, 0.16)' } }, [
                                             h('input', {

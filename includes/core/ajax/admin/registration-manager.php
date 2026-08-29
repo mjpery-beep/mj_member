@@ -119,6 +119,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_update_occurrences', [$this, 'updateOccurrences']);
         add_action('wp_ajax_mj_regmgr_save_event_occurrences', [$this, 'saveEventOccurrences']);
         add_action('wp_ajax_mj_regmgr_delete_occurrence_batch', [$this, 'deleteOccurrenceBatch']);
+        add_action('wp_ajax_mj_regmgr_archive_occurrence_batch', [$this, 'archiveOccurrenceBatch']);
         add_action('wp_ajax_mj_regmgr_update_batch_schedule_flag', [$this, 'updateBatchScheduleFlag']);
         add_action('wp_ajax_mj_regmgr_update_batch_preview_dates_flag', [$this, 'updateBatchPreviewDatesFlag']);
         add_action('wp_ajax_mj_regmgr_save_event_schedule_preview', [$this, 'saveEventSchedulePreview']);
@@ -7495,6 +7496,45 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         wp_send_json_success(array(
             'message' => __('Lot supprimé.', 'mj-member'),
             'occurrenceGenerationBatches' => $updated_batches,
+        ));
+    }
+
+    /**
+     * Archive a generation batch while preserving its occurrences.
+     */
+    public function archiveOccurrenceBatch() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        if (!$auth['is_coordinateur'] && !current_user_can(Config::capability())) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+        $batch_id = isset($_POST['batchId']) ? sanitize_text_field((string) $_POST['batchId']) : '';
+        if ($event_id <= 0 || $batch_id === '') {
+            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+            return;
+        }
+
+        $existing = $this->findOccurrenceGenerationBatchRecord($batch_id);
+        if (!$existing || (int) $existing['event_id'] !== $event_id) {
+            wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $batch_uuid = isset($existing['batch_uuid']) ? sanitize_text_field((string) $existing['batch_uuid']) : '';
+        if (!MjEventOccurrenceGenerationBatches::mark_archived($event_id, $batch_uuid)) {
+            wp_send_json_error(array('message' => __('Impossible d\'archiver ce lot.', 'mj-member')), 500);
+            return;
+        }
+
+        wp_send_json_success(array(
+            'message' => __('Lot archivé.', 'mj-member'),
+            'occurrenceGenerationBatches' => $this->getOccurrenceGenerationBatchesForEvent($event_id),
         ));
     }
 

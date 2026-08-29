@@ -15,6 +15,7 @@ class MjEventOccurrenceGenerationBatches {
     const TABLE = 'mj_event_occurrence_generation_batches';
 
     const STATUS_ACTIVE = 'active';
+    const STATUS_ARCHIVED = 'archived';
     const STATUS_DELETED = 'deleted';
 
     /**
@@ -191,6 +192,33 @@ class MjEventOccurrenceGenerationBatches {
 
     /**
      * @param int $event_id
+     * @param string $batch_uuid
+     * @return bool
+     */
+    public static function mark_archived($event_id, $batch_uuid) {
+        $event_id = (int) $event_id;
+        $batch_uuid = self::normalize_batch_uuid($batch_uuid);
+        if ($event_id <= 0 || $batch_uuid === '' || !self::table_ready()) {
+            return false;
+        }
+
+        global $wpdb;
+        $updated = $wpdb->update(
+            self::table_name(),
+            array('status' => self::STATUS_ARCHIVED),
+            array(
+                'event_id' => $event_id,
+                'batch_uuid' => $batch_uuid,
+            ),
+            array('%s'),
+            array('%d', '%s')
+        );
+
+        return $updated !== false;
+    }
+
+    /**
+     * @param int $event_id
      * @return bool
      */
     public static function mark_deleted_for_event($event_id) {
@@ -234,7 +262,7 @@ class MjEventOccurrenceGenerationBatches {
      */
     private static function normalize_status($value) {
         $candidate = sanitize_key((string) $value);
-        if (!in_array($candidate, array(self::STATUS_ACTIVE, self::STATUS_DELETED), true)) {
+        if (!in_array($candidate, array(self::STATUS_ACTIVE, self::STATUS_ARCHIVED, self::STATUS_DELETED), true)) {
             return self::STATUS_ACTIVE;
         }
 

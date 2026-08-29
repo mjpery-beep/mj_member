@@ -310,6 +310,77 @@
         var mobileModalBody = mobileModal ? mobileModal.querySelector('.mj-cal-mobile__modal-body') : null;
         var mobileModalClose = mobileModal ? mobileModal.querySelector('.mj-cal-mobile__modal-close') : null;
         var mobileModalBackdrop = mobileModal ? mobileModal.querySelector('.mj-cal-mobile__modal-backdrop') : null;
+        var mobileLists = toArray(root.querySelectorAll('[data-calendar-mobile-list]'));
+
+        function formatMobileDayLabel(dayKey) {
+            var dateParts = dayKey.split('-');
+            var dateObj = new Date(parseInt(dateParts[0], 10), parseInt(dateParts[1], 10) - 1, parseInt(dateParts[2], 10));
+            var dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+            var monthNames = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+            return dayNames[dateObj.getDay()] + ' ' + dateObj.getDate() + ' ' + monthNames[dateObj.getMonth()];
+        }
+
+        function setActiveMobileDay(mobileList, dayKey) {
+            var mobileCalendar = mobileList.closest('.mj-cal-mobile');
+            if (!mobileCalendar) {
+                return;
+            }
+            toArray(mobileCalendar.querySelectorAll('.mj-cal-mobile__day')).forEach(function(dayCell) {
+                dayCell.classList.toggle('is-list-active', dayCell.getAttribute('data-calendar-day') === dayKey);
+            });
+        }
+
+        function buildMobileList(mobileList) {
+            var mobileCalendar = mobileList.closest('.mj-cal-mobile');
+            if (!mobileCalendar) {
+                return;
+            }
+            mobileList.innerHTML = '';
+            toArray(mobileCalendar.querySelectorAll('template[data-mobile-day-events]')).forEach(function(tpl) {
+                var dayKey = tpl.getAttribute('data-mobile-day-events') || '';
+                if (!dayKey) {
+                    return;
+                }
+                var section = document.createElement('section');
+                section.className = 'mj-cal-mobile__event-day';
+                section.setAttribute('data-calendar-mobile-list-day', dayKey);
+
+                var heading = document.createElement('h4');
+                heading.className = 'mj-cal-mobile__event-day-title';
+                heading.textContent = formatMobileDayLabel(dayKey);
+                section.appendChild(heading);
+                section.appendChild(document.importNode(tpl.content, true));
+                mobileList.appendChild(section);
+            });
+        }
+
+        function scrollMobileListToDay(mobileList, dayKey) {
+            var section = mobileList.querySelector('[data-calendar-mobile-list-day="' + dayKey + '"]');
+            if (!section) {
+                return;
+            }
+            setActiveMobileDay(mobileList, dayKey);
+            mobileList.scrollTo({ top: section.offsetTop - mobileList.offsetTop, behavior: 'smooth' });
+        }
+
+        function syncMobileListDay(mobileList) {
+            var sections = toArray(mobileList.querySelectorAll('[data-calendar-mobile-list-day]'));
+            var listTop = mobileList.getBoundingClientRect().top;
+            var activeSection = sections.find(function(section) {
+                return section.getBoundingClientRect().bottom > listTop + 40;
+            });
+            if (activeSection) {
+                setActiveMobileDay(mobileList, activeSection.getAttribute('data-calendar-mobile-list-day'));
+            }
+        }
+
+        mobileLists.forEach(function(mobileList) {
+            buildMobileList(mobileList);
+            mobileList.addEventListener('scroll', function() {
+                syncMobileListDay(mobileList);
+            }, { passive: true });
+            syncMobileListDay(mobileList);
+        });
 
         function openMobileModal(dayKey) {
             if (!mobileModal || !mobileModalBody) {
@@ -402,12 +473,12 @@
                     var dayCell = root.querySelector('.mj-cal-mobile__day[data-calendar-day="' + dayKey + '"]');
                     if (dayCell) {
                         var remainingEvents = tpl.content.querySelectorAll('.mj-member-events-calendar__mobile-event');
-                        var eventTitles = toArray(dayCell.querySelectorAll('.mj-cal-mobile__event-title'));
-                        // Rebuild mobile titles to match remaining events.
-                        if (eventTitles.length > remainingEvents.length) {
-                            // Remove the last item after an occurrence is deleted.
-                            for (var c = eventTitles.length - 1; c >= remainingEvents.length; c--) {
-                                eventTitles[c].remove();
+                        var chips = toArray(dayCell.querySelectorAll('.mj-cal-mobile__chip'));
+                        // Rebuild chips to match remaining events
+                        if (chips.length > remainingEvents.length) {
+                            // Remove last chip (simplistic approach - works when only one deleted at a time)
+                            for (var c = chips.length - 1; c >= remainingEvents.length; c--) {
+                                chips[c].remove();
                             }
                         }
                         if (!remainingEvents.length) {
@@ -418,15 +489,11 @@
             });
         }
 
-        if (mobileModal) {
+        if (mobileLists.length) {
             // Day cell click handler
             root.addEventListener('click', function(e) {
                 var dayCell = e.target.closest('.mj-cal-mobile__day');
                 if (!dayCell) {
-                    return;
-                }
-                // Don't open modal if clicking inside the modal itself
-                if (e.target.closest('.mj-cal-mobile__modal')) {
                     return;
                 }
                 var dayKey = dayCell.getAttribute('data-calendar-day');
@@ -438,21 +505,10 @@
                     return;
                 }
 
-                if (root.querySelector('template[data-mobile-day-events="' + dayKey + '"]')) {
-                    openMobileModal(dayKey);
-                }
-            });
-
-            // Close handlers
-            if (mobileModalClose) {
-                mobileModalClose.addEventListener('click', closeMobileModal);
-            }
-            if (mobileModalBackdrop) {
-                mobileModalBackdrop.addEventListener('click', closeMobileModal);
-            }
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && mobileModal && !mobileModal.hidden) {
-                    closeMobileModal();
+                var mobileCalendar = dayCell.closest('.mj-cal-mobile');
+                var mobileList = mobileCalendar ? mobileCalendar.querySelector('[data-calendar-mobile-list]') : null;
+                if (mobileList && mobileCalendar.querySelector('template[data-mobile-day-events="' + dayKey + '"]')) {
+                    scrollMobileListToDay(mobileList, dayKey);
                 }
             });
         }
@@ -629,6 +685,14 @@
                     dayNode.classList.add('is-filtered-empty');
                 } else {
                     dayNode.classList.remove('is-filtered-empty');
+                }
+                var mobileCalendar = dayNode.classList.contains('mj-cal-mobile__day') ? dayNode.closest('.mj-cal-mobile') : null;
+                var mobileList = mobileCalendar ? mobileCalendar.querySelector('[data-calendar-mobile-list]') : null;
+                var mobileListDay = mobileList
+                    ? mobileList.querySelector('[data-calendar-mobile-list-day="' + dayNode.getAttribute('data-calendar-day') + '"]')
+                    : null;
+                if (mobileListDay) {
+                    mobileListDay.classList.toggle('is-filtered-empty', visibleCount === 0);
                 }
                 var countNode = dayNode.querySelector('[data-calendar-day-count]');
                 if (countNode) {
@@ -2609,9 +2673,74 @@
             document.body.style.overflow = '';
         }
 
+        var multiMonthMediaQuery = window.matchMedia('(min-width: 550px) and (max-width: 1100px)');
+        var threeMonthMediaQuery = window.matchMedia('(min-width: 700px) and (max-width: 1100px)');
+
+        function getVisibleMonthCount() {
+            if (threeMonthMediaQuery.matches) {
+                return 3;
+            }
+            return multiMonthMediaQuery.matches ? 2 : 1;
+        }
+
+        function updateMobilePanelHeights() {
+            var mobilePanels = toArray(root.querySelectorAll('.mj-member-events-calendar__month.is-active .mj-cal-mobile'));
+            var multiMonthLayout = getVisibleMonthCount() > 1 && mobilePanels.length > 0;
+            var lockPageScroll = !!(config && config.lockPageScroll && multiMonthLayout);
+            document.documentElement.classList.toggle('mj-calendar-mobile-layout', lockPageScroll);
+            document.body.classList.toggle('mj-calendar-mobile-layout', lockPageScroll);
+            toArray(document.querySelectorAll('.mj-header--sticky')).forEach(function(header) {
+                var forceCompactHeader = !!(config && config.forceCompactHeader && multiMonthLayout && !header.contains(root));
+                var headerInstance = header._mjHeader;
+                if (!headerInstance || typeof headerInstance.setCompact !== 'function') {
+                    return;
+                }
+                if (forceCompactHeader || header.getAttribute('data-mj-calendar-forced-stuck') === '1') {
+                    headerInstance.setCompact(forceCompactHeader);
+                    header.toggleAttribute('data-mj-calendar-forced-stuck', forceCompactHeader);
+                }
+            });
+            if (!multiMonthLayout) {
+                mobilePanels.forEach(function(panel) {
+                    panel.style.removeProperty('height');
+                });
+                return;
+            }
+
+            var viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            var panelTop = Math.min.apply(null, mobilePanels.map(function(panel) {
+                return panel.getBoundingClientRect().top;
+            }));
+            var stickyHeaderHeight = 0;
+            toArray(document.querySelectorAll('.mj-header--sticky')).forEach(function(header) {
+                if (header.contains(root)) {
+                    return;
+                }
+                var headerRect = header.getBoundingClientRect();
+                if (headerRect.bottom > 0 && headerRect.top < viewportHeight) {
+                    stickyHeaderHeight = Math.max(stickyHeaderHeight, headerRect.height);
+                }
+            });
+            var adminBar = document.getElementById('wpadminbar');
+            var adminBarHeight = 0;
+            if (adminBar) {
+                var adminBarRect = adminBar.getBoundingClientRect();
+                if (adminBarRect.bottom > 0 && adminBarRect.top < viewportHeight) {
+                    adminBarHeight = adminBarRect.height;
+                }
+            }
+            var topOffset = Math.max(0, panelTop, stickyHeaderHeight + adminBarHeight);
+            var availableHeight = Math.max(0, Math.floor(viewportHeight - topOffset - 16));
+
+            mobilePanels.forEach(function(panel) {
+                panel.style.height = availableHeight + 'px';
+            });
+        }
+
         function sync() {
+            var visibleMonthCount = getVisibleMonthCount();
             months.forEach(function(month, idx) {
-                if (idx === activeIndex) {
+                if (idx >= activeIndex && idx < activeIndex + visibleMonthCount) {
                     month.classList.add('is-active');
                 } else {
                     month.classList.remove('is-active');
@@ -2624,13 +2753,14 @@
                 prev.disabled = activeIndex === 0;
             }
             if (next) {
-                next.disabled = activeIndex === months.length - 1;
+                next.disabled = activeIndex >= months.length - visibleMonthCount;
             }
             if (todayBtn) {
-                todayBtn.disabled = todayIndex === -1 || activeIndex === todayIndex;
+                todayBtn.disabled = todayIndex === -1 || (todayIndex >= activeIndex && todayIndex < activeIndex + visibleMonthCount);
             }
             applyFilters();
             refreshPrintPreview();
+            window.requestAnimationFrame(updateMobilePanelHeights);
         }
 
         if (prev) {
@@ -2644,7 +2774,7 @@
 
         if (next) {
             next.addEventListener('click', function() {
-                if (activeIndex < months.length - 1) {
+                if (activeIndex < months.length - getVisibleMonthCount()) {
                     activeIndex += 1;
                     sync();
                 }
@@ -2658,6 +2788,13 @@
                     sync();
                 }
             });
+        }
+
+        multiMonthMediaQuery.addEventListener('change', sync);
+        threeMonthMediaQuery.addEventListener('change', sync);
+        window.addEventListener('resize', updateMobilePanelHeights, { passive: true });
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', updateMobilePanelHeights, { passive: true });
         }
 
         if (filterInputs.length) {

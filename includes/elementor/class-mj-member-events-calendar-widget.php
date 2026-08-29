@@ -199,6 +199,30 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'force_compact_header',
+            array(
+                'label' => __('Forcer la réduction de la taille du header', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+            )
+        );
+
+        $this->add_control(
+            'lock_page_scroll',
+            array(
+                'label' => __('Bloquer le défilement de la page', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+            )
+        );
+
+        $this->add_control(
             'show_print_button',
             array(
                 'label' => __('Afficher le bouton "Imprimer"', 'mj-member'),
@@ -676,6 +700,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $hide_closure_occurrences = !isset($settings['hide_closure_occurrences']) || $settings['hide_closure_occurrences'] === 'yes';
         $show_toolbar_left = !isset($settings['show_toolbar_left']) || $settings['show_toolbar_left'] === 'yes';
         $show_toolbar_actions = !isset($settings['show_toolbar_actions']) || $settings['show_toolbar_actions'] === 'yes';
+        $force_compact_header = isset($settings['force_compact_header']) && $settings['force_compact_header'] === 'yes';
+        $lock_page_scroll = isset($settings['lock_page_scroll']) && $settings['lock_page_scroll'] === 'yes';
         $show_print_button = !isset($settings['show_print_button']) || $settings['show_print_button'] === 'yes';
 
         $print_default_mode = isset($settings['print_default_mode']) && in_array($settings['print_default_mode'], array('week', 'month'), true)
@@ -2990,6 +3016,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
             // ── Mobile compact calendar grid ──
             echo '<div class="mj-cal-mobile" data-calendar-mobile>';
+            echo '<div class="mj-cal-mobile__calendar">';
+
+            echo '<h4 class="mj-cal-mobile__month-title">' . esc_html($month_data['label']) . '</h4>';
 
             // Weekday headers
             echo '<div class="mj-cal-mobile__weekdays">';
@@ -3039,7 +3068,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 $chip_type_key = 'misc';
                             }
                             $chip_is_known = isset($available_type_filters[$chip_type_key]) || $chip_type_key === 'closure';
-                            $chip_classes = array('mj-cal-mobile__event-title');
+                            $chip_classes = array('mj-cal-mobile__chip');
                             if (!empty($chip_event['is_cancelled'])) {
                                 $chip_classes[] = 'is-cancelled';
                             }
@@ -3047,8 +3076,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 $chip_classes[] = 'is-draft';
                             }
                             $chip_style = self::build_event_style_attribute($chip_event);
-                            $chip_title = isset($chip_event['title']) ? (string) $chip_event['title'] : '';
-                            echo '<span class="' . esc_attr(implode(' ', $chip_classes)) . '"' . $chip_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($chip_type_key) . '" data-calendar-type-known="' . ($chip_is_known ? '1' : '0') . '" title="' . esc_attr($chip_title) . '">' . esc_html($chip_title) . '</span>';
+                            echo '<div class="' . esc_attr(implode(' ', $chip_classes)) . '"' . $chip_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($chip_type_key) . '" data-calendar-type-known="' . ($chip_is_known ? '1' : '0') . '"></div>';
                         }
                         echo '</div>';
                     }
@@ -3058,6 +3086,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 echo '</div>';
             }
             echo '</div>';
+
+            echo '</div>';
+            echo '<div class="mj-cal-mobile__event-list" data-calendar-mobile-list></div>';
 
             // Pre-rendered day detail templates for the modal
             foreach ($day_list_entries as $day_entry) {
@@ -3364,6 +3395,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $instance_config = array(
             'preferredIndex' => $preferred_index,
             'todayMonth' => $today_month_key,
+            'forceCompactHeader' => $force_compact_header,
+            'lockPageScroll' => $lock_page_scroll,
             'print' => array(
                 'enabled' => $show_print_button,
                 'userPrefsEnabled' => $print_prefs_enabled,
@@ -3424,6 +3457,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             'hide_closure_occurrences' => 'yes',
             'show_toolbar_left' => 'yes',
             'show_toolbar_actions' => 'yes',
+            'force_compact_header' => '',
+            'lock_page_scroll' => '',
             'show_print_button' => 'yes',
             'print_default_details' => 'yes',
             'print_default_cover' => '',
@@ -4551,7 +4586,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $rules[] = sprintf('#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}', $normalized_id, $desktop);
         $rules[] = sprintf('#%1$s .mj-member-events-calendar__event-thumb img{width:100%%;height:100%%;object-fit:cover;}', $normalized_id);
         $rules[] = sprintf('@media (max-width: 900px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $tablet);
-        $rules[] = sprintf('@media (max-width: 640px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $mobile);
+        $rules[] = sprintf('@media (max-width: 1100px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $mobile);
 
         return implode('', $rules);
     }

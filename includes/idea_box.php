@@ -11,12 +11,15 @@ namespace Mj\Member\Module {
             add_action('wp_ajax_mj_member_idea_box_vote', 'mj_member_ajax_idea_box_vote');
             add_action('wp_ajax_mj_member_idea_box_delete', 'mj_member_ajax_idea_box_delete');
             add_action('wp_ajax_mj_member_idea_box_mark_done', 'mj_member_ajax_idea_box_mark_done');
+            add_action('wp_ajax_mj_member_idea_box_comment_add', 'mj_member_ajax_idea_box_comment_add');
+            add_action('wp_ajax_mj_member_idea_box_comment_delete', 'mj_member_ajax_idea_box_comment_delete');
         }
     }
 }
 
 namespace {
     use Mj\Member\Classes\Crud\MjIdeas;
+    use Mj\Member\Classes\Crud\MjIdeaComments;
     use Mj\Member\Classes\Crud\MjIdeaVotes;
     use Mj\Member\Classes\Crud\MjMembers;
     use Mj\Member\Classes\MjRoles;
@@ -66,6 +69,8 @@ if (!function_exists('mj_member_idea_box_member_payload')) {
         $memberId = (int) $member->get('id', 0);
         $firstName = sanitize_text_field((string) $member->get('first_name', ''));
         $lastName = sanitize_text_field((string) $member->get('last_name', ''));
+        $photoId = (int) $member->get('photo_id', 0);
+        $avatarUrl = $photoId > 0 ? wp_get_attachment_image_url($photoId, 'thumbnail') : false;
         $name = trim($firstName . ' ' . $lastName);
         if ($name === '') {
             $name = sprintf(__('Membre #%d', 'mj-member'), $memberId);
@@ -75,6 +80,7 @@ if (!function_exists('mj_member_idea_box_member_payload')) {
             'id' => $memberId,
             'name' => $name,
             'role' => sanitize_key((string) $member->get('role', '')),
+            'avatarUrl' => is_string($avatarUrl) ? $avatarUrl : '',
         );
     }
 }
@@ -105,6 +111,8 @@ if (!function_exists('mj_member_idea_box_localize')) {
                 'vote' => 'mj_member_idea_box_vote',
                 'delete' => 'mj_member_idea_box_delete',
                 'markDone' => 'mj_member_idea_box_mark_done',
+                'commentAdd' => 'mj_member_idea_box_comment_add',
+                'commentDelete' => 'mj_member_idea_box_comment_delete',
             ),
             'memberId' => $memberId,
             'member' => $memberPayload,
@@ -118,6 +126,7 @@ if (!function_exists('mj_member_idea_box_localize')) {
                 'empty' => __('Aucune idée proposée pour le moment.', 'mj-member'),
                 'filteredEmpty' => __('Aucune idée réalisée pour le moment.', 'mj-member'),
                 'loadError' => __('Impossible de charger les idées.', 'mj-member'),
+                'filterLabel' => __('Filtrer les idées', 'mj-member'),
                 'filterAll' => __('Toutes les idées', 'mj-member'),
                 'filterDone' => __('Réalisé', 'mj-member'),
                 'submit' => __('Partager', 'mj-member'),
@@ -142,6 +151,12 @@ if (!function_exists('mj_member_idea_box_localize')) {
                 'markDoneConfirm' => __('Marquer cette idée comme réalisée ?', 'mj-member'),
                 'markDoneError' => __('Impossible de marquer l’idée comme réalisée.', 'mj-member'),
                 'archivedBadge' => __('Réalisée', 'mj-member'),
+                'commentPlaceholder' => __('Écrire un commentaire…', 'mj-member'),
+                'commentSubmitLabel' => __('Envoyer le commentaire', 'mj-member'),
+                'commentError' => __('Impossible d’ajouter le commentaire.', 'mj-member'),
+                'commentDeleteLabel' => __('Supprimer', 'mj-member'),
+                'commentDeleteConfirm' => __('Supprimer ce commentaire ?', 'mj-member'),
+                'commentDeleteError' => __('Impossible de supprimer le commentaire.', 'mj-member'),
             ),
         );
 
@@ -407,6 +422,70 @@ if (!function_exists('mj_member_ajax_idea_box_mark_done')) {
         }
 
         wp_send_json_success(array('idea_id' => $ideaId));
+    }
+}
+
+if (!function_exists('mj_member_ajax_idea_box_comment_add')) {
+    function mj_member_ajax_idea_box_comment_add(): void
+    {
+        check_ajax_referer('mj_member_idea_box', 'nonce');
+
+        $member = mj_member_idea_box_resolve_member();
+        if (!($member instanceof MemberData)) {
+            wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+        }
+
+        $ideaId = isset($_POST['idea_id']) ? (int) $_POST['idea_id'] : 0;
+        $content = isset($_POST['content']) ? sanitize_textarea_field(wp_unslash((string) $_POST['content'])) : '';
+        if ($ideaId <= 0 || !is_array(MjIdeas::get($ideaId))) {
+            wp_send_json_error(array('message' => __('Idée introuvable.', 'mj-member')), 404);
+        }
+        if ($content === '') {
+            wp_send_json_error(array('message' => __('Le commentaire ne peut pas être vide.', 'mj-member')), 400);
+        }
+
+        $commentId = MjIdeaComments::add($ideaId, (int) $member->get('id', 0), $content);
+        if (!$commentId) {
+            wp_send_json_error(array('message' => __('Impossible d’ajouter le commentaire.', 'mj-member')), 500);
+        }
+
+        $comment = MjIdeaComments::get($commentId);
+        if (!$comment) {
+            wp_send_json_error(array('message' => __('Impossible de récupérer le commentaire.', 'mj-member')), 500);
+        }
+
+        $payload = MjIdeaComments::format_for_json($comment);
+        $payload['isOwner'] = true;
+        wp_send_json_success(array('comment' => $payload));
+    }
+}
+
+if (!function_exists('mj_member_ajax_idea_box_comment_delete')) {
+    function mj_member_ajax_idea_box_comment_delete(): void
+    {
+        check_ajax_referer('mj_member_idea_box', 'nonce');
+
+        $member = mj_member_idea_box_resolve_member();
+        if (!($member instanceof MemberData)) {
+            wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+        }
+
+        $commentId = isset($_POST['comment_id']) ? (int) $_POST['comment_id'] : 0;
+        $comment = $commentId > 0 ? MjIdeaComments::get($commentId) : null;
+        if (!$comment) {
+            wp_send_json_error(array('message' => __('Commentaire introuvable.', 'mj-member')), 404);
+        }
+        if ((int) $comment->member_id !== (int) $member->get('id', 0)) {
+            wp_send_json_error(array('message' => __('Vous ne pouvez supprimer que vos propres commentaires.', 'mj-member')), 403);
+        }
+        if (!MjIdeaComments::delete($commentId)) {
+            wp_send_json_error(array('message' => __('Impossible de supprimer le commentaire.', 'mj-member')), 500);
+        }
+
+        wp_send_json_success(array(
+            'comment_id' => $commentId,
+            'idea_id' => (int) $comment->idea_id,
+        ));
     }
 }
 

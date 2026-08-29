@@ -104,6 +104,7 @@
         this.pendingVotes = new Set();
         this.pendingDeletes = new Set();
         this.pendingMarkDone = new Set();
+        this.pendingComments = new Set();
 
         this.dom = {
             inner: null,
@@ -123,12 +124,39 @@
 
     IdeaBox.prototype.normalizeMember = function (member) {
         if (!member || typeof member !== 'object') {
-            return { id: 0, name: '', role: '' };
+            return { id: 0, name: '', role: '', avatarUrl: '' };
         }
         var id = toInt(member.id, 0);
         var name = typeof member.name === 'string' ? member.name : '';
         var role = normalizeRole(member.role);
-        return { id: id, name: name, role: role };
+        var avatarUrl = typeof (member.avatarUrl !== undefined ? member.avatarUrl : member.avatar_url) === 'string'
+            ? (member.avatarUrl !== undefined ? member.avatarUrl : member.avatar_url)
+            : '';
+        return { id: id, name: name, role: role, avatarUrl: avatarUrl };
+    };
+
+    IdeaBox.prototype.normalizeComment = function (comment) {
+        if (!comment || typeof comment !== 'object' || !toInt(comment.id, 0)) {
+            return null;
+        }
+        return {
+            id: toInt(comment.id, 0),
+            memberId: toInt(comment.memberId !== undefined ? comment.memberId : comment.member_id, 0),
+            memberName: typeof (comment.memberName !== undefined ? comment.memberName : comment.member_name) === 'string'
+                ? (comment.memberName !== undefined ? comment.memberName : comment.member_name)
+                : '',
+            avatarUrl: typeof (comment.avatarUrl !== undefined ? comment.avatarUrl : comment.avatar_url) === 'string'
+                ? (comment.avatarUrl !== undefined ? comment.avatarUrl : comment.avatar_url)
+                : '',
+            content: typeof comment.content === 'string' ? comment.content : '',
+            createdAt: typeof (comment.createdAt !== undefined ? comment.createdAt : comment.created_at) === 'string'
+                ? (comment.createdAt !== undefined ? comment.createdAt : comment.created_at)
+                : '',
+            createdAgo: typeof (comment.createdAgo !== undefined ? comment.createdAgo : comment.created_ago) === 'string'
+                ? (comment.createdAgo !== undefined ? comment.createdAgo : comment.created_ago)
+                : '',
+            isOwner: !!(comment.isOwner !== undefined ? comment.isOwner : comment.is_owner),
+        };
     };
 
     IdeaBox.prototype.normalizeIdea = function (idea) {
@@ -152,6 +180,9 @@
             name: typeof author.name === 'string' ? author.name : '',
             role: typeof author.role === 'string' ? author.role : '',
         };
+        var comments = Array.isArray(idea.comments) ? idea.comments.map(this.normalizeComment).filter(function (comment) {
+            return comment !== null;
+        }) : [];
 
         return {
             id: id,
@@ -165,6 +196,8 @@
             viewerHasVoted: !!(idea.viewerHasVoted !== undefined ? idea.viewerHasVoted : idea.viewer_has_voted),
             isOwner: !!(idea.isOwner !== undefined ? idea.isOwner : idea.is_owner),
             canDelete: !!(idea.canDelete !== undefined ? idea.canDelete : idea.can_delete),
+            comments: comments,
+            commentCount: toInt(idea.commentCount !== undefined ? idea.commentCount : idea.comment_count, comments.length),
         };
     };
 
@@ -318,22 +351,6 @@
 
         inner.appendChild(header);
 
-    var filter = document.createElement('select');
-    filter.className = 'mj-idea-box__filter';
-    filter.setAttribute('aria-label', getString(this.i18n, 'filterLabel', 'Filtrer les idées'));
-
-    var allOption = document.createElement('option');
-    allOption.value = 'all';
-    allOption.textContent = getString(this.i18n, 'filterAll', 'Toutes les idées');
-    filter.appendChild(allOption);
-
-    var doneOption = document.createElement('option');
-    doneOption.value = 'archived';
-    doneOption.textContent = getString(this.i18n, 'filterDone', 'Réalisé');
-    filter.appendChild(doneOption);
-
-    inner.appendChild(filter);
-
         var feedback = document.createElement('div');
         feedback.className = 'mj-idea-box__feedback';
         feedback.setAttribute('role', 'alert');
@@ -383,6 +400,29 @@
             this.dom.contentCounter = counter;
             this.dom.submit = submit;
         }
+
+        var filter = document.createElement('div');
+        filter.className = 'mj-idea-box__filter';
+        filter.setAttribute('role', 'group');
+        filter.setAttribute('aria-label', getString(this.i18n, 'filterLabel', 'Filtrer les idées'));
+
+        var allFilter = document.createElement('button');
+        allFilter.type = 'button';
+        allFilter.className = 'mj-idea-box__filter-button is-active';
+        allFilter.setAttribute('data-idea-filter', 'all');
+        allFilter.setAttribute('aria-pressed', 'true');
+        allFilter.textContent = getString(this.i18n, 'filterAll', 'Toutes les idées');
+        filter.appendChild(allFilter);
+
+        var doneFilter = document.createElement('button');
+        doneFilter.type = 'button';
+        doneFilter.className = 'mj-idea-box__filter-button';
+        doneFilter.setAttribute('data-idea-filter', 'archived');
+        doneFilter.setAttribute('aria-pressed', 'false');
+        doneFilter.textContent = getString(this.i18n, 'filterDone', 'Réalisé');
+        filter.appendChild(doneFilter);
+
+        inner.appendChild(filter);
 
         var empty = document.createElement('p');
         empty.className = 'mj-idea-box__empty';
@@ -458,6 +498,17 @@
             if (this.dom.contentCounter) {
                 this.dom.contentCounter.style.display = canSubmit ? '' : 'none';
                 this.updateContentCounter();
+            }
+        }
+
+        if (this.dom.filter) {
+            var selectedFilter = this.state.statusFilter;
+            var filterButtons = this.dom.filter.querySelectorAll('[data-idea-filter]');
+            for (var index = 0; index < filterButtons.length; index += 1) {
+                var filterButton = filterButtons[index];
+                var isSelected = filterButton.getAttribute('data-idea-filter') === selectedFilter;
+                filterButton.classList.toggle('is-active', isSelected);
+                filterButton.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
             }
         }
 
@@ -598,6 +649,39 @@
                     '</div>';
             }
 
+            var comments = Array.isArray(idea.comments) ? idea.comments : [];
+            var commentsHtml = comments.map(function (comment) {
+                var authorName = comment.memberName || '';
+                var initial = authorName ? authorName.charAt(0).toUpperCase() : '?';
+                var avatarHtml = comment.avatarUrl
+                    ? '<img src="' + escapeHtml(comment.avatarUrl) + '" alt="">'
+                    : '<span>' + escapeHtml(initial) + '</span>';
+                var content = escapeHtml(comment.content).replace(/\r?\n/g, '<br>');
+                var deleteCommentHtml = comment.isOwner
+                    ? '<button type="button" class="mj-idea-comment__delete" data-comment-id="' + comment.id + '">' + escapeHtml(getString(this.i18n, 'commentDeleteLabel', 'Supprimer')) + '</button>'
+                    : '';
+                var date = comment.createdAgo || formatDate(comment.createdAt, this.i18n);
+                return '<div class="mj-idea-comment" data-comment-id="' + comment.id + '">' +
+                    '<div class="mj-idea-comment__avatar">' + avatarHtml + '</div>' +
+                    '<div class="mj-idea-comment__body"><div class="mj-idea-comment__bubble">' +
+                    '<span class="mj-idea-comment__author">' + escapeHtml(authorName) + '</span>' +
+                    '<span class="mj-idea-comment__text">' + content + '</span></div>' +
+                    '<div class="mj-idea-comment__meta"><span>' + escapeHtml(date) + '</span>' + deleteCommentHtml + '</div></div></div>';
+            }, this).join('');
+            var commentFormHtml = '';
+            if (this.hasAccess) {
+                var commentPending = this.pendingComments.has(idea.id);
+                var viewerInitial = this.viewer.name ? this.viewer.name.charAt(0).toUpperCase() : '?';
+                var viewerAvatarHtml = this.viewer.avatarUrl
+                    ? '<img src="' + escapeHtml(this.viewer.avatarUrl) + '" alt="">'
+                    : '<span>' + escapeHtml(viewerInitial) + '</span>';
+                commentFormHtml = '<form class="mj-idea-box__comment-form" data-idea-id="' + idea.id + '">' +
+                    '<div class="mj-idea-comment__avatar">' + viewerAvatarHtml + '</div>' +
+                    '<div class="mj-idea-box__comment-input-wrap"><input type="text" class="mj-idea-box__comment-input" maxlength="1000" placeholder="' + escapeHtml(getString(this.i18n, 'commentPlaceholder', 'Écrire un commentaire…')) + '">' +
+                    '<button type="submit" class="mj-idea-box__comment-submit" aria-label="' + escapeHtml(getString(this.i18n, 'commentSubmitLabel', 'Envoyer le commentaire')) + '"' + (commentPending ? ' disabled' : '') + '>&rarr;</button></div></form>';
+            }
+            var commentsSectionHtml = '<section class="mj-idea-box__comments" aria-label="Commentaires"><div class="mj-idea-box__comments-list">' + commentsHtml + '</div>' + commentFormHtml + '</section>';
+
             return (
                 '<article class="mj-idea-box__item' + (isArchived ? ' mj-idea-box__item--archived' : '') + '" role="listitem" data-idea-id="' + idea.id + '">' +
                     '<div class="mj-idea-box__item-header">' +
@@ -611,6 +695,7 @@
                         markDoneButtonHtml +
                         deleteButtonHtml +
                     '</div>' +
+                    commentsSectionHtml +
                 '</article>'
             );
         }, this).join('');
@@ -661,13 +746,30 @@
         }
 
         if (this.dom.filter) {
-            this.dom.filter.addEventListener('change', function () {
-                self.state.statusFilter = self.dom.filter.value === 'archived' ? 'archived' : 'all';
-                self.renderIdeas();
+            this.dom.filter.addEventListener('click', function (event) {
+                var target = event.target;
+                if (!target || typeof target.closest !== 'function') {
+                    return;
+                }
+                var filterButton = target.closest('[data-idea-filter]');
+                if (!filterButton) {
+                    return;
+                }
+                self.state.statusFilter = filterButton.getAttribute('data-idea-filter') === 'archived' ? 'archived' : 'all';
+                self.render();
             });
         }
 
         if (this.dom.list) {
+            this.dom.list.addEventListener('submit', function (event) {
+                var form = event.target;
+                if (!form || !form.matches('.mj-idea-box__comment-form')) {
+                    return;
+                }
+                event.preventDefault();
+                self.handleCommentSubmit(toInt(form.getAttribute('data-idea-id'), 0), form);
+            });
+
             this.dom.list.addEventListener('click', function (event) {
                 var target = event.target;
                 if (!target) {
@@ -677,6 +779,10 @@
                     target = target.closest('button');
                 }
                 if (!target || target.tagName !== 'BUTTON') {
+                    return;
+                }
+                if (target.matches('.mj-idea-comment__delete')) {
+                    self.handleCommentDelete(toInt(target.getAttribute('data-comment-id'), 0));
                     return;
                 }
                 if (target.matches('.mj-idea-box__vote-button')) {
@@ -802,6 +908,111 @@
             ideas[index] = idea;
         }
         this.state.ideas = this.sortIdeas(ideas);
+    };
+
+    IdeaBox.prototype.handleCommentSubmit = function (ideaId, form) {
+        if (!ideaId || !this.hasAccess || this.pendingComments.has(ideaId)) {
+            return;
+        }
+        var input = form.querySelector('.mj-idea-box__comment-input');
+        var content = input ? input.value.trim() : '';
+        if (!content || !this.ajaxUrl || !this.actions.commentAdd) {
+            if (!content) {
+                this.state.error = getString(this.i18n, 'commentError', 'Impossible d’ajouter le commentaire.');
+                this.render();
+            }
+            return;
+        }
+
+        this.pendingComments.add(ideaId);
+        var self = this;
+        var params = new URLSearchParams();
+        params.append('action', this.actions.commentAdd);
+        params.append('nonce', this.nonce);
+        params.append('idea_id', String(ideaId));
+        params.append('content', content);
+
+        fetch(this.ajaxUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: params.toString(),
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('http_error');
+                }
+                return response.json();
+            })
+            .then(function (payload) {
+                var comment = payload && payload.success && payload.data ? self.normalizeComment(payload.data.comment) : null;
+                var idea = self.state.ideas.find(function (entry) { return entry.id === ideaId; });
+                if (!comment || !idea) {
+                    throw new Error('api_error');
+                }
+                idea.comments = Array.isArray(idea.comments) ? idea.comments : [];
+                idea.comments.push(comment);
+                idea.commentCount = idea.comments.length;
+                self.state.error = '';
+            })
+            .catch(function () {
+                self.state.error = getString(self.i18n, 'commentError', 'Impossible d’ajouter le commentaire.');
+            })
+            .finally(function () {
+                self.pendingComments.delete(ideaId);
+                self.render();
+            });
+    };
+
+    IdeaBox.prototype.handleCommentDelete = function (commentId) {
+        if (!commentId || !this.hasAccess || !this.ajaxUrl || !this.actions.commentDelete) {
+            return;
+        }
+        var confirmMessage = getString(this.i18n, 'commentDeleteConfirm', 'Supprimer ce commentaire ?');
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function' && !window.confirm(confirmMessage)) {
+            return;
+        }
+
+        var self = this;
+        var params = new URLSearchParams();
+        params.append('action', this.actions.commentDelete);
+        params.append('nonce', this.nonce);
+        params.append('comment_id', String(commentId));
+
+        fetch(this.ajaxUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: params.toString(),
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('http_error');
+                }
+                return response.json();
+            })
+            .then(function (payload) {
+                if (!payload || !payload.success) {
+                    throw new Error('api_error');
+                }
+                self.state.ideas.forEach(function (idea) {
+                    if (!Array.isArray(idea.comments)) {
+                        return;
+                    }
+                    var initialLength = idea.comments.length;
+                    idea.comments = idea.comments.filter(function (comment) { return comment.id !== commentId; });
+                    if (idea.comments.length !== initialLength) {
+                        idea.commentCount = idea.comments.length;
+                    }
+                });
+                self.state.error = '';
+            })
+            .catch(function () {
+                self.state.error = getString(self.i18n, 'commentDeleteError', 'Impossible de supprimer le commentaire.');
+            })
+            .finally(function () {
+                self.render();
+            });
     };
 
     IdeaBox.prototype.handleVote = function (ideaId, button) {
@@ -1021,7 +1232,12 @@
                     throw new Error('api_error');
                 }
                 self.state.error = '';
-                self.removeIdea(ideaId);
+                var updatedIdea = self.state.ideas.find(function (entry) {
+                    return entry.id === ideaId;
+                });
+                if (updatedIdea) {
+                    updatedIdea.status = 'archived';
+                }
             })
             .catch(function () {
                 self.state.error = getString(self.i18n, 'markDoneError', 'Impossible de marquer l’idée comme réalisée.');

@@ -316,6 +316,7 @@ class MjIdeas extends MjTools implements CrudRepositoryInterface
         $table = self::table_name();
 
         MjIdeaVotes::delete_for_idea($id);
+        MjIdeaComments::delete_for_idea($id);
 
         $result = $wpdb->delete($table, array('id' => $id), array('%d'));
         if ($result === false) {
@@ -416,6 +417,14 @@ class MjIdeas extends MjTools implements CrudRepositoryInterface
             }
         }
 
+        $ideaIds = array();
+        foreach ($ideas as $idea) {
+            if (isset($idea['id']) && $idea['id'] > 0) {
+                $ideaIds[] = (int) $idea['id'];
+            }
+        }
+        $commentsByIdea = MjIdeaComments::get_for_ideas($ideaIds);
+
         $memberMap = array();
         if (!empty($memberIds) && class_exists(MjMembers::class)) {
             global $wpdb;
@@ -470,6 +479,13 @@ class MjIdeas extends MjTools implements CrudRepositoryInterface
                 'role' => '',
             );
 
+            $comments = array();
+            foreach ($commentsByIdea[$ideaId] ?? array() as $comment) {
+                $commentPayload = MjIdeaComments::format_for_json($comment);
+                $commentPayload['isOwner'] = $viewerMemberId > 0 && (int) $commentPayload['memberId'] === $viewerMemberId;
+                $comments[] = $commentPayload;
+            }
+
             $payload[] = array(
                 'id' => $ideaId,
                 'title' => $idea['title'],
@@ -482,6 +498,8 @@ class MjIdeas extends MjTools implements CrudRepositoryInterface
                 'viewerHasVoted' => isset($viewerLookup[$ideaId]),
                 'isOwner' => $authorId > 0 && $authorId === $viewerMemberId,
                 'canDelete' => $viewerCanDelete,
+                'comments' => $comments,
+                'commentCount' => count($comments),
             );
         }
 

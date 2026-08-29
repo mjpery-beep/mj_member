@@ -27,6 +27,8 @@
         this._refreshTimer  = null;
         this._scrollLockY   = 0;
         this._scrollLocked  = false;
+        this._compactForced = false;
+        this._stickyPlaceholder = null;
 
         /** Track which lazy dropdowns have been loaded already */
         this._loaded = {
@@ -849,6 +851,34 @@
     // Sticky
     // -------------------------------------------------------------------------
 
+    MjHeader.prototype._updateStickyPlaceholder = function () {
+        if (this._stickyPlaceholder) {
+            this._stickyPlaceholder.style.height = this.el.offsetHeight + 'px';
+        }
+    };
+
+    MjHeader.prototype._setStuck = function (isStuck) {
+        if (this._isStuck === isStuck) {
+            return;
+        }
+
+        this._isStuck = isStuck;
+        this.el.classList.toggle('mj-header--stuck', isStuck);
+        var self = this;
+        setTimeout(function () {
+            self._updateStickyPlaceholder();
+        }, 270);
+    };
+
+    MjHeader.prototype.setCompact = function (force) {
+        this._compactForced = !!force;
+        if (this._compactForced) {
+            this._setStuck(true);
+        } else if (this._scrollHandler) {
+            this._scrollHandler();
+        }
+    };
+
     MjHeader.prototype._initSticky = function () {
         var self         = this;
         var scrollOffset = this.config.scrollOffset || 20;
@@ -857,24 +887,23 @@
         var placeholder = document.createElement('div');
         placeholder.className = 'mj-header-sticky-placeholder';
         this.el.parentNode.insertBefore(placeholder, this.el);
+        this._stickyPlaceholder = placeholder;
 
         var updatePlaceholder = function () {
-            placeholder.style.height = self.el.offsetHeight + 'px';
+            self._updateStickyPlaceholder();
         };
         updatePlaceholder();
         window.addEventListener('resize', updatePlaceholder, { passive: true });
 
         var onScroll = function () {
+            if (self._compactForced) {
+                return;
+            }
             var scrollY = window.pageYOffset || document.documentElement.scrollTop;
             if (scrollY > scrollOffset && !self._isStuck) {
-                self._isStuck = true;
-                self.el.classList.add('mj-header--stuck');
-                // Update placeholder after height transition completes (0.25s)
-                setTimeout(updatePlaceholder, 270);
+                self._setStuck(true);
             } else if (scrollY <= scrollOffset && self._isStuck) {
-                self._isStuck = false;
-                self.el.classList.remove('mj-header--stuck');
-                setTimeout(updatePlaceholder, 270);
+                self._setStuck(false);
             }
         };
 

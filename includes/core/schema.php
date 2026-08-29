@@ -820,6 +820,11 @@ function mj_member_get_idea_votes_table_name() {
     return $cached;
 }
 
+function mj_member_get_idea_comments_table_name() {
+    global $wpdb;
+    return $wpdb->prefix . 'mj_idea_comments';
+}
+
 function mj_member_get_contact_message_recipients_table_name() {
     global $wpdb;
     return $wpdb->prefix . 'mj_contact_message_recipients';
@@ -2278,6 +2283,9 @@ function mj_member_run_schema_upgrade() {
     $idea_votes_table = function_exists('mj_member_get_idea_votes_table_name')
         ? mj_member_get_idea_votes_table_name()
         : $wpdb->prefix . 'mj_idea_votes';
+    $idea_comments_table = function_exists('mj_member_get_idea_comments_table_name')
+        ? mj_member_get_idea_comments_table_name()
+        : $wpdb->prefix . 'mj_idea_comments';
 
     $notifications_table = function_exists('mj_member_get_notifications_table_name')
         ? mj_member_get_notifications_table_name()
@@ -2312,6 +2320,9 @@ function mj_member_run_schema_upgrade() {
     }
     if (!mj_member_table_exists($idea_votes_table)) {
         $missing_idea_tables[] = $idea_votes_table;
+    }
+    if (!mj_member_table_exists($idea_comments_table)) {
+        $missing_idea_tables[] = $idea_comments_table;
     }
 
     if (!mj_member_table_exists($notifications_table)) {
@@ -2445,6 +2456,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_83($wpdb);
     mj_member_upgrade_to_2_84($wpdb);
     mj_member_upgrade_to_2_85($wpdb);
+    mj_member_upgrade_to_2_86($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -7185,4 +7197,22 @@ function mj_member_upgrade_to_2_85($wpdb) {
         }
         $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN show_in_manager_list tinyint(1) NOT NULL DEFAULT 0{$after_clause}");
     }
+}
+
+function mj_member_upgrade_to_2_86($wpdb) {
+    $table = mj_member_get_idea_comments_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+    $sql = "CREATE TABLE {$table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        idea_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        content text NOT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY idx_idea (idea_id),
+        KEY idx_member (member_id),
+        KEY idx_created (created_at)
+    ) {$charset_collate};";
+
+    dbDelta($sql);
 }
