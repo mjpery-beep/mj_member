@@ -565,6 +565,21 @@ function mj_settings_page() {
         $cards_background_back_id = isset($_POST['mj_cards_pdf_background_back_image_id']) ? intval($_POST['mj_cards_pdf_background_back_image_id']) : 0;
         $cards_double_sided = isset($_POST['mj_cards_pdf_double_sided']) ? '1' : '0';
         $registration_page = isset($_POST['mj_login_registration_page']) ? intval($_POST['mj_login_registration_page']) : 0;
+
+        // --- Testimonial photo watermark ---
+        $tw_enabled = isset($_POST['mj_testimonials_watermark_enabled']) ? '1' : '0';
+        $tw_logo_id = isset($_POST['mj_testimonials_watermark_logo_id']) ? intval($_POST['mj_testimonials_watermark_logo_id']) : 0;
+        $tw_opacity = isset($_POST['mj_testimonials_watermark_opacity']) ? max(5, min(100, intval($_POST['mj_testimonials_watermark_opacity']))) : 60;
+        $tw_scale = isset($_POST['mj_testimonials_watermark_scale']) ? max(5, min(90, intval($_POST['mj_testimonials_watermark_scale']))) : 22;
+        $tw_position_raw = isset($_POST['mj_testimonials_watermark_position']) ? sanitize_key(wp_unslash($_POST['mj_testimonials_watermark_position'])) : 'bottom-right';
+        $tw_position = in_array($tw_position_raw, \Mj\Member\Classes\MjImageWatermark::POSITIONS, true) ? $tw_position_raw : 'bottom-right';
+        $tw_changed = (
+            get_option(\Mj\Member\Classes\MjImageWatermark::OPTION_ENABLED, '0') !== $tw_enabled
+            || (int) get_option(\Mj\Member\Classes\MjImageWatermark::OPTION_LOGO_ID, 0) !== $tw_logo_id
+            || (int) get_option(\Mj\Member\Classes\MjImageWatermark::OPTION_OPACITY, 60) !== $tw_opacity
+            || (int) get_option(\Mj\Member\Classes\MjImageWatermark::OPTION_SCALE, 22) !== $tw_scale
+            || (string) get_option(\Mj\Member\Classes\MjImageWatermark::OPTION_POSITION, 'bottom-right') !== $tw_position
+        );
         $openai_api_key = isset($_POST['mj_openai_api_key']) ? sanitize_text_field(wp_unslash($_POST['mj_openai_api_key'])) : '';
         $remove_bg_api_key = isset($_POST['mj_remove_bg_api_key']) ? sanitize_text_field(wp_unslash($_POST['mj_remove_bg_api_key'])) : '';
         $photo_grimlins_prompt = isset($_POST['mj_photo_grimlins_prompt']) ? sanitize_textarea_field(wp_unslash($_POST['mj_photo_grimlins_prompt'])) : '';
@@ -619,6 +634,14 @@ function mj_settings_page() {
         update_option('mj_cards_pdf_background_back_image_id', $cards_background_back_id > 0 ? $cards_background_back_id : 0);
         update_option('mj_cards_pdf_double_sided', $cards_double_sided);
         update_option('mj_login_registration_page', $registration_page > 0 ? $registration_page : 0);
+        update_option(\Mj\Member\Classes\MjImageWatermark::OPTION_ENABLED, $tw_enabled);
+        update_option(\Mj\Member\Classes\MjImageWatermark::OPTION_LOGO_ID, $tw_logo_id > 0 ? $tw_logo_id : 0);
+        update_option(\Mj\Member\Classes\MjImageWatermark::OPTION_OPACITY, $tw_opacity);
+        update_option(\Mj\Member\Classes\MjImageWatermark::OPTION_SCALE, $tw_scale);
+        update_option(\Mj\Member\Classes\MjImageWatermark::OPTION_POSITION, $tw_position);
+        if ($tw_changed) {
+            \Mj\Member\Classes\MjImageWatermark::purgeCache();
+        }
         update_option('mj_member_openai_api_key', $openai_api_key);
         update_option('mj_member_remove_bg_api_key', $remove_bg_api_key);
         update_option('mj_member_photo_grimlins_prompt', $photo_grimlins_prompt);
@@ -1482,6 +1505,19 @@ function mj_settings_page() {
         ''   => '25'
     );
     $recommended_port = $recommended_ports[$secure_mode];
+
+    // --- Testimonial photo watermark (display values for the settings template) ---
+    $tw_watermark_enabled  = get_option(\Mj\Member\Classes\MjImageWatermark::OPTION_ENABLED, '0') === '1';
+    $tw_watermark_logo_id  = (int) get_option(\Mj\Member\Classes\MjImageWatermark::OPTION_LOGO_ID, 0);
+    $tw_watermark_opacity  = max(5, min(100, (int) get_option(\Mj\Member\Classes\MjImageWatermark::OPTION_OPACITY, 60)));
+    $tw_watermark_scale    = max(5, min(90, (int) get_option(\Mj\Member\Classes\MjImageWatermark::OPTION_SCALE, 22)));
+    $tw_watermark_position = \Mj\Member\Classes\MjImageWatermark::position();
+    $tw_watermark_supported = \Mj\Member\Classes\MjImageWatermark::isSupported();
+    $tw_watermark_logo_src = '';
+    if ($tw_watermark_logo_id > 0) {
+        $tw_watermark_logo_img = wp_get_attachment_image_src($tw_watermark_logo_id, 'medium');
+        $tw_watermark_logo_src = $tw_watermark_logo_img ? $tw_watermark_logo_img[0] : (string) wp_get_attachment_url($tw_watermark_logo_id);
+    }
 
     $settings_template_path = __DIR__ . '/settings/page-template.php';
     if (is_readable($settings_template_path)) {

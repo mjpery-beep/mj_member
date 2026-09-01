@@ -1,0 +1,714 @@
+/**
+ * Agenda widget (mj-member-agenda) — shell around the vendored Schedule-X calendar.
+ * BEM. The Schedule-X grid itself is themed by css/vendor/schedule-x.css.
+ */
+
+.mj-agenda {
+    --mj-agenda-gap: 12px;
+    --mj-agenda-radius: 12px;
+    --mj-agenda-border: #e5e7eb;
+    --mj-agenda-surface: #ffffff;
+    --mj-agenda-muted: #6b7280;
+    --mj-agenda-accent: #2563eb;
+    --mj-agenda-hover: rgba(15, 23, 42, 0.05);
+    /* fixed px so the toolbar never inherits an odd theme root font-size */
+    --mj-agenda-font: 13px;
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--mj-agenda-gap);
+    background: var(--mj-agenda-surface);
+    border-radius: var(--mj-agenda-radius);
+}
+
+.mj-agenda__title {
+    margin: 0;
+    font-size: 1.4rem;
+    line-height: 1.2;
+}
+
+.mj-agenda__intro {
+    margin: 0;
+    color: var(--mj-agenda-muted);
+}
+
+/* Boot loader ------------------------------------------------------------- */
+.mj-agenda__boot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 32px 16px;
+    color: var(--mj-agenda-muted);
+    justify-content: center;
+}
+
+.mj-agenda__spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--mj-agenda-border);
+    border-top-color: var(--mj-agenda-accent);
+    border-radius: 50%;
+    animation: mj-agenda-spin 0.8s linear infinite;
+}
+
+@keyframes mj-agenda-spin {
+    to { transform: rotate(360deg); }
+}
+
+.mj-agenda--ready .mj-agenda__boot {
+    display: none;
+}
+
+.mj-agenda__spinner--sm {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+}
+
+.mj-agenda__svg {
+    display: block;
+    flex: none;
+}
+
+/* ---------------------------------------------------------------------- *
+ * Neutralise WordPress/Elementor theme styling on the widget's OWN chrome
+ * controls only. Deliberately scoped to the shell containers so it can
+ * NEVER reach inside .sx__calendar-wrapper (Schedule-X sizes its own
+ * buttons / icons / resize handles and must be left alone). No width /
+ * height / min-* / pseudo-element resets here for the same reason.
+ * ------------------------------------------------------------------------ */
+.mj-agenda__toolbar button,
+.mj-agenda__filters button,
+.mj-agenda__notice button,
+.mj-agenda__error button,
+.mj-agenda-preview button {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    margin: 0;
+    font-family: inherit;
+    font-style: normal;
+    letter-spacing: normal;
+    text-transform: none;
+    text-shadow: none;
+    text-decoration: none;
+    background-image: none;
+    box-shadow: none;
+    filter: none;
+    outline-offset: 1px;
+}
+
+/* Toolbar --------------------------------------------------------------- *
+ * Compact, neutral, px-based. Every selector is prefixed with `.mj-agenda`
+ * so it outranks the theme's element rules and the neutralising reset above.
+ * The accent colour appears only on the active view, the focus ring and the
+ * count badges — the rest is greyscale. */
+.mj-agenda .mj-agenda__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    font-size: var(--mj-agenda-font);
+}
+
+.mj-agenda .mj-agenda__toolbar.is-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    background: var(--mj-agenda-surface);
+    padding: 6px 0;
+    box-shadow: 0 1px 0 var(--mj-agenda-border);
+}
+
+.mj-agenda .mj-agenda__tb-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mj-agenda .mj-agenda__tb-spacer {
+    flex: 1 1 auto;
+}
+
+/* Shared control look */
+.mj-agenda .mj-agenda__icon-btn,
+.mj-agenda .mj-agenda__today-btn,
+.mj-agenda .mj-agenda__add-btn,
+.mj-agenda .mj-agenda__filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid var(--mj-agenda-border);
+    background: var(--mj-agenda-surface);
+    color: inherit;
+    font-family: inherit;
+    font-size: var(--mj-agenda-font);
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    padding: 0 10px;
+    height: 30px;
+    border-radius: 8px;
+    box-shadow: none;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.mj-agenda .mj-agenda__icon-btn {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+}
+
+.mj-agenda .mj-agenda__icon-btn .mj-agenda__svg,
+.mj-agenda .mj-agenda__today-btn .mj-agenda__svg,
+.mj-agenda .mj-agenda__add-btn .mj-agenda__svg,
+.mj-agenda .mj-agenda__filter-toggle .mj-agenda__svg {
+    width: 15px;
+    height: 15px;
+}
+
+.mj-agenda .mj-agenda__icon-btn:hover,
+.mj-agenda .mj-agenda__today-btn:hover,
+.mj-agenda .mj-agenda__add-btn:hover,
+.mj-agenda .mj-agenda__filter-toggle:hover {
+    background: var(--mj-agenda-hover);
+    border-color: var(--mj-agenda-border);
+}
+
+.mj-agenda .mj-agenda__icon-btn:focus-visible,
+.mj-agenda .mj-agenda__today-btn:focus-visible,
+.mj-agenda .mj-agenda__add-btn:focus-visible,
+.mj-agenda .mj-agenda__filter-toggle:focus-visible,
+.mj-agenda .mj-agenda__view-btn:focus-visible,
+.mj-agenda .mj-agenda__chip:focus-visible,
+.mj-agenda .mj-agenda__link-btn:focus-visible {
+    outline: 2px solid var(--mj-agenda-accent);
+    outline-offset: 1px;
+}
+
+/* "+ Ajouter" — quiet outline style, not a big filled block */
+.mj-agenda .mj-agenda__add-btn {
+    color: var(--mj-agenda-accent);
+    border-color: color-mix(in srgb, var(--mj-agenda-accent) 45%, var(--mj-agenda-border));
+    font-weight: 600;
+}
+
+.mj-agenda .mj-agenda__add-btn:hover {
+    background: color-mix(in srgb, var(--mj-agenda-accent) 8%, var(--mj-agenda-surface));
+    border-color: var(--mj-agenda-accent);
+}
+
+/* Period label */
+.mj-agenda .mj-agenda__period {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mj-agenda .mj-agenda__period-label {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    color: inherit;
+}
+
+/* Segmented view switcher */
+.mj-agenda .mj-agenda__views {
+    display: inline-flex;
+    padding: 2px;
+    gap: 2px;
+    background: rgba(15, 23, 42, 0.06);
+    border-radius: 8px;
+}
+
+.mj-agenda .mj-agenda__view-btn {
+    border: 0;
+    background: transparent;
+    padding: 0 11px;
+    height: 26px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    cursor: pointer;
+    color: var(--mj-agenda-muted);
+    border-radius: 6px;
+    box-shadow: none;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.mj-agenda .mj-agenda__view-btn:hover {
+    color: inherit;
+    background: transparent;
+}
+
+.mj-agenda .mj-agenda__view-btn.is-active {
+    background: var(--mj-agenda-surface);
+    color: var(--mj-agenda-accent);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14);
+}
+
+.mj-agenda .mj-agenda__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.08);
+    color: var(--mj-agenda-muted);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.mj-agenda .mj-agenda__filter-toggle.is-open {
+    border-color: var(--mj-agenda-accent);
+    color: var(--mj-agenda-accent);
+}
+
+/* Notice / error banners */
+.mj-agenda .mj-agenda__notice,
+.mj-agenda .mj-agenda__error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: var(--mj-agenda-font);
+    line-height: 1.4;
+}
+
+.mj-agenda .mj-agenda__notice {
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid var(--mj-agenda-border);
+    color: inherit;
+}
+
+.mj-agenda .mj-agenda__error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+}
+
+.mj-agenda .mj-agenda__notice-close {
+    margin-left: auto;
+    border: 0;
+    background: none;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.55;
+}
+
+.mj-agenda .mj-agenda__notice-close:hover {
+    opacity: 1;
+    background: none;
+}
+
+/* Filters panel ----------------------------------------------------------- */
+.mj-agenda .mj-agenda__filters {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--mj-agenda-border);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.02);
+    font-size: var(--mj-agenda-font);
+}
+
+.mj-agenda .mj-agenda__filters-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.mj-agenda .mj-agenda__filters-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--mj-agenda-muted);
+}
+
+.mj-agenda .mj-agenda__filters-bulk {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.mj-agenda .mj-agenda__link-btn {
+    border: 0;
+    background: none;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--mj-agenda-muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 5px;
+    box-shadow: none;
+}
+
+.mj-agenda .mj-agenda__link-btn:hover:not(:disabled) {
+    background: var(--mj-agenda-hover);
+    color: inherit;
+}
+
+.mj-agenda .mj-agenda__link-btn:disabled {
+    color: var(--mj-agenda-muted);
+    opacity: 0.45;
+    cursor: default;
+}
+
+.mj-agenda .mj-agenda__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.mj-agenda .mj-agenda__chip {
+    --mj-chip-color: var(--mj-agenda-accent);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--mj-agenda-border);
+    background: var(--mj-agenda-surface);
+    color: var(--mj-agenda-muted);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    padding: 0 9px;
+    height: 26px;
+    border-radius: 999px;
+    box-shadow: none;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+    opacity: 0.6;
+}
+
+.mj-agenda .mj-agenda__chip:hover {
+    opacity: 1;
+    background: var(--mj-agenda-surface);
+}
+
+.mj-agenda .mj-agenda__chip.is-on {
+    opacity: 1;
+    color: inherit;
+    border-color: color-mix(in srgb, var(--mj-chip-color) 50%, var(--mj-agenda-border));
+    background: color-mix(in srgb, var(--mj-chip-color) 10%, var(--mj-agenda-surface));
+}
+
+.mj-agenda .mj-agenda__chip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--mj-chip-color);
+    flex: none;
+}
+
+.mj-agenda .mj-agenda__chip:not(.is-on) .mj-agenda__chip-dot {
+    background: var(--mj-agenda-muted);
+}
+
+.mj-agenda .mj-agenda__chip-label {
+    white-space: nowrap;
+}
+
+.mj-agenda .mj-agenda__chip-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5em;
+    height: 1.5em;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.08);
+    color: var(--mj-agenda-muted);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.mj-agenda .mj-agenda__chip.is-on .mj-agenda__chip-count {
+    background: color-mix(in srgb, var(--mj-chip-color) 18%, var(--mj-agenda-surface));
+    color: color-mix(in srgb, var(--mj-chip-color) 78%, #000);
+}
+
+/* Read-only legend (when filters are off but legend is on) */
+.mj-agenda .mj-agenda__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    padding: 4px 2px;
+}
+
+.mj-agenda .mj-agenda__legend-item {
+    --mj-chip-color: var(--mj-agenda-accent);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--mj-agenda-muted);
+}
+
+/* Calendar host ----------------------------------------------------------- */
+.mj-agenda__calendar {
+    width: 100%;
+    min-height: 560px;
+    height: 70vh;
+    max-height: 900px;
+}
+
+/* Isolation from the WordPress theme -------------------------------------- *
+ * Schedule-X's own stylesheet only neutralises <ul> and <button> inside its
+ * wrapper. WP themes leak box-sizing / margins / line-height / link styles
+ * etc. into the grid and blow the layout apart, so re-assert the essentials
+ * here with class-level specificity (this file loads after the injected
+ * Schedule-X theme). */
+.mj-agenda .sx__calendar-wrapper,
+.mj-agenda .sx__calendar-wrapper *,
+.mj-agenda .sx__calendar-wrapper *::before,
+.mj-agenda .sx__calendar-wrapper *::after {
+    box-sizing: border-box;
+}
+
+.mj-agenda .sx__calendar-wrapper {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+        Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    letter-spacing: normal;
+    text-align: left;
+    color: var(--sx-color-on-surface, #1c1b1f);
+}
+
+.mj-agenda .sx__calendar-wrapper h1,
+.mj-agenda .sx__calendar-wrapper h2,
+.mj-agenda .sx__calendar-wrapper h3,
+.mj-agenda .sx__calendar-wrapper h4,
+.mj-agenda .sx__calendar-wrapper h5,
+.mj-agenda .sx__calendar-wrapper h6,
+.mj-agenda .sx__calendar-wrapper p,
+.mj-agenda .sx__calendar-wrapper ul,
+.mj-agenda .sx__calendar-wrapper ol,
+.mj-agenda .sx__calendar-wrapper li,
+.mj-agenda .sx__calendar-wrapper dl,
+.mj-agenda .sx__calendar-wrapper dd,
+.mj-agenda .sx__calendar-wrapper figure,
+.mj-agenda .sx__calendar-wrapper table {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font: inherit;
+    line-height: inherit;
+    background: none;
+}
+
+.mj-agenda .sx__calendar-wrapper ul,
+.mj-agenda .sx__calendar-wrapper ol {
+    list-style: none;
+}
+
+/* Only neutralise the theme chrome a WP theme adds to buttons here — NEVER
+ * their box model (Schedule-X controls width/height/padding of its chevrons,
+ * resize handles, event buttons, icons, …). */
+.mj-agenda .sx__calendar-wrapper button,
+.mj-agenda .sx__calendar-wrapper input,
+.mj-agenda .sx__calendar-wrapper select,
+.mj-agenda .sx__calendar-wrapper textarea {
+    font-family: inherit;
+    letter-spacing: normal;
+    text-transform: none;
+    text-shadow: none;
+    box-shadow: none;
+    background-image: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.mj-agenda .sx__calendar-wrapper a {
+    text-decoration: none;
+    color: inherit;
+    box-shadow: none;
+    background: none;
+}
+
+.mj-agenda .sx__calendar-wrapper table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+/* Fill the host box */
+.mj-agenda__calendar > .sx__calendar-wrapper,
+.mj-agenda__calendar .sx__calendar {
+    height: 100%;
+    width: 100%;
+}
+
+.mj-agenda--height-fixed .mj-agenda__calendar {
+    height: var(--mj-agenda-fixed-height, 720px);
+}
+
+/* Preview overlay ------------------------------------------------------- */
+.mj-agenda__overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.35);
+    z-index: 40;
+}
+
+.mj-agenda-preview {
+    position: fixed;
+    z-index: 41;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(420px, calc(100vw - 32px));
+    max-height: min(70vh, 640px);
+    overflow: auto;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+    padding: 20px;
+}
+
+.mj-agenda-preview__close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    border: 0;
+    background: transparent;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--mj-agenda-muted);
+}
+
+.mj-agenda-preview__title {
+    margin: 0 0 12px;
+    font-size: 1.1rem;
+    padding-right: 24px;
+}
+
+.mj-agenda-preview__rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mj-agenda-preview__row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 10px;
+    font-size: 0.9rem;
+}
+
+.mj-agenda-preview__label {
+    color: var(--mj-agenda-muted);
+}
+
+.mj-agenda-preview__body {
+    margin-top: 10px;
+    white-space: pre-wrap;
+    font-size: 0.9rem;
+}
+
+.mj-agenda__preview-hint {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: #64748b;
+    font-style: italic;
+}
+
+/* The filter toggle button only matters on narrow screens (see media query) */
+.mj-agenda .mj-agenda__filter-toggle {
+    display: none;
+}
+
+/* Responsive --------------------------------------------------------- */
+@media (max-width: 900px) {
+    .mj-agenda .mj-agenda__tb-spacer {
+        display: none;
+    }
+
+    .mj-agenda .mj-agenda__period {
+        order: -1;
+        flex: 1 1 100%;
+    }
+
+    .mj-agenda .mj-agenda__views {
+        flex: 1 1 100%;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .mj-agenda .mj-agenda__views::-webkit-scrollbar {
+        display: none;
+    }
+
+    .mj-agenda .mj-agenda__view-btn {
+        flex: 1 0 auto;
+    }
+
+    .mj-agenda .mj-agenda__tb-actions {
+        flex: 1 1 100%;
+        justify-content: space-between;
+    }
+
+    .mj-agenda .mj-agenda__filter-toggle {
+        display: inline-flex;
+    }
+
+    /* Collapse the filter panel behind the toggle */
+    .mj-agenda .mj-agenda__filters {
+        display: none;
+    }
+
+    .mj-agenda .mj-agenda__filters.is-open {
+        display: flex;
+    }
+}
+
+@media (max-width: 768px) {
+    .mj-agenda__calendar {
+        min-height: 460px;
+        height: 78vh;
+    }
+}
+
+/* Dark scheme (follows the host page) -------------------------------- */
+@media (prefers-color-scheme: dark) {
+    .mj-agenda:not([data-theme="light"]) {
+        --mj-agenda-border: #334155;
+        --mj-agenda-surface: #0f172a;
+        --mj-agenda-muted: #94a3b8;
+        color: #e2e8f0;
+    }
+
+    .mj-agenda:not([data-theme="light"]) .mj-agenda-preview {
+        background: #1e293b;
+        color: #e2e8f0;
+    }
+
+    .mj-agenda:not([data-theme="light"]) .mj-agenda__error {
+        background: #431a1a;
+        border-color: #7f1d1d;
+        color: #fecaca;
+    }
+}

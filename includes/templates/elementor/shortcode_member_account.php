@@ -1096,10 +1096,17 @@ if (!function_exists('mj_member_render_account_component')) {
                         if (!empty($dyn_account_fields)) :
                             $dyn_member_id = $is_preview ? 0 : (int) ($member->id ?? 0);
                             $dyn_values = $dyn_member_id ? \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($dyn_member_id) : array();
+                            $dyn_account_groups = \Mj\Member\Classes\Crud\MjDynamicFields::groupByFormPosition($dyn_account_fields);
+
+                            // Renders one positional group of account dynamic fields in its own fieldset.
+                            $mj_render_account_dynfields_group = static function (array $group_fields) use ($is_preview, $dyn_values, $has_children_tabs) {
+                                if (empty($group_fields)) {
+                                    return;
+                                }
                         ?>
                         <fieldset class="mj-fieldset">
                             <div class="mj-field-grid mj-field-grid--dynfields">
-                                <?php foreach ($dyn_account_fields as $df) :
+                                <?php foreach ($group_fields as $df) :
                                     // Skip youth-only fields for guardians (members who have children)
                                     if (!empty($df->youth_only) && $has_children_tabs) continue;
 
@@ -1248,6 +1255,12 @@ if (!function_exists('mj_member_render_account_component')) {
                                 <?php endforeach; ?>
                             </div>
                         </fieldset>
+                        <?php
+                            }; // end $mj_render_account_dynfields_group
+                            $mj_render_account_dynfields_group($dyn_account_groups['above']);
+                            $mj_render_account_dynfields_group($dyn_account_groups['inside']);
+                            $mj_render_account_dynfields_group($dyn_account_groups['below']);
+                        ?>
                         <?php endif; ?>
 
                         <div class="mj-account-photo-field">
@@ -1449,10 +1462,16 @@ if (!function_exists('mj_member_render_account_component')) {
                         }
                         if (!empty($tc_youth_fields)) :
                             $tc_dyn_vals = $is_preview ? array() : \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($tc_id);
+                            $tc_youth_groups = \Mj\Member\Classes\Crud\MjDynamicFields::groupByFormPosition($tc_youth_fields);
+
+                            $mj_render_tc_youth_dynfields_group = static function (array $group_fields) use ($is_preview, $tc_dyn_vals, $tc_prefix) {
+                                if (empty($group_fields)) {
+                                    return;
+                                }
                         ?>
                         <fieldset class="mj-fieldset">
                             <div class="mj-field-grid mj-field-grid--dynfields">
-                                <?php foreach ($tc_youth_fields as $df) :
+                                <?php foreach ($group_fields as $df) :
                                     $df_id   = (int) $df->id;
                                     $df_name = 'dynfield_' . $df_id;
                                     $df_html = esc_attr($tc_prefix . '-dynfield-' . $df_id);
@@ -1597,6 +1616,12 @@ if (!function_exists('mj_member_render_account_component')) {
                                 <?php endforeach; ?>
                             </div>
                         </fieldset>
+                        <?php
+                            }; // end $mj_render_tc_youth_dynfields_group
+                            $mj_render_tc_youth_dynfields_group($tc_youth_groups['above']);
+                            $mj_render_tc_youth_dynfields_group($tc_youth_groups['inside']);
+                            $mj_render_tc_youth_dynfields_group($tc_youth_groups['below']);
+                        ?>
                         <?php endif; ?>
 
                         <div class="mj-account-photo-field">

@@ -354,6 +354,43 @@ if (!isset($GLOBALS['wpdb'])) {
     };
 }
 
+if (!function_exists('get_option')) {
+    function get_option($name, $default = false)
+    {
+        return $GLOBALS['__mj_test_options'][$name] ?? $default;
+    }
+}
+
+if (!function_exists('update_option')) {
+    function update_option($name, $value)
+    {
+        $GLOBALS['__mj_test_options'][$name] = $value;
+        return true;
+    }
+}
+
+if (!function_exists('current_user_can')) {
+    function current_user_can($capability)
+    {
+        return !empty($GLOBALS['__mj_test_caps'][$capability]);
+    }
+}
+
+if (!function_exists('wp_send_json_error')) {
+    function wp_send_json_error($data = null, $status_code = null)
+    {
+        $message = (is_array($data) && isset($data['message'])) ? $data['message'] : '';
+        throw new \RuntimeException('wp_send_json_error:' . $message);
+    }
+}
+
+if (!function_exists('sanitize_hex_color')) {
+    function sanitize_hex_color($color)
+    {
+        return preg_match('/^#([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/', (string) $color) ? $color : '';
+    }
+}
+
 require_once dirname(__DIR__) . '/includes/classes/value/MemberData.php';
 require_once dirname(__DIR__) . '/includes/classes/MjTools.php';
 require_once dirname(__DIR__) . '/includes/classes/MjRoles.php';

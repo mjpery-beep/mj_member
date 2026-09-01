@@ -96,10 +96,12 @@ class MjTestimonials implements CrudRepositoryInterface {
 
         if ($args['event_slug'] !== null && $args['event_slug'] !== '') {
             $slug = sanitize_title($args['event_slug']);
-            $mention = '%@' . $wpdb->esc_like($slug) . '%';
-            $where[] = '(t.event_slug = %s OR t.content LIKE %s)';
+            $hash_mention = '%#' . $wpdb->esc_like($slug) . '%';
+            $legacy_mention = '%@' . $wpdb->esc_like($slug) . '%';
+            $where[] = '(t.event_slug = %s OR t.content LIKE %s OR t.content LIKE %s)';
             $values[] = $slug;
-            $values[] = $mention;
+            $values[] = $hash_mention;
+            $values[] = $legacy_mention;
         }
 
         if ($args['search'] !== '') {
@@ -168,10 +170,12 @@ class MjTestimonials implements CrudRepositoryInterface {
 
         if (isset($args['event_slug']) && $args['event_slug'] !== null && $args['event_slug'] !== '') {
             $slug = sanitize_title($args['event_slug']);
-            $mention = '%@' . $wpdb->esc_like($slug) . '%';
-            $where[] = '(event_slug = %s OR content LIKE %s)';
+            $hash_mention = '%#' . $wpdb->esc_like($slug) . '%';
+            $legacy_mention = '%@' . $wpdb->esc_like($slug) . '%';
+            $where[] = '(event_slug = %s OR content LIKE %s OR content LIKE %s)';
             $values[] = $slug;
-            $values[] = $mention;
+            $values[] = $hash_mention;
+            $values[] = $legacy_mention;
         }
 
         $where_sql = implode(' AND ', $where);
@@ -245,9 +249,14 @@ class MjTestimonials implements CrudRepositoryInterface {
         $photo_ids = isset($payload['photo_ids']) && is_array($payload['photo_ids'])
             ? array_map('intval', array_filter($payload['photo_ids']))
             : array();
-        $video_id = isset($payload['video_id']) && (int) $payload['video_id'] > 0
-            ? (int) $payload['video_id']
-            : null;
+        // Multi-video support: accept video_ids array; fall back to legacy video_id
+        $video_ids_raw = isset($payload['video_ids']) && is_array($payload['video_ids'])
+            ? array_values(array_filter(array_map('intval', $payload['video_ids'])))
+            : array();
+        if (empty($video_ids_raw) && isset($payload['video_id']) && (int) $payload['video_id'] > 0) {
+            $video_ids_raw = array((int) $payload['video_id']);
+        }
+        $video_id = !empty($video_ids_raw) ? $video_ids_raw[0] : null;
         
         // Handle link preview (JSON object with url, title, description, image, and optional YouTube data)
         $link_preview = null;
@@ -316,6 +325,7 @@ class MjTestimonials implements CrudRepositoryInterface {
             'content' => $content,
             'photo_ids' => wp_json_encode($photo_ids),
             'video_id' => $video_id,
+            'video_ids' => !empty($video_ids_raw) ? wp_json_encode($video_ids_raw) : null,
             'link_preview' => $link_preview,
             'event_slug' => $event_slug,
             'status' => $status,
@@ -325,7 +335,7 @@ class MjTestimonials implements CrudRepositoryInterface {
             'reviewed_by' => $reviewed_by,
         );
 
-        $formats = array('%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%d');
+        $formats = array('%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d');
 
         $result = $wpdb->insert($table, $insert_data, $formats);
         if ($result === false) {
@@ -376,6 +386,17 @@ class MjTestimonials implements CrudRepositoryInterface {
             $formats[] = '%d';
         }
 
+        if (array_key_exists('video_ids', $data)) {
+            $vids = is_array($data['video_ids'])
+                ? array_values(array_filter(array_map('intval', $data['video_ids'])))
+                : array();
+            $fields['video_ids'] = !empty($vids) ? wp_json_encode($vids) : null;
+            $formats[] = '%s';
+            // Keep legacy video_id in sync with first entry
+            $fields['video_id'] = !empty($vids) ? $vids[0] : null;
+            $formats[] = '%d';
+        }
+
         if (array_key_exists('status', $data)) {
             $fields['status'] = self::sanitize_status((string) $data['status']);
             $formats[] = '%s';
@@ -409,6 +430,19 @@ class MjTestimonials implements CrudRepositoryInterface {
             $fields['event_slug'] = ($data['event_slug'] !== null && $data['event_slug'] !== '')
                 ? sanitize_title($data['event_slug'])
                 : null;
+            $formats[] = '%s';
+        }
+
+        if (array_key_exists('member_id', $data)) {
+            $member_id = (int) $data['member_id'];
+            if ($member_id > 0) {
+                $fields['member_id'] = $member_id;
+                $formats[] = '%d';
+            }
+        }
+
+        if (array_key_exists('created_at', $data)) {
+            $fields['created_at'] = sanitize_text_field($data['created_at']);
             $formats[] = '%s';
         }
 
@@ -633,11 +667,19 @@ class MjTestimonials implements CrudRepositoryInterface {
             $full = wp_get_attachment_image_url($photo_id, 'full');
 
             if ($url) {
+                $display_url = $url;
+                $display_full = $full ?: $url;
+
+                if (class_exists(\Mj\Member\Classes\MjImageWatermark::class)) {
+                    $display_url = \Mj\Member\Classes\MjImageWatermark::watermarkUrl($display_url);
+                    $display_full = \Mj\Member\Classes\MjImageWatermark::watermarkUrl($display_full);
+                }
+
                 $photos[] = array(
                     'id' => $photo_id,
-                    'url' => $url,
+                    'url' => $display_url,
                     'thumb' => $thumb ?: $url,
-                    'full' => $full ?: $url,
+                    'full' => $display_full,
                 );
             }
         }
@@ -646,34 +688,59 @@ class MjTestimonials implements CrudRepositoryInterface {
     }
 
     /**
-     * Get video URL for a testimonial.
+     * Parse video_ids JSON field (multi-video support).
+     * Falls back to legacy video_id column for backward compatibility.
+     *
+     * @param object $testimonial
+     * @return array<int>
+     */
+    public static function parse_video_ids($testimonial): array {
+        if (!empty($testimonial->video_ids)) {
+            $raw = $testimonial->video_ids;
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    return array_values(array_filter(array_map('intval', $decoded)));
+                }
+            }
+        }
+        // Backward compat: legacy single video_id column
+        $vid = isset($testimonial->video_id) ? (int) $testimonial->video_id : 0;
+        return $vid > 0 ? array($vid) : array();
+    }
+
+    /**
+     * Get all video data for a testimonial (supports multiple videos).
+     *
+     * @param object $testimonial
+     * @return array<array{id:int,url:string,poster:string}>
+     */
+    public static function get_videos_data($testimonial): array {
+        $ids = self::parse_video_ids($testimonial);
+        $videos = array();
+        foreach ($ids as $video_id) {
+            $url = wp_get_attachment_url($video_id);
+            if (!$url) continue;
+            $poster_url = '';
+            $meta = get_post_meta($video_id, '_wp_attachment_metadata', true);
+            if (is_array($meta) && isset($meta['image']['sizes']['medium']['file'])) {
+                $uploads = wp_upload_dir();
+                $poster_url = $uploads['baseurl'] . '/' . dirname($meta['file']) . '/' . $meta['image']['sizes']['medium']['file'];
+            }
+            $videos[] = array('id' => $video_id, 'url' => $url, 'poster' => $poster_url);
+        }
+        return $videos;
+    }
+
+    /**
+     * Get video URL for a testimonial (legacy single-video, kept for BC).
      *
      * @param object $testimonial
      * @return array{id:int,url:string,poster:string}|null
      */
     public static function get_video_data($testimonial) {
-        $video_id = isset($testimonial->video_id) ? (int) $testimonial->video_id : 0;
-        if ($video_id <= 0) {
-            return null;
-        }
-
-        $url = wp_get_attachment_url($video_id);
-        if (!$url) {
-            return null;
-        }
-
-        $poster = get_post_meta($video_id, '_wp_attachment_metadata', true);
-        $poster_url = '';
-        if (is_array($poster) && isset($poster['image']['sizes']['medium']['file'])) {
-            $uploads = wp_upload_dir();
-            $poster_url = $uploads['baseurl'] . '/' . dirname($poster['file']) . '/' . $poster['image']['sizes']['medium']['file'];
-        }
-
-        return array(
-            'id' => $video_id,
-            'url' => $url,
-            'poster' => $poster_url,
-        );
+        $videos = self::get_videos_data($testimonial);
+        return !empty($videos) ? $videos[0] : null;
     }
 
     /**

@@ -951,31 +951,16 @@ if (!function_exists('mj_render_child_form_block')) {
             // Dynamic fields (registration)
             $dyn_reg_fields = MjDynamicFields::getRegistrationFields();
             if (!empty($dyn_reg_fields)) :
-            ?>
-            <div class="mj-child-card__complementary" data-complementary-container>
-                <div class="mj-child-complementary-header">
-                    <button
-                        type="button"
-                        class="mj-button mj-button--secondary mj-child-complementary-toggle"
-                        data-complementary-toggle
-                        aria-expanded="false"
-                        aria-controls="<?php echo esc_attr($complementary_panel_id); ?>"
-                    >
-                        <?php echo esc_html($complementary_options['toggle_label']); ?>
-                    </button>
-                    <p class="mj-field-hint mj-child-complementary-hint">
-                        <?php if (!empty($complementary_options['icon_url'])) : ?>
-                            <img src="<?php echo esc_url($complementary_options['icon_url']); ?>" alt="<?php echo esc_attr($complementary_options['icon_alt']); ?>" loading="lazy" />
-                        <?php endif; ?>
-                        <span class="mj-child-complementary-hint__content">
-                            <span class="mj-child-complementary-hint__title"><?php esc_html_e('Information', 'mj-member'); ?></span>
-                            <span class="mj-child-complementary-hint__text"><?php echo esc_html($complementary_options['helper_text']); ?></span>
-                        </span>
-                    </p>
-                </div>
-                <div class="mj-child-card__complementary-panel mj-hidden" id="<?php echo esc_attr($complementary_panel_id); ?>" data-complementary-panel>
+                $dyn_reg_groups = MjDynamicFields::groupByFormPosition($dyn_reg_fields);
+
+                // Renders one positional group of dynamic fields inside its own grid wrapper.
+                $mj_render_child_dynfields_group = static function (array $group_fields) use ($index_attr, $values) {
+                    if (empty($group_fields)) {
+                        return;
+                    }
+                    ?>
             <div class="mj-child-card__grid mj-child-card__dynfields">
-                <?php foreach ($dyn_reg_fields as $df) :
+                <?php foreach ($group_fields as $df) :
                     $df_id    = (int) $df->id;
                     $df_slug  = esc_attr($df->slug);
                     $df_name  = 'jeunes[' . $index_attr . '][dynfield_' . $df_id . ']';
@@ -1122,8 +1107,46 @@ if (!function_exists('mj_render_child_form_block')) {
                 </div>
                 <?php endforeach; ?>
             </div>
+                <?php
+                }; // end $mj_render_child_dynfields_group
+                ?>
+            <?php if (!empty($dyn_reg_groups['above'])) : ?>
+            <div class="mj-child-card__dynfields-block mj-child-card__dynfields-block--above">
+                <?php $mj_render_child_dynfields_group($dyn_reg_groups['above']); ?>
+            </div>
+            <?php endif; ?>
+            <?php if (!empty($dyn_reg_groups['inside'])) : ?>
+            <div class="mj-child-card__complementary" data-complementary-container>
+                <div class="mj-child-complementary-header">
+                    <button
+                        type="button"
+                        class="mj-button mj-button--secondary mj-child-complementary-toggle"
+                        data-complementary-toggle
+                        aria-expanded="false"
+                        aria-controls="<?php echo esc_attr($complementary_panel_id); ?>"
+                    >
+                        <?php echo esc_html($complementary_options['toggle_label']); ?>
+                    </button>
+                    <p class="mj-field-hint mj-child-complementary-hint">
+                        <?php if (!empty($complementary_options['icon_url'])) : ?>
+                            <img src="<?php echo esc_url($complementary_options['icon_url']); ?>" alt="<?php echo esc_attr($complementary_options['icon_alt']); ?>" loading="lazy" />
+                        <?php endif; ?>
+                        <span class="mj-child-complementary-hint__content">
+                            <span class="mj-child-complementary-hint__title"><?php esc_html_e('Information', 'mj-member'); ?></span>
+                            <span class="mj-child-complementary-hint__text"><?php echo esc_html($complementary_options['helper_text']); ?></span>
+                        </span>
+                    </p>
+                </div>
+                <div class="mj-child-card__complementary-panel mj-hidden" id="<?php echo esc_attr($complementary_panel_id); ?>" data-complementary-panel>
+                    <?php $mj_render_child_dynfields_group($dyn_reg_groups['inside']); ?>
                 </div>
             </div>
+            <?php endif; ?>
+            <?php if (!empty($dyn_reg_groups['below'])) : ?>
+            <div class="mj-child-card__dynfields-block mj-child-card__dynfields-block--below">
+                <?php $mj_render_child_dynfields_group($dyn_reg_groups['below']); ?>
+            </div>
+            <?php endif; ?>
             <?php endif; ?>
             <div class="<?php echo esc_attr($account_classes); ?>" data-autonomous-section="1">
                 <h5>Accès du jeune</h5>

@@ -18,6 +18,7 @@ function mj_header_svg_icon(string $name): string {
         'grid'        => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 6a3 3 0 0 1 3-3h2.25a3 3 0 0 1 3 3v2.25a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6Zm9.75 0a3 3 0 0 1 3-3H18a3 3 0 0 1 3 3v2.25a3 3 0 0 1-3 3h-2.25a3 3 0 0 1-3-3V6ZM3 15.75a3 3 0 0 1 3-3h2.25a3 3 0 0 1 3 3V18a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-2.25Zm9.75 0a3 3 0 0 1 3-3H18a3 3 0 0 1 3 3V18a3 3 0 0 1-3 3h-2.25a3 3 0 0 1-3-3v-2.25Z" clip-rule="evenodd"/></svg>',
         'cloud'       => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.5 9.75a6 6 0 0 1 11.573-2.226 3.75 3.75 0 0 1 4.133 4.303A4.5 4.5 0 0 1 18 20.25H6.75a5.25 5.25 0 0 1-4.233-8.385A6.032 6.032 0 0 1 4.5 9.75Z" clip-rule="evenodd"/></svg>',
         'bell'        => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.25 9a6.75 6.75 0 0 1 13.5 0v.75c0 2.123.8 4.057 2.118 5.52a.75.75 0 0 1-.297 1.206c-1.544.57-3.16.99-4.831 1.243a3.75 3.75 0 1 1-7.48 0 24.585 24.585 0 0 1-4.831-1.244.75.75 0 0 1-.298-1.205A8.217 8.217 0 0 0 5.25 9.75V9Zm4.502 8.9a2.25 2.25 0 1 0 4.496 0 25.057 25.057 0 0 1-4.496 0Z" clip-rule="evenodd"/></svg>',
+        'testimonial' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.5 5.25A3.75 3.75 0 0 0 3.75 9v3.75a3.75 3.75 0 0 0 3.75 3.75h.75a.75.75 0 0 0 .75-.75v-3.75a.75.75 0 0 0-.75-.75H6.75V9a.75.75 0 0 1 .75-.75h1.125a.75.75 0 0 0 .75-.75V6a.75.75 0 0 0-.75-.75H7.5Zm8.25 0A3.75 3.75 0 0 0 12 9v3.75a3.75 3.75 0 0 0 3.75 3.75h.75a.75.75 0 0 0 .75-.75v-3.75a.75.75 0 0 0-.75-.75H15V9a.75.75 0 0 1 .75-.75h1.125a.75.75 0 0 0 .75-.75V6a.75.75 0 0 0-.75-.75H15.75Z" clip-rule="evenodd"/></svg>',
         'user'        => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clip-rule="evenodd"/></svg>',
         'lock'        => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3A5.25 5.25 0 0 0 12 1.5Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clip-rule="evenodd"/></svg>',
         'menu'        => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/></svg>',
@@ -62,7 +63,7 @@ function mj_header_svg_icon(string $name): string {
             <nav class="mj-header__nav" aria-label="<?php esc_attr_e('Navigation principale', 'mj-member'); ?>">
                 <?php
                 if ($nav_menu_id) {
-                    wp_nav_menu(array('menu' => $nav_menu_id, 'container' => false, 'menu_class' => 'mj-header__nav-list', 'depth' => $nav_show_sub ? 2 : 1, 'fallback_cb' => false));
+                    wp_nav_menu(array('menu' => $nav_menu_id, 'container' => false, 'menu_class' => 'mj-header__nav-list', 'depth' => $nav_show_sub ? 0 : 1, 'fallback_cb' => false));
                 } elseif ($is_preview) {
                     echo '<ul class="mj-header__nav-list"><li><a href="#">Accueil</a></li><li><a href="#">Activités</a></li><li><a href="#">Nous contacter</a></li></ul>';
                 }
@@ -294,6 +295,82 @@ function mj_header_svg_icon(string $name): string {
                     <?php else: ?>
                         <div class="mj-header-nc-loading">Chargement&hellip;</div>
                     <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <?php elseif ($key === 'testimonials' && $testimonials_enabled): ?>
+        <div class="mj-header__action-item" style="order:<?php echo (int)$order; ?>">
+            <button type="button" class="mj-header__trigger" data-mj-header-trigger="testimonials" aria-expanded="false" aria-haspopup="true" title="<?php echo esc_attr($testimonials_label); ?>">
+                <span class="mj-header__trigger-icon">
+                    <?php echo $testimonials_custom_icon ? '<img src="' . esc_url($testimonials_custom_icon) . '" alt="" />' : mj_header_svg_icon('testimonial'); ?>
+                </span>
+            </button>
+            <div class="mj-header-dropdown mj-header-dropdown--testimonials" data-mj-header-dropdown="testimonials" role="dialog" aria-label="<?php echo esc_attr($testimonials_label); ?>">
+                <div class="mj-header-dropdown__header">
+                    <span class="mj-header-dropdown__title"><?php echo esc_html($testimonials_label); ?></span>
+                    <a href="<?php echo esc_url($testimonials_url); ?>" class="mj-header-dropdown__header-link"><?php esc_html_e('Voir tout', 'mj-member'); ?></a>
+                    <button type="button" class="mj-header-dropdown__close" aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>"><?php echo mj_header_svg_icon('close'); ?></button>
+                </div>
+                <div class="mj-header-dropdown__content">
+                    <div class="mj-header-testimonials" data-mj-header-testimonials>
+                        <?php
+                        $display_testimonials = $header_testimonials;
+                        if ($is_preview && empty($display_testimonials)) {
+                            $display_testimonials = array(
+                                (object) array('first_name' => 'Camille', 'last_name' => 'D.', 'content' => 'Une super expérience, merci à toute l\'équipe !', 'created_at' => current_time('mysql')),
+                                (object) array('first_name' => 'Noah', 'last_name' => 'L.', 'content' => 'J\'ai rencontré plein de nouvelles personnes.', 'created_at' => current_time('mysql')),
+                            );
+                        }
+                        ?>
+                        <?php if (!empty($display_testimonials)): ?>
+                            <?php foreach ($display_testimonials as $index => $testimonial):
+                                $name = trim((string) ($testimonial->first_name ?? '') . ' ' . (string) ($testimonial->last_name ?? '')) ?: __('Membre MJ', 'mj-member');
+                                $initial = function_exists('mb_substr') ? mb_strtoupper(mb_substr($name, 0, 1)) : strtoupper(substr($name, 0, 1));
+                                $avatar_url = !empty($testimonial->member_photo_id) ? wp_get_attachment_image_url((int) $testimonial->member_photo_id, 'thumbnail') : '';
+                                $content = wp_trim_words(wp_strip_all_tags((string) ($testimonial->content ?? '')), 20, '...');
+                                $photos = class_exists(\Mj\Member\Classes\Crud\MjTestimonials::class)
+                                    ? array_slice(\Mj\Member\Classes\Crud\MjTestimonials::get_photo_urls($testimonial, 'thumbnail'), 0, 3)
+                                    : array();
+                                $testimonial_url = !empty($testimonial->id)
+                                    ? add_query_arg(array('section' => 'testimonials', 'post' => (int) $testimonial->id), $testimonials_url)
+                                    : '#';
+                            ?>
+                            <article class="mj-header-testimonial<?php echo $index === 0 ? ' mj-header-testimonial--active' : ''; ?>" data-mj-header-testimonial aria-hidden="<?php echo $index === 0 ? 'false' : 'true'; ?>">
+                                <a class="mj-header-testimonial__link" href="<?php echo $is_preview ? '#' : esc_url($testimonial_url); ?>" aria-label="<?php echo esc_attr(sprintf(__('Ouvrir le témoignage de %s', 'mj-member'), $name)); ?>">
+                                    <div class="mj-header-testimonial__author">
+                                        <?php if ($avatar_url): ?>
+                                            <img src="<?php echo esc_url($avatar_url); ?>" alt="" loading="lazy" />
+                                        <?php else: ?>
+                                            <span><?php echo esc_html($initial); ?></span>
+                                        <?php endif; ?>
+                                        <div>
+                                            <strong><?php echo esc_html($name); ?></strong>
+                                            <?php if (!empty($testimonial->created_at)): ?><time><?php printf(esc_html__('Il y a %s', 'mj-member'), esc_html(human_time_diff(strtotime($testimonial->created_at), current_time('timestamp')))); ?></time><?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <p><?php echo esc_html($content); ?></p>
+                                    <?php if (!empty($photos)): ?>
+                                    <div class="mj-header-testimonial__photos">
+                                        <?php foreach ($photos as $photo): ?>
+                                        <img src="<?php echo esc_url($photo['thumb']); ?>" alt="" loading="lazy" />
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <?php endif; ?>
+                                </a>
+                            </article>
+                            <?php endforeach; ?>
+                            <?php if (count($display_testimonials) > 1): ?>
+                            <div class="mj-header-testimonials__controls">
+                                <button type="button" class="mj-header-testimonials__nav" data-mj-header-testimonial-prev aria-label="<?php esc_attr_e('Témoignage précédent', 'mj-member'); ?>">&lsaquo;</button>
+                                <span class="mj-header-testimonials__counter" data-mj-header-testimonial-counter>1 / <?php echo count($display_testimonials); ?></span>
+                                <button type="button" class="mj-header-testimonials__nav" data-mj-header-testimonial-next aria-label="<?php esc_attr_e('Témoignage suivant', 'mj-member'); ?>">&rsaquo;</button>
+                            </div>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <div class="mj-header-dropdown__empty"><p><?php esc_html_e('Aucun témoignage pour le moment.', 'mj-member'); ?></p></div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </div>

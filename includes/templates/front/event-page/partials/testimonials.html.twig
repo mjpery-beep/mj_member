@@ -164,6 +164,21 @@
                     </div>
                 {% endif %}
 
+                {% if item.mentioned_members|default([])|length > 0 %}
+                    <div class="mj-feed-post__member-mentions">
+                        {% for member in item.mentioned_members %}
+                            <div class="mj-feed-post__member-mention-chip">
+                                {% if member.avatarUrl %}
+                                    <img src="{{ member.avatarUrl|esc_url }}" alt="" class="mj-feed-post__member-mention-avatar" loading="lazy" />
+                                {% else %}
+                                    <span class="mj-feed-post__member-mention-initial">{{ member.initial|default('?') }}</span>
+                                {% endif %}
+                                <span class="mj-feed-post__member-mention-name">{{ member.name }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
                 {% if item.photos|default([])|length > 0 %}
                     <div class="mj-event-page__testimonial-photos">
                         {% for photo in item.photos %}

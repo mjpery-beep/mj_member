@@ -246,6 +246,11 @@ final class DynamicFieldsController implements AjaxHandlerInterface
         if (isset($_POST['youth_only'])) {
             $data['youth_only'] = (int) $_POST['youth_only'];
         }
+        if (isset($_POST['form_position'])) {
+            $data['form_position'] = MjDynamicFields::normalizeFormPosition(
+                sanitize_text_field(wp_unslash($_POST['form_position']))
+            );
+        }
         if (isset($_POST['options_list'])) {
             $raw = wp_unslash($_POST['options_list']);
             if (is_string($raw)) {
@@ -293,6 +298,7 @@ final class DynamicFieldsController implements AjaxHandlerInterface
             'otherLabel'         => $field->other_label ?? '',
             'showInNotes'        => (bool) ($field->show_in_notes ?? false),
             'youthOnly'          => (bool) ($field->youth_only ?? false),
+            'formPosition'       => MjDynamicFields::normalizeFormPosition($field->form_position ?? MjDynamicFields::POSITION_INSIDE),
             'optionsList'        => MjDynamicFields::decodeOptions($field),
             'optionsDetailed'    => MjDynamicFields::decodeOptionsDetailed($field),
             'otherOptionImage'   => MjDynamicFields::decodeOtherOptionImage($field),

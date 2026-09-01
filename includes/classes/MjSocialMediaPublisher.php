@@ -147,12 +147,13 @@ final class MjSocialMediaPublisher
     }
 
     /**
-     * Publish to Instagram (business account).
+     * Publish to Instagram (business account) via the new Instagram Graph API.
+     * Requires a two-step flow: create media container, then publish it.
      *
      * @param string $caption The caption/description.
-     * @param string $link The event URL.
+     * @param string $link The event URL (appended to caption).
      * @param string $imageUrl Optional image URL for the post.
-     * @return array{success: bool, message: string, url?: string}|WP_Error
+     * @return array{success: bool, message: string, postId?: string}|WP_Error
      */
     public function publishToInstagram($caption, $link, $imageUrl = '')
     {
@@ -164,7 +165,7 @@ final class MjSocialMediaPublisher
         }
 
         $caption = trim((string) $caption);
-        $link = trim((string) $link);
+        $link    = trim((string) $link);
 
         if ($caption === '' && $link === '') {
             return new \WP_Error(
@@ -173,27 +174,57 @@ final class MjSocialMediaPublisher
             );
         }
 
-        // Instagram requires image for carousels/reels; text-only posts not supported via API
-        // So we combine caption + link
-        $fullCaption = $caption !== '' ? $caption : '';
+        $fullCaption = $caption;
         if ($link !== '') {
-            $fullCaption = $fullCaption !== '' 
-                ? $fullCaption . "\n\n" . $link 
-                : $link;
+            $fullCaption = $fullCaption !== '' ? $fullCaption . "\n\n" . $link : $link;
         }
 
-        $payload = array(
-            'caption' => $fullCaption,
+        // Instagram requires an image for feed posts — text-only posts are not supported.
+        $imageUrl = trim((string) $imageUrl);
+        if ($imageUrl === '') {
+            return new \WP_Error(
+                'mj_instagram_no_image',
+                __('Instagram nécessite une image pour publier. Sélectionnez au moins une photo.', 'mj-member')
+            );
+        }
+
+        $igUserId = $this->instagramBusinessAccountId;
+
+        // Step 1 — Create media container
+        $containerEndpoint = self::INSTAGRAM_API_BASE . '/' . $igUserId . '/media';
+        $containerPayload  = array(
+            'image_url' => $imageUrl,
+            'caption'   => $fullCaption,
         );
 
-        // If image URL provided, include it (requires separate image container creation)
-        if ($imageUrl !== '') {
-            $payload['image_url'] = $imageUrl;
+        $containerResult = $this->makeApiRequest($containerEndpoint, $containerPayload, $this->instagramAccessToken, 'POST');
+        if (is_wp_error($containerResult)) {
+            return $containerResult;
         }
 
-        $endpoint = self::INSTAGRAM_API_BASE . '/' . $this->instagramBusinessAccountId . '/media';
+        $creationId = isset($containerResult['id']) ? (string) $containerResult['id'] : '';
+        if ($creationId === '') {
+            return new \WP_Error(
+                'mj_instagram_no_container_id',
+                __('Instagram : impossible de créer le container media (ID manquant).', 'mj-member')
+            );
+        }
 
-        return $this->makeApiRequest($endpoint, $payload, $this->instagramAccessToken, 'POST');
+        // Step 2 — Publish the container
+        $publishEndpoint = self::INSTAGRAM_API_BASE . '/' . $igUserId . '/media_publish';
+        $publishPayload  = array('creation_id' => $creationId);
+
+        $publishResult = $this->makeApiRequest($publishEndpoint, $publishPayload, $this->instagramAccessToken, 'POST');
+        if (is_wp_error($publishResult)) {
+            return $publishResult;
+        }
+
+        $postId = isset($publishResult['id']) ? (string) $publishResult['id'] : '';
+        return array(
+            'success' => true,
+            'message' => __('Publication réussie !', 'mj-member'),
+            'postId'  => $postId,
+        );
     }
 
     /**
@@ -289,7 +320,7 @@ final class MjSocialMediaPublisher
                     $rawMsg   = isset($apiError['message']) ? (string) $apiError['message']
                               : (isset($decoded['message']) ? (string) $decoded['message'] : '');
 
-                    if ($apiCode === 190 || strpos($rawMsg, 'Session has expired') !== false || strpos($rawMsg, 'access token') !== false) {
+                    if ($apiCode === 190 || strpos($rawMsg, 'Session has expired') !== false) {
                         // Token expired or invalid
                         $tokenExpired = true;
                         $errorMsg = __('Le token d\'accès a expiré ou est invalide. Renouvelez-le dans Paramètres → Publier sur les réseaux.', 'mj-member');
@@ -377,7 +408,7 @@ final class MjSocialMediaPublisher
                     $rawMsg   = isset($apiError['message']) ? (string) $apiError['message']
                               : (isset($decoded['message']) ? (string) $decoded['message'] : '');
 
-                    if ($apiCode === 190 || strpos($rawMsg, 'Session has expired') !== false || strpos($rawMsg, 'access token') !== false) {
+                    if ($apiCode === 190 || strpos($rawMsg, 'Session has expired') !== false) {
                         $tokenExpired = true;
                         $errorMsg = __('Le token d\'accès a expiré ou est invalide. Renouvelez-le dans Paramètres → Publier sur les réseaux.', 'mj-member');
                     } elseif ($apiCode === 200) {

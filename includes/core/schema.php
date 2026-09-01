@@ -766,6 +766,17 @@ function mj_member_get_todo_notes_table_name() {
     return $cached;
 }
 
+function mj_member_get_agenda_notes_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $cached = $wpdb->prefix . 'mj_agenda_notes';
+    return $cached;
+}
+
 function mj_member_get_todo_media_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -2457,7 +2468,10 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_84($wpdb);
     mj_member_upgrade_to_2_85($wpdb);
     mj_member_upgrade_to_2_86($wpdb);
-    
+    mj_member_upgrade_to_2_93($wpdb);
+    mj_member_upgrade_to_2_94($wpdb);
+    mj_member_upgrade_to_2_95($wpdb);
+
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
         if (!mj_member_column_exists($registrations_table, 'attendance_payload')) {
@@ -3389,6 +3403,38 @@ function mj_member_upgrade_to_2_27($wpdb) {
     ) {$charset_collate};";
 
     dbDelta($sql_notes);
+}
+
+function mj_member_upgrade_to_2_94($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $agenda_notes_table = mj_member_get_agenda_notes_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql_agenda_notes = "CREATE TABLE {$agenda_notes_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        author_member_id bigint(20) unsigned NOT NULL DEFAULT 0,
+        wp_user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+        note_date date NOT NULL,
+        start_time time DEFAULT NULL,
+        end_time time DEFAULT NULL,
+        title varchar(191) DEFAULT NULL,
+        content text NOT NULL,
+        color varchar(9) DEFAULT NULL,
+        visibility varchar(20) NOT NULL DEFAULT 'staff',
+        event_id bigint(20) unsigned DEFAULT NULL,
+        member_id bigint(20) unsigned DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY note_date_idx (note_date),
+        KEY author_idx (author_member_id),
+        KEY event_idx (event_id)
+    ) {$charset_collate};";
+
+    dbDelta($sql_agenda_notes);
 }
 
 function mj_member_upgrade_to_2_28($wpdb) {
@@ -6915,6 +6961,51 @@ function mj_member_ensure_request_management_tables() {
 add_action('admin_init', 'mj_member_ensure_request_management_tables', 8);
 
 /**
+ * Ensure the agenda internal-notes table exists even if the schema version was
+ * already bumped (belt-and-suspenders, matching the other ensure_* helpers).
+ */
+function mj_member_ensure_agenda_notes_table() {
+    global $wpdb;
+
+    if (!isset($wpdb) || !is_object($wpdb)) {
+        return;
+    }
+
+    $table = mj_member_get_agenda_notes_table_name();
+    if (mj_member_table_exists($table)) {
+        return;
+    }
+
+    mj_member_upgrade_to_2_94($wpdb);
+}
+
+add_action('admin_init', 'mj_member_ensure_agenda_notes_table', 9);
+
+/**
+ * Ensure the dynamic fields form_position column exists even if the schema
+ * version was already bumped (matching the other ensure_* helpers).
+ */
+function mj_member_ensure_dynfields_form_position_column() {
+    global $wpdb;
+
+    if (!isset($wpdb) || !is_object($wpdb)) {
+        return;
+    }
+
+    $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
+    if (!mj_member_table_exists($fields_table)) {
+        return;
+    }
+    if (mj_member_column_exists($fields_table, 'form_position')) {
+        return;
+    }
+
+    mj_member_upgrade_to_2_95($wpdb);
+}
+
+add_action('admin_init', 'mj_member_ensure_dynfields_form_position_column', 9);
+
+/**
  * Migration 2.77: Add missing performance indexes.
  */
 function mj_member_upgrade_to_2_77($wpdb) {
@@ -7196,6 +7287,44 @@ function mj_member_upgrade_to_2_85($wpdb) {
             $after_clause = '';
         }
         $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN show_in_manager_list tinyint(1) NOT NULL DEFAULT 0{$after_clause}");
+    }
+}
+
+/**
+ * Migration 2.95: Add form_position column to dynamic fields table.
+ *
+ * Controls where a dynamic field renders relative to the "Données complémentaires"
+ * section: 'above', 'inside' (default, legacy behaviour) or 'below'.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_95($wpdb) {
+    $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
+    if (!$fields_table || !mj_member_table_exists($fields_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($fields_table, 'form_position')) {
+        $after_clause = ' AFTER show_in_manager_list';
+        if (!mj_member_column_exists($fields_table, 'show_in_manager_list')) {
+            $after_clause = '';
+        }
+        $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN form_position varchar(10) NOT NULL DEFAULT 'inside'{$after_clause}");
+    }
+}
+
+/**
+ * Migration 2.93: Add video_ids column to testimonials table for multiple videos.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_93($wpdb) {
+    $table = mj_member_get_testimonials_table_name();
+    if (!$table || !mj_member_table_exists($table)) {
+        return;
+    }
+    if (!mj_member_column_exists($table, 'video_ids')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN video_ids longtext DEFAULT NULL AFTER video_id");
     }
 }
 

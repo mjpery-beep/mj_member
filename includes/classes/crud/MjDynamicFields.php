@@ -18,6 +18,10 @@ class MjDynamicFields extends MjTools
     const TABLE_NAME = 'mj_dynamic_fields';
     const OTHER_OPTION_META_KEY = '__mj_other_option_meta__';
 
+    const POSITION_ABOVE  = 'above';
+    const POSITION_INSIDE = 'inside';
+    const POSITION_BELOW  = 'below';
+
     const TYPE_TEXT      = 'text';
     const TYPE_TEXTAREA  = 'textarea';
     const TYPE_DROPDOWN  = 'dropdown';
@@ -57,6 +61,64 @@ class MjDynamicFields extends MjTools
             self::TYPE_CHECKLIST => __('📋 Liste de cases à cocher', 'mj-member'),
             self::TYPE_TITLE     => __('🏷️ Titre de section', 'mj-member'),
         );
+    }
+
+    /**
+     * @return string[]
+     */
+    public static function getAllowedPositions(): array
+    {
+        return array(
+            self::POSITION_ABOVE,
+            self::POSITION_INSIDE,
+            self::POSITION_BELOW,
+        );
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    public static function getPositionLabels(): array
+    {
+        return array(
+            self::POSITION_ABOVE  => __('Au-dessus des données complémentaires', 'mj-member'),
+            self::POSITION_INSIDE => __('Dans les données complémentaires', 'mj-member'),
+            self::POSITION_BELOW  => __('En dessous des données complémentaires', 'mj-member'),
+        );
+    }
+
+    /**
+     * Normalize a raw form position value to an allowed one.
+     *
+     * @param mixed $value
+     * @return string
+     */
+    public static function normalizeFormPosition($value): string
+    {
+        $value = is_string($value) ? $value : '';
+        return in_array($value, self::getAllowedPositions(), true) ? $value : self::POSITION_INSIDE;
+    }
+
+    /**
+     * Split a list of field rows into groups keyed by form position.
+     *
+     * @param array<int,object> $fields
+     * @return array{above:array<int,object>,inside:array<int,object>,below:array<int,object>}
+     */
+    public static function groupByFormPosition(array $fields): array
+    {
+        $groups = array(
+            self::POSITION_ABOVE  => array(),
+            self::POSITION_INSIDE => array(),
+            self::POSITION_BELOW  => array(),
+        );
+
+        foreach ($fields as $field) {
+            $position = self::normalizeFormPosition($field->form_position ?? self::POSITION_INSIDE);
+            $groups[$position][] = $field;
+        }
+
+        return $groups;
     }
 
     /**
@@ -202,9 +264,10 @@ class MjDynamicFields extends MjTools
             'other_label'          => sanitize_text_field($data['other_label'] ?? ''),
             'show_in_notes'        => !empty($data['show_in_notes']) ? 1 : 0,
             'youth_only'           => !empty($data['youth_only']) ? 1 : 0,
+            'form_position'        => self::normalizeFormPosition($data['form_position'] ?? self::POSITION_INSIDE),
             'options_list'         => $options_json,
             'sort_order'           => isset($data['sort_order']) ? (int) $data['sort_order'] : $max_order + 1,
-        ), array('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%s', '%d', '%d', '%s', '%d'));
+        ), array('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%s', '%d', '%d', '%s', '%s', '%d'));
 
         if ($inserted) {
             self::invalidateCache();
@@ -297,6 +360,11 @@ class MjDynamicFields extends MjTools
         if (isset($data['youth_only'])) {
             $fields['youth_only'] = !empty($data['youth_only']) ? 1 : 0;
             $formats[] = '%d';
+        }
+
+        if (isset($data['form_position'])) {
+            $fields['form_position'] = self::normalizeFormPosition($data['form_position']);
+            $formats[] = '%s';
         }
 
         if (isset($data['options_list'])) {

@@ -3001,6 +3001,10 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         echo '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
                         echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer un event', 'mj-member') . '</span>';
                         echo '</button>';
+                        echo '<button type="button" class="mj-member-events-calendar__day-add mj-member-events-calendar__day-add--occurrence" data-calendar-create-occurrence-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Créer une occurrence pour un événement existant', 'mj-member') . '" title="' . esc_attr__('Créer une occurrence pour un événement existant', 'mj-member') . '">';
+                        echo '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8m4-4H8"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>';
+                        echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer une occurrence', 'mj-member') . '</span>';
+                        echo '</button>';
                     }
 
                     echo '</div>';

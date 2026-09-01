@@ -1,0 +1,18 @@
+{
+  "name": "mj-member-vendor-build",
+  "private": true,
+  "description": "One-shot bundling of third-party front-end libraries vendored into the plugin (js/vendor, css/vendor). Not required for a normal composer install.",
+  "scripts": {
+    "build:vendor": "node scripts/build-schedule-x.mjs"
+  },
+  "devDependencies": {
+    "@schedule-x/calendar": "^2.30.0",
+    "@schedule-x/calendar-controls": "^2.30.0",
+    "@schedule-x/current-time": "^2.30.0",
+    "@schedule-x/drag-and-drop": "^2.30.0",
+    "@schedule-x/events-service": "^2.30.0",
+    "@schedule-x/resize": "^2.30.0",
+    "@schedule-x/theme-default": "^2.30.0",
+    "esbuild": "^0.25.0"
+  }
+}

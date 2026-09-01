@@ -13,6 +13,7 @@ use Mj\Member\Classes\Crud\MjTestimonialReactions;
 use Mj\Member\Classes\Crud\MjTestimonialComments;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\MjSocialMediaPublisher;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -41,10 +42,62 @@ final class TestimonialsController implements AjaxHandlerInterface {
         add_action('wp_ajax_mj_front_testimonial_reject', [$this, 'reject']);
         add_action('wp_ajax_mj_front_testimonial_pending_list', [$this, 'pendingList']);
         add_action('wp_ajax_mj_front_testimonial_search_events', [$this, 'searchEvents']);
+        add_action('wp_ajax_mj_front_testimonial_search_members', [$this, 'searchMembers']);
         add_action('wp_ajax_mj_front_testimonial_delete', [$this, 'delete']);
         add_action('wp_ajax_mj_front_testimonial_edit', [$this, 'edit']);
         add_action('wp_ajax_mj_front_testimonial_toggle_featured', [$this, 'toggleFeatured']);
+        add_action('wp_ajax_mj_front_testimonial_publish_social', [$this, 'publishSocial']);
         add_action('template_redirect', [$this, 'renderShareBridgePage']);
+        add_filter('query_vars',        [$this, 'addQueryVars']);
+        add_action('init',              [$this, 'registerTestimonialRewrite'], 20);
+    }
+
+    public function addQueryVars(array $vars): array {
+        $vars[] = 'mj_testimonial_id';
+        return $vars;
+    }
+
+    public function registerTestimonialRewrite(): void {
+        global $mj_testimonial_clean_urls_active;
+
+        add_rewrite_tag('%mj_testimonial_id%', '([0-9]+)');
+
+        $uri = (string) get_option('mj_member_testimonials_page_uri', '');
+        if ($uri === '') {
+            $pages = get_posts(array(
+                'post_type'      => 'page',
+                'name'           => 'temoignages',
+                'posts_per_page' => 1,
+                'post_status'    => 'publish',
+                'no_found_rows'  => true,
+                'fields'         => 'ids',
+            ));
+            if (!empty($pages)) {
+                $uri = get_page_uri((int) $pages[0]);
+                if ($uri !== '') {
+                    update_option('mj_member_testimonials_page_uri', $uri, false);
+                }
+            }
+        }
+
+        if ($uri === '') {
+            $mj_testimonial_clean_urls_active = false;
+            return;
+        }
+
+        $pattern = '^' . preg_quote($uri, '/') . '/([0-9]+)(?:/[^/]+)?/?$';
+        $target  = 'index.php?pagename=' . $uri . '&mj_testimonial_id=$matches[1]';
+
+        // Check BEFORE flushing: is the rule already active in the stored rules?
+        $stored = (array) get_option('rewrite_rules', array());
+        $mj_testimonial_clean_urls_active = isset($stored[$pattern]);
+
+        add_rewrite_rule($pattern, $target, 'top');
+
+        // Flush once to make the rule effective for the next request
+        if (!$mj_testimonial_clean_urls_active) {
+            flush_rewrite_rules(false);
+        }
     }
 
     /**
@@ -87,13 +140,15 @@ final class TestimonialsController implements AjaxHandlerInterface {
 
         $this->renderOgHtmlDocument(
             array(
-                'title' => $og_data['title'],
-                'description' => $og_data['description'],
-                'image' => $og_data['image'],
-                'og_url' => $share_url,
+                'title'        => $og_data['title'],
+                'description'  => $og_data['description'],
+                'image'        => $og_data['image'],
+                'images'       => $og_data['images'] ?? array(),
+                'videos'       => $og_data['videos'] ?? array(),
+                'og_url'       => $share_url,
                 'canonical_url' => $share_url,
                 'redirect_url' => $this->isSocialCrawlerRequest() ? '' : $target_url,
-                'fb_app_id' => $this->getFacebookAppId(),
+                'fb_app_id'    => $this->getFacebookAppId(),
             )
         );
     }
@@ -111,7 +166,10 @@ final class TestimonialsController implements AjaxHandlerInterface {
             return;
         }
 
-        $testimonial_id = isset($_GET['post']) ? (int) $_GET['post'] : 0;
+        $testimonial_id = (int) get_query_var('mj_testimonial_id', 0);
+        if ($testimonial_id <= 0) {
+            $testimonial_id = isset($_GET['post']) ? (int) $_GET['post'] : 0;
+        }
         if ($testimonial_id <= 0) {
             return;
         }
@@ -126,12 +184,14 @@ final class TestimonialsController implements AjaxHandlerInterface {
 
         $this->renderOgHtmlDocument(
             array(
-                'title' => $og_data['title'],
-                'description' => $og_data['description'],
-                'image' => $og_data['image'],
-                'og_url' => $current_url,
+                'title'        => $og_data['title'],
+                'description'  => $og_data['description'],
+                'image'        => $og_data['image'],
+                'images'       => $og_data['images'] ?? array(),
+                'videos'       => $og_data['videos'] ?? array(),
+                'og_url'       => $current_url,
                 'canonical_url' => $current_url,
-                'fb_app_id' => $this->getFacebookAppId(),
+                'fb_app_id'    => $this->getFacebookAppId(),
             )
         );
     }
@@ -151,7 +211,13 @@ final class TestimonialsController implements AjaxHandlerInterface {
             }
         }
 
-        $content_text = isset($testimonial->content) ? trim(wp_strip_all_tags((string) $testimonial->content)) : '';
+        $raw_content = isset($testimonial->content) ? (string) $testimonial->content : '';
+        // Strip @{id} member tokens and #event-slug mentions before exposing as OG description
+        $content_text = preg_replace('/@\{\d+\}/', '', $raw_content);
+        $content_text = preg_replace('/#([a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)\b/i', '', $content_text);
+        $content_text = trim(wp_strip_all_tags($content_text));
+        $content_text = preg_replace('/\s{2,}/', ' ', $content_text);
+
         $og_title = $author_name
             ? sprintf(__('Témoignage de %s', 'mj-member'), $author_name)
             : __('Témoignage', 'mj-member');
@@ -159,34 +225,48 @@ final class TestimonialsController implements AjaxHandlerInterface {
             ? wp_html_excerpt($content_text, 220, '...')
             : __('Découvrez ce témoignage partagé sur MJ Pery.', 'mj-member');
 
-        $og_image = '';
+        // Collect all photo URLs for og:image (multiple allowed by spec)
+        $og_images = array();
         $photos = MjTestimonials::get_photo_urls($testimonial, 'large');
-        if (!empty($photos) && isset($photos[0]['full']) && is_string($photos[0]['full'])) {
-            $og_image = $photos[0]['full'];
-        }
-
-        if ($og_image === '') {
-            $video = MjTestimonials::get_video_data($testimonial);
-            if (is_array($video) && !empty($video['poster']) && is_string($video['poster'])) {
-                $og_image = $video['poster'];
+        foreach ($photos as $p) {
+            if (!empty($p['full']) && is_string($p['full'])) {
+                $og_images[] = $p['full'];
             }
         }
 
-        if ($og_image === '' && isset($testimonial->member_photo_id) && (int) $testimonial->member_photo_id > 0) {
+        // Collect video URLs and posters for og:video
+        $og_videos = array();
+        $videos = MjTestimonials::get_videos_data($testimonial);
+        foreach ($videos as $v) {
+            if (!empty($v['url']) && is_string($v['url'])) {
+                $og_videos[] = array('url' => $v['url'], 'poster' => $v['poster'] ?? '');
+            }
+            // Use video poster as additional og:image fallback
+            if (empty($og_images) && !empty($v['poster']) && is_string($v['poster'])) {
+                $og_images[] = $v['poster'];
+            }
+        }
+
+        if (empty($og_images) && isset($testimonial->member_photo_id) && (int) $testimonial->member_photo_id > 0) {
             $avatar_src = wp_get_attachment_image_src((int) $testimonial->member_photo_id, 'large');
             if ($avatar_src && isset($avatar_src[0])) {
-                $og_image = (string) $avatar_src[0];
+                $og_images[] = (string) $avatar_src[0];
             }
         }
 
-        if ($og_image === '') {
-            $og_image = (string) wp_get_site_icon_url(512);
+        if (empty($og_images)) {
+            $site_icon = (string) wp_get_site_icon_url(512);
+            if ($site_icon !== '') {
+                $og_images[] = $site_icon;
+            }
         }
 
         return array(
-            'title' => $og_title,
+            'title'       => $og_title,
             'description' => $og_description,
-            'image' => $og_image,
+            'image'       => $og_images[0] ?? '',
+            'images'      => $og_images,
+            'videos'      => $og_videos,
         );
     }
 
@@ -194,13 +274,19 @@ final class TestimonialsController implements AjaxHandlerInterface {
      * @return array<string,mixed> $data
      */
     private function renderOgHtmlDocument(array $data): void {
-        $title = isset($data['title']) ? (string) $data['title'] : __('Témoignage', 'mj-member');
-        $description = isset($data['description']) ? (string) $data['description'] : '';
-        $image = isset($data['image']) ? (string) $data['image'] : '';
-        $og_url = isset($data['og_url']) ? (string) $data['og_url'] : home_url('/');
+        $title        = isset($data['title']) ? (string) $data['title'] : __('Témoignage', 'mj-member');
+        $description  = isset($data['description']) ? (string) $data['description'] : '';
+        $og_url       = isset($data['og_url']) ? (string) $data['og_url'] : home_url('/');
         $canonical_url = isset($data['canonical_url']) ? (string) $data['canonical_url'] : $og_url;
         $redirect_url = isset($data['redirect_url']) ? (string) $data['redirect_url'] : '';
-        $fb_app_id = isset($data['fb_app_id']) ? preg_replace('/[^0-9]/', '', (string) $data['fb_app_id']) : '';
+        $fb_app_id    = isset($data['fb_app_id']) ? preg_replace('/[^0-9]/', '', (string) $data['fb_app_id']) : '';
+        $images       = isset($data['images']) && is_array($data['images']) ? $data['images'] : array();
+        $videos       = isset($data['videos']) && is_array($data['videos']) ? $data['videos'] : array();
+        // Backward compat: single 'image' key
+        if (empty($images) && isset($data['image']) && (string) $data['image'] !== '') {
+            $images = array((string) $data['image']);
+        }
+        $first_image = $images[0] ?? '';
 
         nocache_headers();
         ?>
@@ -217,14 +303,23 @@ final class TestimonialsController implements AjaxHandlerInterface {
     <?php if ($fb_app_id !== '') : ?>
     <meta property="fb:app_id" content="<?php echo esc_attr($fb_app_id); ?>">
     <?php endif; ?>
-    <?php if ($image !== '') : ?>
-    <meta property="og:image" content="<?php echo esc_url($image); ?>">
+    <?php foreach ($images as $img_url) : if (!is_string($img_url) || $img_url === '') continue; ?>
+    <meta property="og:image" content="<?php echo esc_url($img_url); ?>">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <?php endforeach; ?>
+    <?php foreach ($videos as $vid) : if (!is_array($vid) || empty($vid['url'])) continue; ?>
+    <meta property="og:video" content="<?php echo esc_url($vid['url']); ?>">
+    <meta property="og:video:type" content="video/mp4">
+    <?php if (!empty($vid['poster'])) : ?>
+    <meta property="og:video:image" content="<?php echo esc_url($vid['poster']); ?>">
     <?php endif; ?>
-    <meta name="twitter:card" content="summary_large_image">
+    <?php endforeach; ?>
+    <meta name="twitter:card" content="<?php echo !empty($videos) ? 'player' : 'summary_large_image'; ?>">
     <meta name="twitter:title" content="<?php echo esc_attr($title); ?>">
     <meta name="twitter:description" content="<?php echo esc_attr($description); ?>">
-    <?php if ($image !== '') : ?>
-    <meta name="twitter:image" content="<?php echo esc_url($image); ?>">
+    <?php if ($first_image !== '') : ?>
+    <meta name="twitter:image" content="<?php echo esc_url($first_image); ?>">
     <?php endif; ?>
     <?php if ($redirect_url !== '') : ?>
     <meta http-equiv="refresh" content="0;url=<?php echo esc_url($redirect_url); ?>">
@@ -314,9 +409,9 @@ final class TestimonialsController implements AjaxHandlerInterface {
         // Parse content
         $content = isset($_POST['content']) ? wp_kses_post(wp_unslash($_POST['content'])) : '';
 
-        // Prepend @slug to content when submitted from an event page
+        // Prepend #slug to content when submitted from an event page
         if ($event_slug !== '' && $content !== '') {
-            $mention = '@' . $event_slug;
+            $mention = '#' . $event_slug;
             // Only prepend if not already present
             if (strpos($content, $mention) === false) {
                 $content = $mention . ' ' . $content;
@@ -337,8 +432,20 @@ final class TestimonialsController implements AjaxHandlerInterface {
             }
         }
 
-        // Parse video ID
-        $video_id = isset($_POST['video_id']) ? (int) $_POST['video_id'] : 0;
+        // Parse video IDs (multi-video: JSON array; fallback to legacy single video_id)
+        $video_ids = array();
+        if (isset($_POST['video_ids'])) {
+            $raw_vids = wp_unslash($_POST['video_ids']);
+            if (is_string($raw_vids)) {
+                $decoded = json_decode($raw_vids, true);
+                if (is_array($decoded)) $video_ids = array_values(array_filter(array_map('intval', $decoded)));
+            } elseif (is_array($raw_vids)) {
+                $video_ids = array_values(array_filter(array_map('intval', $raw_vids)));
+            }
+        }
+        if (empty($video_ids) && isset($_POST['video_id']) && (int) $_POST['video_id'] > 0) {
+            $video_ids = array((int) $_POST['video_id']);
+        }
 
         // Parse link preview
         $link_preview = null;
@@ -347,7 +454,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
         }
 
         // Validate that at least some content exists
-        if (empty($content) && empty($photo_ids) && $video_id <= 0) {
+        if (empty($content) && empty($photo_ids) && empty($video_ids)) {
             wp_send_json_error(__('Veuillez ajouter du texte, des photos ou une vidéo.', 'mj-member'), 400);
         }
 
@@ -360,7 +467,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
             'member_id' => $member_id,
             'content' => $content,
             'photo_ids' => $photo_ids,
-            'video_id' => $video_id > 0 ? $video_id : null,
+            'video_ids' => $video_ids,
             'link_preview' => $link_preview,
             'status' => $initial_status,
         );
@@ -415,7 +522,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
 
         foreach ($testimonials as $t) {
             $photos = MjTestimonials::get_photo_urls($t, 'large');
-            $video = MjTestimonials::get_video_data($t);
+            $videos = MjTestimonials::get_videos_data($t);
 
             $member_name = '';
             $member_initial = '?';
@@ -444,15 +551,18 @@ final class TestimonialsController implements AjaxHandlerInterface {
 
             $items[] = array(
                 'id' => (int) $t->id,
-                'content' => isset($t->content) ? self::linkifyEventMentions($t->content) : '',
+                'content' => isset($t->content) ? self::linkifyMemberMentions(self::linkifyEventMentions($t->content)) : '',
+                'rawContent' => isset($t->content) ? $t->content : '',
                 'photos' => $photos,
-                'video' => $video,
+                'videos' => $videos,
                 'linkPreview' => $link_preview,
+                'memberId' => isset($t->member_id) ? (int) $t->member_id : 0,
                 'memberName' => $member_name,
                 'memberInitial' => $member_initial,
                 'memberAvatarUrl' => $member_avatar_url,
                 'createdAgo' => $created_ago,
                 'createdAt' => isset($t->created_at) ? $t->created_at : '',
+                'mentionedMembers' => isset($t->content) ? self::extractMentionedMembers($t->content) : array(),
             );
         }
 
@@ -631,7 +741,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
 
             $items[] = array(
                 'id' => (int) $t->id,
-                'content' => isset($t->content) ? self::linkifyEventMentions($t->content) : '',
+                'content' => isset($t->content) ? self::linkifyMemberMentions(self::linkifyEventMentions($t->content)) : '',
                 'photos' => $photos,
                 'video' => $video,
                 'status' => $status_key,
@@ -1088,7 +1198,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
 
             $items[] = array(
                 'id' => (int) $t->id,
-                'content' => isset($t->content) ? self::linkifyEventMentions($t->content) : '',
+                'content' => isset($t->content) ? self::linkifyMemberMentions(self::linkifyEventMentions($t->content)) : '',
                 'photos' => $photos,
                 'video' => $video,
                 'linkPreview' => $link_preview,
@@ -1109,10 +1219,55 @@ final class TestimonialsController implements AjaxHandlerInterface {
     }
 
     /**
-     * AJAX: Search events for @mention autocomplete in testimonials.
+     * AJAX: Search members for @mention autocomplete in testimonials.
+     */
+    public function searchMembers() {
+        check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+        $search = isset($_POST['search']) ? sanitize_text_field(wp_unslash($_POST['search'])) : '';
+        if (mb_strlen($search) < 1) {
+            wp_send_json_success(array('members' => array()));
+        }
+
+        $members = MjMembers::get_all(array(
+            'search' => $search,
+            'orderby' => 'last_name',
+            'order' => 'ASC',
+            'limit' => 10,
+        ));
+
+        $items = array();
+        foreach ($members as $m) {
+            if (!isset($m->id) || !isset($m->first_name)) {
+                continue;
+            }
+            $name = $m->first_name;
+            if (isset($m->last_name) && $m->last_name !== '') {
+                $name .= ' ' . mb_strtoupper(mb_substr($m->last_name, 0, 1)) . '.';
+            }
+            $avatar_url = '';
+            if (isset($m->photo_id) && $m->photo_id) {
+                $src = wp_get_attachment_image_src((int) $m->photo_id, 'thumbnail');
+                if ($src) {
+                    $avatar_url = $src[0];
+                }
+            }
+            $items[] = array(
+                'id'        => (int) $m->id,
+                'name'      => $name,
+                'initial'   => mb_strtoupper(mb_substr($m->first_name, 0, 1)),
+                'avatarUrl' => $avatar_url,
+            );
+        }
+
+        wp_send_json_success(array('members' => $items));
+    }
+
+    /**
+     * AJAX: Search events for #mention autocomplete in testimonials.
      *
      * Returns a list of events matching the search query (title or slug).
-     * Used by the front-end autocomplete when users type @.
+     * Used by the front-end autocomplete when users type #.
      */
     public function searchEvents() {
         check_ajax_referer('mj-testimonial-submit', '_wpnonce');
@@ -1247,15 +1402,42 @@ final class TestimonialsController implements AjaxHandlerInterface {
             }
         }
 
-        // Parse video_id if provided (0 = remove, >0 = set)
-        if (isset($_POST['video_id'])) {
-            $update_data['video_id'] = (int) $_POST['video_id'];
+        // Parse video_ids (multi-video); fallback to legacy video_id
+        if (isset($_POST['video_ids'])) {
+            $raw_vids = wp_unslash($_POST['video_ids']);
+            $decoded_vids = is_string($raw_vids) ? json_decode($raw_vids, true) : (is_array($raw_vids) ? $raw_vids : array());
+            $update_data['video_ids'] = is_array($decoded_vids)
+                ? array_values(array_filter(array_map('intval', $decoded_vids)))
+                : array();
+        } elseif (isset($_POST['video_id'])) {
+            $vid = (int) $_POST['video_id'];
+            $update_data['video_ids'] = $vid > 0 ? array($vid) : array();
+        }
+
+        // Animator-only fields
+        if ($is_animator) {
+            if (!empty($_POST['created_at'])) {
+                $raw_date = sanitize_text_field(wp_unslash($_POST['created_at']));
+                $dt = \DateTime::createFromFormat('Y-m-d\TH:i', $raw_date);
+                if ($dt) {
+                    $update_data['created_at'] = $dt->format('Y-m-d H:i:s');
+                }
+            }
+            if (!empty($_POST['new_member_id'])) {
+                $new_member_id = (int) $_POST['new_member_id'];
+                if ($new_member_id > 0) {
+                    $new_member = MjMembers::getById($new_member_id);
+                    if ($new_member) {
+                        $update_data['member_id'] = $new_member_id;
+                    }
+                }
+            }
         }
 
         // Must have at least content or media
         $has_content   = !empty(trim($content));
         $has_photos    = isset($update_data['photo_ids']) ? !empty($update_data['photo_ids']) : !empty(MjTestimonials::parse_photo_ids($testimonial));
-        $has_video     = isset($update_data['video_id']) ? ($update_data['video_id'] > 0) : ((int)($testimonial->video_id ?? 0) > 0);
+        $has_video     = isset($update_data['video_ids']) ? !empty($update_data['video_ids']) : !empty(MjTestimonials::parse_video_ids($testimonial));
 
         if (!$has_content && !$has_photos && !$has_video) {
             wp_send_json_error(__('Le témoignage doit contenir au moins du texte, une photo ou une vidéo.', 'mj-member'), 400);
@@ -1276,7 +1458,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
         $final_content = $fresh->content ?? $content;
 
         // Return the linkified HTML so JS can update the DOM
-        $html_content = wp_kses_post(wpautop(self::linkifyEventMentions($final_content)));
+        $html_content = wp_kses_post(wpautop(self::linkifyMemberMentions(self::linkifyEventMentions($final_content))));
 
         // Build photos array for JS
         $photos = MjTestimonials::get_photo_urls($fresh, 'large');
@@ -1284,42 +1466,48 @@ final class TestimonialsController implements AjaxHandlerInterface {
             return array('id' => $p['id'], 'url' => $p['url'], 'full' => $p['full']);
         }, $photos);
 
-        // Build video data for JS
-        $video = MjTestimonials::get_video_data($fresh);
-        $video_for_js = $video ? array('id' => $video['id'], 'url' => $video['url']) : null;
+        // Build videos array for JS
+        $videos = MjTestimonials::get_videos_data($fresh);
+        $videos_for_js = array_map(function($v) { return array('id' => $v['id'], 'url' => $v['url']); }, $videos);
 
-        // Build photos HTML for DOM replacement
-        $photos_html = '';
-        if (!empty($photos)) {
-            $photos_html .= '<div class="mj-feed-post__media mj-feed-post__media--photos-' . min(count($photos), 5) . '">';
-            foreach (array_slice($photos, 0, 5) as $index => $photo) {
-                $photos_html .= '<a href="' . esc_url($photo['full']) . '" class="mj-feed-post__photo" data-lightbox="post-' . $testimonial_id . '">';
-                $photos_html .= '<img src="' . esc_url($photo['url']) . '" alt="" loading="lazy">';
-                if ($index === 4 && count($photos) > 5) {
-                    $photos_html .= '<span class="mj-feed-post__photo-more">+' . (count($photos) - 5) . '</span>';
-                }
-                $photos_html .= '</a>';
+        $slider_html = self::buildMediaSliderHtml($photos, $videos, $testimonial_id);
+
+        $mentioned_members = self::extractMentionedMembers($final_content);
+        $mentioned_members_html = self::buildMentionedMembersHtml($mentioned_members);
+
+        // Build updated member info for response
+        $fresh_member = MjMembers::getById((int) $fresh->member_id);
+        $new_member_name = '';
+        $new_member_initial = '';
+        $new_member_avatar_url = '';
+        if ($fresh_member) {
+            $new_member_name = trim(($fresh_member->first_name ?? '') . ' ' . ($fresh_member->last_name ?? ''));
+            $new_member_initial = $new_member_name ? mb_strtoupper(mb_substr($new_member_name, 0, 1)) : '?';
+            $photo_id = $fresh_member->photo_id ?? 0;
+            if ($photo_id) {
+                $src = wp_get_attachment_image_src((int) $photo_id, 'thumbnail');
+                if ($src) $new_member_avatar_url = $src[0];
             }
-            $photos_html .= '</div>';
         }
 
-        // Build video HTML for DOM replacement
-        $video_html = '';
-        if ($video) {
-            $video_html = '<div class="mj-feed-post__media mj-feed-post__media--video">';
-            $video_html .= '<video controls playsinline poster="' . esc_url($video['poster']) . '">';
-            $video_html .= '<source src="' . esc_url($video['url']) . '" type="video/mp4">';
-            $video_html .= '</video></div>';
-        }
+        $new_created_at = $fresh->created_at ?? '';
+        $new_created_ago = $new_created_at ? human_time_diff(strtotime($new_created_at), current_time('timestamp')) : '';
 
         wp_send_json_success(array(
-            'message'     => __('Témoignage modifié.', 'mj-member'),
-            'content'     => $final_content,
-            'contentHtml' => $html_content,
-            'photos'      => $photos_for_js,
-            'photosHtml'  => $photos_html,
-            'video'       => $video_for_js,
-            'videoHtml'   => $video_html,
+            'message'              => __('Témoignage modifié.', 'mj-member'),
+            'content'              => $final_content,
+            'contentHtml'         => $html_content,
+            'photos'              => $photos_for_js,
+            'videos'              => $videos_for_js,
+            'sliderHtml'          => $slider_html,
+            'mentionedMembers'    => $mentioned_members,
+            'mentionedMembersHtml' => $mentioned_members_html,
+            'newMemberId'         => (int) $fresh->member_id,
+            'newMemberName'       => $new_member_name,
+            'newMemberInitial'    => $new_member_initial,
+            'newMemberAvatarUrl'  => $new_member_avatar_url,
+            'newCreatedAt'        => $new_created_at,
+            'newCreatedAgo'       => $new_created_ago,
         ));
     }
 
@@ -1365,15 +1553,192 @@ final class TestimonialsController implements AjaxHandlerInterface {
     }
 
     /**
+     * AJAX: Publish a testimonial to one or more social platforms (animators/coordinators only).
+     */
+    public function publishSocial(): void {
+        check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+        $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+        if (!$current_member || !isset($current_member->id)) {
+            wp_send_json_error(__('Vous devez être connecté.', 'mj-member'));
+        }
+
+        $member_role = isset($current_member->role) ? $current_member->role : null;
+        if (!$member_role || !in_array($member_role, array('animateur', 'coordinateur'), true)) {
+            wp_send_json_error(__('Accès refusé.', 'mj-member'));
+        }
+
+        $testimonial_id = isset($_POST['testimonial_id']) ? (int) $_POST['testimonial_id'] : 0;
+        if ($testimonial_id <= 0) {
+            wp_send_json_error(__('Témoignage invalide.', 'mj-member'));
+        }
+
+        $testimonial = MjTestimonials::get_by_id($testimonial_id);
+        if (!$testimonial) {
+            wp_send_json_error(__('Témoignage introuvable.', 'mj-member'));
+        }
+
+        $message = isset($_POST['message']) ? sanitize_textarea_field(wp_unslash($_POST['message'])) : '';
+        if (empty(trim($message))) {
+            wp_send_json_error(__('Le message ne peut pas être vide.', 'mj-member'));
+        }
+
+        // Parse selected platforms (whitelist)
+        $platforms = array();
+        if (isset($_POST['platforms']) && is_array($_POST['platforms'])) {
+            foreach ($_POST['platforms'] as $p) {
+                $p = sanitize_key($p);
+                if (in_array($p, array('facebook', 'instagram'), true)) {
+                    $platforms[] = $p;
+                }
+            }
+        }
+        if (empty($platforms)) {
+            wp_send_json_error(__('Sélectionnez au moins une plateforme.', 'mj-member'));
+        }
+
+        // Parse selected photo IDs → URLs
+        $image_urls = array();
+        $selected_photo_ids = array();
+        if (isset($_POST['photo_ids'])) {
+            $raw = wp_unslash($_POST['photo_ids']);
+            $decoded = is_string($raw) ? json_decode($raw, true) : (is_array($raw) ? $raw : array());
+            if (is_array($decoded)) {
+                $selected_photo_ids = array_values(array_filter(array_map('intval', $decoded)));
+            }
+        }
+        foreach ($selected_photo_ids as $photo_id) {
+            $src = wp_get_attachment_image_src($photo_id, 'large');
+            if ($src && !empty($src[0])) {
+                $image_urls[] = (string) $src[0];
+            }
+        }
+
+        // Build link block
+        $include_post_url    = !empty($_POST['include_post_url']);
+        $include_event_urls  = !empty($_POST['include_event_urls']);
+
+        $post_url = '';
+        if ($include_post_url) {
+            $post_url = isset($_POST['post_url']) ? esc_url_raw(wp_unslash($_POST['post_url'])) : '';
+            if ($post_url === '' || !wp_http_validate_url($post_url)) {
+                $post_url = home_url('/mon-compte/temoignages/?section=testimonials&post=' . $testimonial_id);
+            }
+        }
+
+        $extra_urls = array();
+        if ($include_event_urls && isset($testimonial->content)) {
+            $extra_urls = $this->extractMentionedEventUrls((string) $testimonial->content);
+        }
+
+        $link_parts = array_filter(array_merge(
+            $post_url !== '' ? array($post_url) : array(),
+            $extra_urls
+        ));
+        $link = implode("\n", $link_parts);
+
+        // Publish to each platform
+        $publisher    = new MjSocialMediaPublisher();
+        $results      = array();
+        $has_error    = false;
+        $settings_url = admin_url('admin.php?page=mj_settings');
+
+        if (in_array('facebook', $platforms, true)) {
+            $fb_result = $publisher->publishToFacebook($message, $link, $image_urls);
+            if (is_wp_error($fb_result)) {
+                $err_data     = $fb_result->get_error_data() ?: array();
+                $token_expired = !empty($err_data['tokenExpired']);
+                $results['facebook'] = array(
+                    'success'      => false,
+                    'message'      => $fb_result->get_error_message(),
+                    'tokenExpired' => $token_expired,
+                    'settingsUrl'  => $token_expired ? $settings_url : '',
+                );
+                $has_error = true;
+            } else {
+                $results['facebook'] = array('success' => true, 'message' => $fb_result['message'] ?? __('Publié !', 'mj-member'));
+            }
+        }
+
+        if (in_array('instagram', $platforms, true)) {
+            $ig_image  = $image_urls[0] ?? '';
+            $ig_result = $publisher->publishToInstagram($message, $link, $ig_image);
+            if (is_wp_error($ig_result)) {
+                $err_data     = $ig_result->get_error_data() ?: array();
+                $token_expired = !empty($err_data['tokenExpired']);
+                $results['instagram'] = array(
+                    'success'      => false,
+                    'message'      => $ig_result->get_error_message(),
+                    'tokenExpired' => $token_expired,
+                    'settingsUrl'  => $token_expired ? $settings_url : '',
+                );
+                $has_error = true;
+            } else {
+                $results['instagram'] = array('success' => true, 'message' => $ig_result['message'] ?? __('Publié !', 'mj-member'));
+            }
+        }
+
+        wp_send_json_success(array(
+            'results'  => $results,
+            'hasError' => $has_error,
+            'message'  => $has_error
+                ? __('Publication partielle — vérifiez les résultats ci-dessous.', 'mj-member')
+                : __('Publié avec succès sur toutes les plateformes !', 'mj-member'),
+        ));
+    }
+
+    /**
+     * Extract permalinks for all #event-slug mentions in content.
+     *
+     * @return string[]
+     */
+    private function extractMentionedEventUrls(string $content): array {
+        if (!preg_match_all('/#([a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)\b/i', $content, $matches)) {
+            return array();
+        }
+        $urls = array();
+        foreach (array_unique($matches[1]) as $slug) {
+            $slug  = sanitize_title($slug);
+            $event = $slug !== '' ? MjEvents::find_by_slug($slug) : null;
+            if (!$event) {
+                continue;
+            }
+            $permalink = function_exists('mj_member_build_event_permalink')
+                ? mj_member_build_event_permalink($slug)
+                : '';
+            if ($permalink !== '') {
+                $urls[] = $permalink;
+            }
+        }
+        return $urls;
+    }
+
+    /**
+     * Return array of configured social platforms keys ('facebook', 'instagram').
+     *
+     * @return string[]
+     */
+    public static function getConfiguredPlatforms(): array {
+        $platforms = array();
+        if (get_option('mj_social_facebook_page_token', '') !== '' && get_option('mj_social_facebook_page_id', '') !== '') {
+            $platforms[] = 'facebook';
+        }
+        if (get_option('mj_social_instagram_access_token', '') !== '' && get_option('mj_social_instagram_business_id', '') !== '') {
+            $platforms[] = 'instagram';
+        }
+        return $platforms;
+    }
+
+    /**
      * Convert @event-slug mentions in testimonial content to clickable links.
      *
      * @param string $content The raw testimonial content.
      * @return string Content with @mentions converted to links.
      */
     public static function linkifyEventMentions(string $content): string {
-        // Match @followed-by-slug-chars (letters, digits, hyphens)
+        // Match #followed-by-slug-chars (letters, digits, hyphens)
         return preg_replace_callback(
-            '/@([a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)\b/i',
+            '/#([a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)\b/i',
             function ($matches) {
                 $slug = sanitize_title($matches[1]);
                 if ($slug === '') {
@@ -1400,6 +1765,161 @@ final class TestimonialsController implements AjaxHandlerInterface {
             },
             $content
         );
+    }
+
+    /**
+     * Convert @{member_id} tokens to inline member mention spans.
+     *
+     * @param string $content Raw testimonial content.
+     * @return string Content with @{id} tokens replaced by HTML spans.
+     */
+    public static function linkifyMemberMentions(string $content): string {
+        // Strip @{id} tokens from displayed text — members appear only in the chips below.
+        return preg_replace('/@\{(\d+)\}/', '', $content);
+    }
+
+    /**
+     * Extract data for all members mentioned via @{id} in the content.
+     *
+     * @param string $content Raw testimonial content.
+     * @return array Array of ['id', 'name', 'initial', 'avatarUrl'].
+     */
+    public static function extractMentionedMembers(string $content): array {
+        if (!preg_match_all('/@\{(\d+)\}/', $content, $matches)) {
+            return array();
+        }
+        $ids = array_unique(array_map('intval', $matches[1]));
+        $result = array();
+        foreach ($ids as $id) {
+            $member = MjMembers::getById($id);
+            if (!$member || !isset($member->first_name)) {
+                continue;
+            }
+            $name = $member->first_name;
+            if (isset($member->last_name) && $member->last_name !== '') {
+                $name .= ' ' . mb_strtoupper(mb_substr($member->last_name, 0, 1)) . '.';
+            }
+            $avatar_url = '';
+            if (isset($member->photo_id) && $member->photo_id) {
+                $src = wp_get_attachment_image_src((int) $member->photo_id, 'thumbnail');
+                if ($src) {
+                    $avatar_url = $src[0];
+                }
+            }
+            $result[] = array(
+                'id'        => $id,
+                'name'      => $name,
+                'initial'   => mb_strtoupper(mb_substr($member->first_name, 0, 1)),
+                'avatarUrl' => $avatar_url,
+            );
+        }
+        return $result;
+    }
+
+    /**
+     * Build the unified media slider HTML (photos + video as slides).
+     *
+     * All values are escaped via esc_url/esc_attr — output can be echoed directly.
+     *
+     * @param array      $photos  From MjTestimonials::get_photo_urls() — each has 'url', 'full'.
+     * @param array|null $video   From MjTestimonials::get_video_data() — has 'url', 'poster'.
+     * @param int|string $post_id Used for the lightbox group attribute.
+     * @return string
+     */
+    public static function buildMediaSliderHtml(array $photos, $videos_or_video, $post_id): string {
+        // Accept either an array of video objects (multi) or a single video object (legacy)
+        $videos = array();
+        if (is_array($videos_or_video)) {
+            if (!empty($videos_or_video) && isset($videos_or_video[0]) && is_array($videos_or_video[0])) {
+                $videos = $videos_or_video; // already an array of video objects
+            } elseif (!empty($videos_or_video) && isset($videos_or_video['url'])) {
+                $videos = array($videos_or_video); // single video object wrapped
+            }
+        }
+
+        $slides = array();
+        foreach ($photos as $photo) {
+            if (!empty($photo['url'])) {
+                $slides[] = array(
+                    'type' => 'photo',
+                    'url'  => $photo['url'],
+                    'full' => $photo['full'] ?? $photo['url'],
+                );
+            }
+        }
+        foreach ($videos as $video) {
+            if (!empty($video['url'])) {
+                $slides[] = array(
+                    'type'   => 'video',
+                    'url'    => $video['url'],
+                    'poster' => $video['poster'] ?? '',
+                );
+            }
+        }
+        if (empty($slides)) {
+            return '';
+        }
+
+        $total = count($slides);
+        $html  = '<div class="mj-feed-post__slider" data-index="0" data-total="' . esc_attr($total) . '">';
+        $html .= '<div class="mj-feed-post__slider-track">';
+
+        foreach ($slides as $slide) {
+            $html .= '<div class="mj-feed-post__slide">';
+            if ($slide['type'] === 'photo') {
+                $html .= '<a href="' . esc_url($slide['full']) . '" class="mj-feed-post__slide-link" data-lightbox="post-' . esc_attr($post_id) . '">';
+                $html .= '<img src="' . esc_url($slide['url']) . '" alt="" loading="lazy">';
+                $html .= '</a>';
+            } else {
+                $poster = !empty($slide['poster']) ? ' poster="' . esc_url($slide['poster']) . '"' : '';
+                $html .= '<video controls playsinline' . $poster . '>';
+                $html .= '<source src="' . esc_url($slide['url']) . '" type="video/mp4">';
+                $html .= '</video>';
+            }
+            $html .= '</div>';
+        }
+
+        $html .= '</div>'; // .mj-feed-post__slider-track
+
+        if ($total > 1) {
+            $prev_svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+            $next_svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+            $html .= '<button type="button" class="mj-feed-post__slider-btn mj-feed-post__slider-btn--prev" aria-label="Précédent" style="display:none;">' . $prev_svg . '</button>';
+            $html .= '<button type="button" class="mj-feed-post__slider-btn mj-feed-post__slider-btn--next" aria-label="Suivant">' . $next_svg . '</button>';
+            $html .= '<div class="mj-feed-post__slider-dots">';
+            for ($i = 0; $i < $total; $i++) {
+                $html .= '<span class="mj-feed-post__slider-dot' . ($i === 0 ? ' is-active' : '') . '" data-index="' . $i . '"></span>';
+            }
+            $html .= '</div>';
+        }
+
+        $html .= '</div>'; // .mj-feed-post__slider
+        return $html;
+    }
+
+    /**
+     * Build the HTML block for the mentioned members section.
+     *
+     * @param array $members Result of extractMentionedMembers().
+     * @return string HTML string or empty string.
+     */
+    public static function buildMentionedMembersHtml(array $members): string {
+        if (empty($members)) {
+            return '';
+        }
+        $html = '<div class="mj-feed-post__member-mentions">';
+        foreach ($members as $m) {
+            $html .= '<div class="mj-feed-post__member-mention-chip">';
+            if (!empty($m['avatarUrl'])) {
+                $html .= '<img src="' . esc_url($m['avatarUrl']) . '" alt="" class="mj-feed-post__member-mention-avatar" loading="lazy">';
+            } else {
+                $html .= '<span class="mj-feed-post__member-mention-initial">' . esc_html($m['initial'] ?? '?') . '</span>';
+            }
+            $html .= '<span class="mj-feed-post__member-mention-name">' . esc_html($m['name']) . '</span>';
+            $html .= '</div>';
+        }
+        $html .= '</div>';
+        return $html;
     }
 
     /**

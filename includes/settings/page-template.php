@@ -34,6 +34,7 @@ if (!defined('ABSPATH')) {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-dynfields" data-tab-target="dynfields" role="tab" aria-controls="mj-tab-dynfields" aria-selected="false">📊 Données dynamiques</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-webpush" data-tab-target="webpush" role="tab" aria-controls="mj-tab-webpush" aria-selected="false">🔔 Web Push</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-widgets" data-tab-target="widgets" role="tab" aria-controls="mj-tab-widgets" aria-selected="false">🧩 Widgets</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-watermark" data-tab-target="watermark" role="tab" aria-controls="mj-tab-watermark" aria-selected="false">🖼️ Filigrane</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-debug" data-tab-target="debug" role="tab" aria-controls="mj-tab-debug" aria-selected="false">🛠️ Debug</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-mileage" data-tab-target="mileage" role="tab" aria-controls="mj-tab-mileage" aria-selected="false">🚗 Frais kilométriques</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-fixtures" data-tab-target="fixtures" role="tab" aria-controls="mj-tab-fixtures" aria-selected="false">🧪 Fixtures</button>
@@ -2352,6 +2353,134 @@ if (!defined('ABSPATH')) {
 
                             updateCounter();
                         })();
+                        </script>
+                    </div>
+
+                    <div id="mj-tab-watermark" class="mj-settings-tabs__panel" data-tab="watermark" role="tabpanel" aria-labelledby="mj-tab-button-watermark" aria-hidden="true">
+                        <div style="background:#eef2ff; border-left:4px solid #6366f1; padding:18px 20px; border-radius:10px; margin:0 0 20px;">
+                            <h2 style="margin:0 0 8px 0;">🖼️ Filigrane des photos de témoignages</h2>
+                            <p style="margin:0; color:#475569;">
+                                Applique automatiquement un logo semi-transparent sur les photos affichées dans le widget Témoignages.
+                                Les images filigranées sont générées à la volée puis mises en cache (extension GD, aucun ImageMagick requis).
+                            </p>
+                        </div>
+
+                        <?php if (empty($tw_watermark_supported)) : ?>
+                            <div class="notice notice-error inline" style="margin:0 0 16px;">
+                                <p><?php esc_html_e("L'extension GD n'est pas disponible sur ce serveur : le filigrane ne pourra pas être appliqué.", 'mj-member'); ?></p>
+                            </div>
+                        <?php endif; ?>
+
+                        <table class="form-table" role="presentation" style="max-width:760px;">
+                            <tr>
+                                <th scope="row"><?php esc_html_e('Activer le filigrane', 'mj-member'); ?></th>
+                                <td>
+                                    <label style="display:flex; align-items:center; gap:8px;">
+                                        <input type="hidden" name="mj_testimonials_watermark_enabled" value="0" />
+                                        <input type="checkbox" id="mj-tw-enabled" name="mj_testimonials_watermark_enabled" value="1" <?php checked(!empty($tw_watermark_enabled)); ?> <?php disabled(empty($tw_watermark_supported)); ?> />
+                                        <span><?php esc_html_e('Filigraner les photos des témoignages', 'mj-member'); ?></span>
+                                    </label>
+                                    <p class="description"><?php esc_html_e('Sans effet tant qu\'aucun logo PNG n\'est sélectionné ci-dessous.', 'mj-member'); ?></p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="mj-tw-logo-select"><?php esc_html_e('Logo (PNG transparent)', 'mj-member'); ?></label></th>
+                                <td>
+                                    <input type="hidden" name="mj_testimonials_watermark_logo_id" id="mj-tw-logo-id" value="<?php echo esc_attr((string) $tw_watermark_logo_id); ?>" />
+                                    <div id="mj-tw-logo-preview" style="margin:0 0 8px; max-width:260px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:repeating-conic-gradient(#e2e8f0 0% 25%, #fff 0% 50%) 50% / 20px 20px;">
+                                        <img src="<?php echo $tw_watermark_logo_src !== '' ? esc_url($tw_watermark_logo_src) : ''; ?>" alt="" style="display:<?php echo $tw_watermark_logo_src !== '' ? 'block' : 'none'; ?>; width:100%; height:auto;" />
+                                        <span class="mj-tw-logo-preview__placeholder" style="display:<?php echo $tw_watermark_logo_src !== '' ? 'none' : 'block'; ?>; padding:20px; text-align:center; color:#64748b; font-size:13px;"><?php esc_html_e('Aucun logo sélectionné', 'mj-member'); ?></span>
+                                    </div>
+                                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                        <button type="button" class="button" id="mj-tw-logo-select"><?php esc_html_e('Choisir / téléverser un logo', 'mj-member'); ?></button>
+                                        <button type="button" class="button-secondary" id="mj-tw-logo-clear" <?php echo $tw_watermark_logo_id ? '' : 'style="display:none;"'; ?>><?php esc_html_e('Retirer', 'mj-member'); ?></button>
+                                    </div>
+                                    <p class="description"><?php esc_html_e('Utilisez un PNG à fond transparent, idéalement en blanc pour rester lisible sur les photos claires comme sombres.', 'mj-member'); ?></p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="mj-tw-opacity"><?php esc_html_e('Opacité', 'mj-member'); ?></label></th>
+                                <td>
+                                    <input type="number" min="5" max="100" step="5" id="mj-tw-opacity" name="mj_testimonials_watermark_opacity" value="<?php echo esc_attr((string) $tw_watermark_opacity); ?>" class="small-text" /> %
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="mj-tw-scale"><?php esc_html_e('Taille du logo', 'mj-member'); ?></label></th>
+                                <td>
+                                    <input type="number" min="5" max="90" step="1" id="mj-tw-scale" name="mj_testimonials_watermark_scale" value="<?php echo esc_attr((string) $tw_watermark_scale); ?>" class="small-text" />
+                                    <?php esc_html_e('% de la largeur de la photo', 'mj-member'); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="mj-tw-position"><?php esc_html_e('Position', 'mj-member'); ?></label></th>
+                                <td>
+                                    <?php
+                                    $tw_position_labels = array(
+                                        'bottom-right'  => __('Bas droite', 'mj-member'),
+                                        'bottom-left'   => __('Bas gauche', 'mj-member'),
+                                        'bottom-center' => __('Bas centré', 'mj-member'),
+                                        'top-right'     => __('Haut droite', 'mj-member'),
+                                        'top-left'      => __('Haut gauche', 'mj-member'),
+                                        'center'        => __('Centré', 'mj-member'),
+                                    );
+                                    ?>
+                                    <select id="mj-tw-position" name="mj_testimonials_watermark_position">
+                                        <?php foreach ($tw_position_labels as $tw_pos_value => $tw_pos_label) : ?>
+                                            <option value="<?php echo esc_attr($tw_pos_value); ?>" <?php selected($tw_watermark_position, $tw_pos_value); ?>><?php echo esc_html($tw_pos_label); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <p class="description"><?php esc_html_e('Le cache des images filigranées est régénéré automatiquement après un changement de réglage.', 'mj-member'); ?></p>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <script>
+                        (function ($) {
+                            var frame;
+                            var input = $('#mj-tw-logo-id');
+                            var preview = $('#mj-tw-logo-preview');
+                            var image = preview.find('img');
+                            var placeholder = preview.find('.mj-tw-logo-preview__placeholder');
+                            var clearBtn = $('#mj-tw-logo-clear');
+
+                            function render(url) {
+                                if (url) {
+                                    image.attr('src', url).show();
+                                    placeholder.hide();
+                                    clearBtn.show();
+                                } else {
+                                    image.attr('src', '').hide();
+                                    placeholder.show();
+                                    clearBtn.hide();
+                                }
+                            }
+
+                            $('#mj-tw-logo-select').on('click', function (event) {
+                                event.preventDefault();
+                                if (frame) { frame.open(); return; }
+                                frame = wp.media({
+                                    title: '<?php echo esc_js(__('Choisir un logo de filigrane', 'mj-member')); ?>',
+                                    library: { type: 'image' },
+                                    button: { text: '<?php echo esc_js(__('Utiliser ce logo', 'mj-member')); ?>' },
+                                    multiple: false
+                                });
+                                frame.on('select', function () {
+                                    var attachment = frame.state().get('selection').first().toJSON();
+                                    var url = attachment.sizes && attachment.sizes.medium ? attachment.sizes.medium.url : attachment.url;
+                                    input.val(attachment.id);
+                                    render(url);
+                                });
+                                frame.open();
+                            });
+
+                            clearBtn.on('click', function (event) {
+                                event.preventDefault();
+                                input.val('');
+                                render('');
+                            });
+
+                            render(image.length && image.attr('src') ? image.attr('src') : '');
+                        })(jQuery);
                         </script>
                     </div>
 

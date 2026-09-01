@@ -442,6 +442,10 @@ button.mj-member-events-calendar__day-add {
     white-space: nowrap;
 }
 
+.mj-member-events-calendar__day-add--occurrence {
+    margin-top: 2px;
+}
+
 .mj-member-events-calendar__day:hover .mj-member-events-calendar__day-add,
 .mj-member-events-calendar__day:focus-within .mj-member-events-calendar__day-add {
     display: inline-flex;
@@ -1908,6 +1912,162 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
     background: inherit;
     color: inherit;
     text-decoration: none;
+}
+
+.mj-calendar-occurrence-modal[hidden] {
+    display: none;
+}
+
+.mj-calendar-occurrence-modal {
+    position: fixed;
+    z-index: 100000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+}
+
+.mj-calendar-occurrence-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.56);
+}
+
+.mj-calendar-occurrence-modal__dialog {
+    position: relative;
+    width: min(680px, 100%);
+    max-height: min(760px, 100%);
+    overflow: auto;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.mj-calendar-occurrence-modal__header,
+.mj-calendar-occurrence-modal__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.mj-calendar-occurrence-modal__header h2 {
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.mj-calendar-occurrence-modal__header button,
+.mj-calendar-occurrence-modal__footer button {
+    width: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #0f172a;
+    padding: 7px 12px;
+    cursor: pointer;
+}
+
+.mj-calendar-occurrence-modal__header button {
+    padding: 0 8px;
+    border: 0;
+    font-size: 1.5rem;
+}
+
+.mj-calendar-occurrence-modal__body {
+    padding: 16px 20px;
+}
+
+.mj-calendar-occurrence-modal__search,
+.mj-calendar-occurrence-modal__schedule input {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 9px 10px;
+}
+
+.mj-calendar-occurrence-modal__events {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    margin-top: 12px;
+}
+
+.mj-calendar-occurrence-modal__event {
+    display: flex;
+    align-items: center;
+    min-height: 56px;
+    gap: 10px;
+    overflow: hidden;
+    border: 1px solid #dbe3ec;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #1e293b;
+    padding: 6px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.mj-calendar-occurrence-modal__event img {
+    width: 48px;
+    height: 42px;
+    flex: 0 0 auto;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.mj-calendar-occurrence-modal__event span {
+    overflow: hidden;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mj-calendar-occurrence-modal__event.is-selected {
+    border-color: var(--mj-events-calendar-accent, #6366f1);
+    background: var(--mj-events-calendar-accent-soft, #eef2ff);
+}
+
+.mj-calendar-occurrence-modal__schedule {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.mj-calendar-occurrence-modal__schedule label {
+    display: grid;
+    gap: 5px;
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.mj-calendar-occurrence-modal__feedback {
+    min-height: 1.25em;
+    margin: 10px 0 0;
+    color: #b91c1c;
+    font-size: 0.85rem;
+}
+
+.mj-calendar-occurrence-modal__footer {
+    border-top: 1px solid #e2e8f0;
+    border-bottom: 0;
+}
+
+.mj-calendar-occurrence-modal__footer [data-occurrence-submit] {
+    border-color: var(--mj-events-calendar-accent, #6366f1);
+    background: var(--mj-events-calendar-accent, #6366f1);
+    color: #ffffff;
+}
+
+.mj-calendar-occurrence-modal__footer [data-occurrence-submit]:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
 }
 
 /* ==========================================================================

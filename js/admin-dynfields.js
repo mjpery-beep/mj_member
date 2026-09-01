@@ -89,6 +89,8 @@
             if (field.showInNotes) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--notes">Notes</span>');
             if (field.youthOnly) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--youth">Jeunes</span>');
             if (field.isRequired) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--required">Requis</span>');
+            if (field.formPosition === 'above') badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--position">↑ Au-dessus</span>');
+            if (field.formPosition === 'below') badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--position">↓ En dessous</span>');
             if (field.allowOther) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--other">« Autre »</span>');
         }
 
@@ -144,6 +146,16 @@
         html += '<option value="checklist">Liste de cases à cocher</option>';
         html += '<option value="title">Titre de section</option>';
         html += '</select>';
+        html += '</div>';
+
+        html += '<div class="mj-dynfields-form__row">';
+        html += '<label for="mj-dynfield-form-position">Position dans le formulaire d\'inscription</label>';
+        html += '<select id="mj-dynfield-form-position">';
+        html += '<option value="above">Au-dessus des données complémentaires</option>';
+        html += '<option value="inside">Dans les données complémentaires</option>';
+        html += '<option value="below">En dessous des données complémentaires</option>';
+        html += '</select>';
+        html += '<small class="mj-dynfields-form__hint">Détermine où ce champ apparaît par rapport à la section « Données complémentaires » (formulaire d\'inscription et « Mes informations »).</small>';
         html += '</div>';
 
         html += '<div class="mj-dynfields-form__row mj-dynfields-form__row--options" id="mj-dynfield-options-row" style="display:none;">';
@@ -315,6 +327,7 @@
         document.getElementById('mj-dynfield-title').value = field.title || '';
         document.getElementById('mj-dynfield-description').value = field.description || '';
         document.getElementById('mj-dynfield-type').value = field.fieldType || 'text';
+        document.getElementById('mj-dynfield-form-position').value = field.formPosition || 'inside';
         document.getElementById('mj-dynfield-options').value = (field.optionsList || []).join('\n');
         optionImagesByIndex = {};
         var detailed = Array.isArray(field.optionsDetailed) ? field.optionsDetailed : [];
@@ -345,6 +358,7 @@
         document.getElementById('mj-dynfield-title').value = '';
         document.getElementById('mj-dynfield-description').value = '';
         document.getElementById('mj-dynfield-type').value = 'text';
+        document.getElementById('mj-dynfield-form-position').value = 'inside';
         document.getElementById('mj-dynfield-options').value = '';
         optionImagesByIndex = {};
         otherOptionImage = { imageId: 0, imageUrl: '' };
@@ -402,6 +416,7 @@
             title: title,
             description: document.getElementById('mj-dynfield-description').value.trim(),
             field_type: type,
+            form_position: document.getElementById('mj-dynfield-form-position').value,
             show_in_registration: document.getElementById('mj-dynfield-registration').checked ? 1 : 0,
             show_in_account: document.getElementById('mj-dynfield-account').checked ? 1 : 0,
             show_in_manager_list: document.getElementById('mj-dynfield-manager-list').checked ? 1 : 0,

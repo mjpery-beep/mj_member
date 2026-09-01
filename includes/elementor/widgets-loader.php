@@ -23,6 +23,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Registrations_Widget' => 'includes/elementor/class-mj-member-registrations-widget.php',
             'Mj_Member_Elementor_Events_Widget' => 'includes/elementor/class-mj-member-events-widget.php',
             'Mj_Member_Elementor_Events_Calendar_Widget' => 'includes/elementor/class-mj-member-events-calendar-widget.php',
+            'Mj_Member_Elementor_Agenda_Widget' => 'includes/elementor/class-mj-member-agenda-widget.php',
             'Mj_Member_Elementor_Upcoming_Events_Widget' => 'includes/elementor/class-mj-member-upcoming-events-widget.php',
             'Mj_Member_Elementor_Payments_Widget' => 'includes/elementor/class-mj-member-payments-widget.php',
             'Mj_Member_Elementor_Hour_Encode_Widget' => 'includes/elementor/class-mj-member-hour-encode-widget.php',

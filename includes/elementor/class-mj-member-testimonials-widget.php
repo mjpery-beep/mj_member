@@ -114,8 +114,8 @@ class Mj_Member_Elementor_Testimonials_Widget extends Widget_Base
                 'label' => __('Nombre max de photos', 'mj-member'),
                 'type' => Controls_Manager::NUMBER,
                 'min' => 1,
-                'max' => 10,
-                'default' => 5,
+                'max' => 20,
+                'default' => 10,
                 'condition' => array(
                     'allow_submission' => 'yes',
                 ),

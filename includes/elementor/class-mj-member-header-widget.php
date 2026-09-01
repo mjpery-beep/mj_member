@@ -21,6 +21,7 @@ use Elementor\Repeater;
 use Elementor\Widget_Base;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjTestimonials;
 use Mj\Member\Classes\MjAccountLinks;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\AssetsManager;
@@ -172,6 +173,7 @@ class Mj_Member_Elementor_Header_Widget extends Widget_Base {
             'agenda'        => __('Agenda', 'mj-member'),
             'gestionnaire'  => __('Gestionnaire', 'mj-member'),
             'nextcloud'     => __('Nextcloud', 'mj-member'),
+            'testimonials'  => __('Témoignages', 'mj-member'),
             'notifications' => __('Notifications', 'mj-member'),
             'account'       => __('Compte / Login', 'mj-member'),
         );
@@ -182,8 +184,9 @@ class Mj_Member_Elementor_Header_Widget extends Widget_Base {
             'agenda'        => 4,
             'gestionnaire'  => 5,
             'nextcloud'     => 6,
-            'notifications' => 7,
-            'account'       => 8,
+            'testimonials'  => 7,
+            'notifications' => 8,
+            'account'       => 9,
         );
 
         foreach ($items as $key => $label) {
@@ -429,6 +432,50 @@ $this->add_control('nextcloud_label', array(
             'type'        => Controls_Manager::URL,
             'placeholder' => home_url('/documents'),
             'condition'   => array('nextcloud_enabled' => 'yes'),
+        ));
+
+        $this->end_controls_section();
+
+        // --- Section : Témoignages ---
+        $this->start_controls_section('section_testimonials', array(
+            'label' => __('Témoignages', 'mj-member'),
+        ));
+
+        $this->add_control('testimonials_enabled', array(
+            'label'        => __('Afficher l\'icône Témoignages', 'mj-member'),
+            'type'         => Controls_Manager::SWITCHER,
+            'return_value' => 'yes',
+            'default'      => 'yes',
+        ));
+
+        $this->add_control('testimonials_url', array(
+            'label'       => __('URL des témoignages', 'mj-member'),
+            'type'        => Controls_Manager::URL,
+            'placeholder' => home_url('/temoignages/'),
+            'condition'   => array('testimonials_enabled' => 'yes'),
+        ));
+
+        $this->add_control('testimonials_label', array(
+            'label'     => __('Libellé (infobulle)', 'mj-member'),
+            'type'      => Controls_Manager::TEXT,
+            'default'   => __('Témoignages', 'mj-member'),
+            'condition' => array('testimonials_enabled' => 'yes'),
+        ));
+
+        $this->add_control('testimonials_custom_icon', array(
+            'label'       => __('Icône personnalisée', 'mj-member'),
+            'type'        => Controls_Manager::MEDIA,
+            'media_types' => array('image', 'svg'),
+            'condition'   => array('testimonials_enabled' => 'yes'),
+        ));
+
+        $this->add_control('testimonials_limit', array(
+            'label'     => __('Nombre de témoignages', 'mj-member'),
+            'type'      => Controls_Manager::NUMBER,
+            'min'       => 1,
+            'max'       => 10,
+            'default'   => 5,
+            'condition' => array('testimonials_enabled' => 'yes'),
         ));
 
         $this->end_controls_section();
@@ -930,7 +977,7 @@ $this->add_control('nextcloud_label', array(
         $sticky_class  = $sticky ? 'mj-header--sticky' : '';
 
         // Build ordered items list
-        $item_keys = array('logo', 'nav', 'spacer', 'agenda', 'gestionnaire', 'nextcloud', 'notifications', 'account');
+        $item_keys = array('logo', 'nav', 'spacer', 'agenda', 'gestionnaire', 'nextcloud', 'testimonials', 'notifications', 'account');
         $ordered_items = array();
         foreach ($item_keys as $key) {
             $order = isset($settings['order_' . $key]) ? (int) $settings['order_' . $key] : 10;
@@ -1107,6 +1154,24 @@ $this->add_control('nextcloud_label', array(
         $nc_page_url    = !empty($settings['nextcloud_page_url']['url']) ? $settings['nextcloud_page_url']['url'] : '';
         $nc_label       = $settings['nextcloud_label'] ?? __('Nextcloud', 'mj-member');
         $nc_custom_icon = $settings['nextcloud_custom_icon']['url'] ?? '';
+
+        // Témoignages — les derniers contenus validés sont rendus directement pour un affichage immédiat.
+        $testimonials_enabled = !isset($settings['testimonials_enabled']) || $settings['testimonials_enabled'] === 'yes';
+        $testimonials_url = !empty($settings['testimonials_url']['url'])
+            ? $settings['testimonials_url']['url']
+            : home_url('/temoignages/');
+        $testimonials_label = $settings['testimonials_label'] ?? __('Témoignages', 'mj-member');
+        $testimonials_custom_icon = $settings['testimonials_custom_icon']['url'] ?? '';
+        $testimonials_limit = isset($settings['testimonials_limit']) ? max(1, min(10, (int) $settings['testimonials_limit'])) : 5;
+        $header_testimonials = array();
+        if (!$is_preview && class_exists(MjTestimonials::class)) {
+            $header_testimonials = MjTestimonials::query(array(
+                'status' => MjTestimonials::STATUS_APPROVED,
+                'per_page' => $testimonials_limit,
+                'orderby' => 'created_at',
+                'order' => 'DESC',
+            ));
+        }
 
         // Notifications
         $notif_enabled   = !empty($settings['notifications_enabled']) && $settings['notifications_enabled'] === 'yes';

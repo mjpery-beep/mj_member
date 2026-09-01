@@ -59,6 +59,7 @@
         this._bindNotifActions();
         this._bindGestionnaireFavoriteRemovals();
         this._bindAccCardNotifPreview();
+        this._bindTestimonialsCarousel();
 
         if (this.config.sticky) {
             this._initSticky();
@@ -86,7 +87,7 @@
             if (isGuestAccountTrigger && self.config.accountGuestRedirect) {
                 directHref = self.config.accountGuestRedirect;
             }
-            var isDirectLink = !!(directHref && directHref !== '#' && directHref !== '');
+            var isDirectLink = name !== 'testimonials' && !!(directHref && directHref !== '#' && directHref !== '');
 
             // Touch : tap → dropdown, long press (500ms) → navigate
             var longPressTimer = null;
@@ -342,6 +343,58 @@
                 if (eyeHide) eyeHide.style.display = isHidden ? '' : 'none';
             });
         }
+    };
+
+    MjHeader.prototype._bindTestimonialsCarousel = function () {
+        var carousel = this.el.querySelector('[data-mj-header-testimonials]');
+        if (!carousel) return;
+
+        var items = Array.prototype.slice.call(carousel.querySelectorAll('[data-mj-header-testimonial]'));
+        var previousButton = carousel.querySelector('[data-mj-header-testimonial-prev]');
+        var nextButton = carousel.querySelector('[data-mj-header-testimonial-next]');
+        var counter = carousel.querySelector('[data-mj-header-testimonial-counter]');
+        if (items.length < 2) return;
+
+        var activeIndex = 0;
+        var timer = null;
+        var show = function (nextIndex) {
+            items[activeIndex].classList.remove('mj-header-testimonial--active');
+            items[activeIndex].setAttribute('aria-hidden', 'true');
+            activeIndex = nextIndex;
+            items[activeIndex].classList.add('mj-header-testimonial--active');
+            items[activeIndex].setAttribute('aria-hidden', 'false');
+            if (counter) counter.textContent = String(activeIndex + 1) + ' / ' + String(items.length);
+        };
+        var start = function () {
+            timer = window.setInterval(function () { show((activeIndex + 1) % items.length); }, 5000);
+        };
+        var stop = function () {
+            if (timer) window.clearInterval(timer);
+            timer = null;
+        };
+
+        if (previousButton) {
+            previousButton.addEventListener('click', function () {
+                stop();
+                show((activeIndex - 1 + items.length) % items.length);
+            });
+        }
+        if (nextButton) {
+            nextButton.addEventListener('click', function () {
+                stop();
+                show((activeIndex + 1) % items.length);
+            });
+        }
+
+        carousel.addEventListener('mouseenter', stop);
+        carousel.addEventListener('mouseleave', start);
+        carousel.addEventListener('focusin', stop);
+        carousel.addEventListener('focusout', function () {
+            window.setTimeout(function () {
+                if (!carousel.contains(document.activeElement)) start();
+            }, 0);
+        });
+        start();
     };
 
     MjHeader.prototype._bindNotifActions = function () {

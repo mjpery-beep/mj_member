@@ -191,6 +191,152 @@
                 'MjCreateEventModal available:', !!window.MjCreateEventModal);
         }
 
+        var occurrenceModal = null;
+        var occurrenceEvents = null;
+
+        function createOccurrenceModal() {
+            if (occurrenceModal) {
+                return occurrenceModal;
+            }
+
+            var modal = document.createElement('div');
+            modal.className = 'mj-calendar-occurrence-modal';
+            modal.hidden = true;
+            modal.innerHTML = '<div class="mj-calendar-occurrence-modal__backdrop" data-occurrence-close></div>' +
+                '<section class="mj-calendar-occurrence-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="mj-calendar-occurrence-title">' +
+                    '<header class="mj-calendar-occurrence-modal__header"><h2 id="mj-calendar-occurrence-title">Créer une occurrence</h2><button type="button" data-occurrence-close aria-label="Fermer">&times;</button></header>' +
+                    '<div class="mj-calendar-occurrence-modal__body">' +
+                        '<input type="search" class="mj-calendar-occurrence-modal__search" placeholder="Rechercher un événement" aria-label="Rechercher un événement" data-occurrence-search>' +
+                        '<div class="mj-calendar-occurrence-modal__events" data-occurrence-events></div>' +
+                        '<div class="mj-calendar-occurrence-modal__schedule"><label>Date<input type="date" data-occurrence-date></label><label>Début<input type="time" value="14:00" data-occurrence-start></label><label>Fin<input type="time" value="17:00" data-occurrence-end></label></div>' +
+                        '<p class="mj-calendar-occurrence-modal__feedback" data-occurrence-feedback aria-live="polite"></p>' +
+                    '</div>' +
+                    '<footer class="mj-calendar-occurrence-modal__footer"><button type="button" data-occurrence-close>Annuler</button><button type="button" data-occurrence-submit disabled>Créer l\'occurrence</button></footer>' +
+                '</section>';
+            document.body.appendChild(modal);
+
+            function close() {
+                modal.hidden = true;
+            }
+
+            toArray(modal.querySelectorAll('[data-occurrence-close]')).forEach(function(button) {
+                button.addEventListener('click', close);
+            });
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' && !modal.hidden) {
+                    close();
+                }
+            });
+            modal._close = close;
+            occurrenceModal = modal;
+            return modal;
+        }
+
+        function requestOccurrenceEvents(callback) {
+            if (occurrenceEvents) {
+                callback(occurrenceEvents);
+                return;
+            }
+            var formData = new FormData();
+            formData.append('action', 'mj_calendar_list_occurrence_events');
+            formData.append('nonce', config.deleteNonce);
+            fetch(config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: formData })
+                .then(function(response) { return response.json(); })
+                .then(function(response) {
+                    if (!response || !response.success) {
+                        throw new Error(response && response.data && response.data.message ? response.data.message : 'Impossible de charger les événements.');
+                    }
+                    occurrenceEvents = response.data.events || [];
+                    callback(occurrenceEvents);
+                })
+                .catch(function(error) { callback([], error.message); });
+        }
+
+        function openOccurrenceModal(day) {
+            if (!config || !config.ajaxUrl || !config.deleteNonce) {
+                return;
+            }
+            var modal = createOccurrenceModal();
+            var search = modal.querySelector('[data-occurrence-search]');
+            var list = modal.querySelector('[data-occurrence-events]');
+            var date = modal.querySelector('[data-occurrence-date]');
+            var feedback = modal.querySelector('[data-occurrence-feedback]');
+            var submit = modal.querySelector('[data-occurrence-submit]');
+            var selectedId = 0;
+            date.value = day;
+            search.value = '';
+            feedback.textContent = 'Chargement des événements...';
+            submit.disabled = true;
+            modal.hidden = false;
+
+            function render(events, errorMessage) {
+                list.textContent = '';
+                if (errorMessage) {
+                    feedback.textContent = errorMessage;
+                    return;
+                }
+                var query = search.value.trim().toLocaleLowerCase();
+                var visibleEvents = events.filter(function(event) {
+                    return !query || (event.title || '').toLocaleLowerCase().indexOf(query) !== -1;
+                });
+                feedback.textContent = visibleEvents.length ? '' : 'Aucun événement trouvé.';
+                visibleEvents.forEach(function(event) {
+                    var item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'mj-calendar-occurrence-modal__event';
+                    item.setAttribute('data-event-id', event.id);
+                    if (event.coverUrl) {
+                        var image = document.createElement('img');
+                        image.src = event.coverUrl;
+                        image.alt = '';
+                        item.appendChild(image);
+                    }
+                    var title = document.createElement('span');
+                    title.textContent = event.title || 'Événement sans titre';
+                    item.appendChild(title);
+                    item.addEventListener('click', function() {
+                        selectedId = parseInt(event.id, 10) || 0;
+                        toArray(list.querySelectorAll('.is-selected')).forEach(function(selected) { selected.classList.remove('is-selected'); });
+                        item.classList.add('is-selected');
+                        submit.disabled = !selectedId;
+                    });
+                    list.appendChild(item);
+                });
+            }
+
+            requestOccurrenceEvents(function(events, errorMessage) {
+                render(events, errorMessage);
+                search.oninput = function() { render(events); };
+            });
+
+            submit.onclick = function() {
+                if (!selectedId) {
+                    return;
+                }
+                var formData = new FormData();
+                formData.append('action', 'mj_calendar_create_occurrence');
+                formData.append('nonce', config.deleteNonce);
+                formData.append('event_id', selectedId);
+                formData.append('date', date.value);
+                formData.append('start_time', modal.querySelector('[data-occurrence-start]').value);
+                formData.append('end_time', modal.querySelector('[data-occurrence-end]').value);
+                submit.disabled = true;
+                feedback.textContent = 'Création en cours...';
+                fetch(config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: formData })
+                    .then(function(response) { return response.json(); })
+                    .then(function(response) {
+                        if (!response || !response.success) {
+                            throw new Error(response && response.data && response.data.message ? response.data.message : 'Impossible de créer l\'occurrence.');
+                        }
+                        window.location.reload();
+                    })
+                    .catch(function(error) {
+                        feedback.textContent = error.message;
+                        submit.disabled = false;
+                    });
+            };
+        }
+
         if (config && config.openEventPageModal) {
             root.addEventListener('click', function(e) {
                 var eventLink = e.target.closest('a.mj-member-events-calendar__event-trigger, a.mj-member-events-calendar__mobile-link');
@@ -232,6 +378,14 @@
                         closeMobileModal();
                     }
                     ccmInstance.open(addBtn.getAttribute('data-calendar-create-day') || '', addBtn);
+                    return;
+                }
+
+                var occurrenceBtn = e.target.closest('[data-calendar-create-occurrence-day]');
+                if (occurrenceBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openOccurrenceModal(occurrenceBtn.getAttribute('data-calendar-create-occurrence-day') || '');
                     return;
                 }
 
@@ -414,6 +568,14 @@
                 addBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
                     '<span>Cr\u00e9er un event</span>';
                 mobileModalBody.appendChild(addBtn);
+            }
+            if (config && config.ajaxUrl && config.deleteNonce) {
+                var occurrenceBtn = document.createElement('button');
+                occurrenceBtn.type = 'button';
+                occurrenceBtn.className = 'mj-cal-mobile__modal-create-event';
+                occurrenceBtn.setAttribute('data-calendar-create-occurrence-day', dayKey);
+                occurrenceBtn.textContent = 'Créer une occurrence';
+                mobileModalBody.appendChild(occurrenceBtn);
             }
             if (mobileModalDate) {
                 var dateParts = dayKey.split('-');

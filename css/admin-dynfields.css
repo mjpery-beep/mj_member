@@ -141,6 +141,11 @@
     color: #9d174d;
 }
 
+.mj-dynfields__badge--position {
+    background: #e0f2fe;
+    color: #075985;
+}
+
 /* Actions */
 .mj-dynfields__item-actions {
     display: flex;
@@ -245,6 +250,13 @@
 
 .mj-dynfields-form__row textarea {
     resize: vertical;
+}
+
+.mj-dynfields-form__hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #6b7280;
 }
 
 .mj-dynfields-form__checkboxes {

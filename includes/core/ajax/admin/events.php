@@ -19,6 +19,8 @@ final class EventsController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_fetch_events_table', [$this, 'fetchEventsTable']);
         add_action('wp_ajax_mj_inline_edit_event', [$this, 'inlineEditEvent']);
         add_action('wp_ajax_mj_calendar_delete_occurrence', [$this, 'calendarDeleteOccurrence']);
+        add_action('wp_ajax_mj_calendar_list_occurrence_events', [$this, 'calendarListOccurrenceEvents']);
+        add_action('wp_ajax_mj_calendar_create_occurrence', [$this, 'calendarCreateOccurrence']);
     }
 
     public function fetchEventsTable(): void
@@ -278,5 +280,94 @@ final class EventsController implements AjaxHandlerInterface
     wp_send_json_error(array(
         'message' => __('Occurrence introuvable dans la base de données. S\'il s\'agit d\'un événement non-récurrent, supprimez-le via le gestionnaire.', 'mj-member'),
     ));
+    }
+
+    public function calendarListOccurrenceEvents(): void
+    {
+        if (!check_ajax_referer('mj_calendar_delete_occurrence', 'nonce', false) || !$this->canManageCalendarOccurrences()) {
+            wp_send_json_error(array('message' => __('Accès non autorisé.', 'mj-member')), 403);
+        }
+
+        $events = MjEvents::get_all(array(
+            'order_by' => 'title',
+            'order' => 'ASC',
+        ));
+        $items = array();
+
+        foreach ($events as $event) {
+            $event_id = isset($event->id) ? (int) $event->id : 0;
+            if ($event_id <= 0) {
+                continue;
+            }
+
+            $cover_id = isset($event->cover_id) ? (int) $event->cover_id : 0;
+            $cover_url = $cover_id > 0 ? wp_get_attachment_image_url($cover_id, 'thumbnail') : '';
+            $items[] = array(
+                'id' => $event_id,
+                'title' => isset($event->title) ? (string) $event->title : '',
+                'type' => isset($event->type) ? (string) $event->type : '',
+                'coverUrl' => $cover_url ? esc_url_raw($cover_url) : '',
+            );
+        }
+
+        wp_send_json_success(array('events' => $items));
+    }
+
+    public function calendarCreateOccurrence(): void
+    {
+        if (!check_ajax_referer('mj_calendar_delete_occurrence', 'nonce', false) || !$this->canManageCalendarOccurrences()) {
+            wp_send_json_error(array('message' => __('Accès non autorisé.', 'mj-member')), 403);
+        }
+
+        $event_id = isset($_POST['event_id']) ? absint($_POST['event_id']) : 0;
+        $date = isset($_POST['date']) ? sanitize_text_field(wp_unslash((string) $_POST['date'])) : '';
+        $start_time = isset($_POST['start_time']) ? sanitize_text_field(wp_unslash((string) $_POST['start_time'])) : '';
+        $end_time = isset($_POST['end_time']) ? sanitize_text_field(wp_unslash((string) $_POST['end_time'])) : '';
+
+        if ($event_id <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !preg_match('/^\d{2}:\d{2}$/', $start_time) || !preg_match('/^\d{2}:\d{2}$/', $end_time)) {
+            wp_send_json_error(array('message' => __('Date ou horaire invalide.', 'mj-member')), 400);
+        }
+
+        if (!MjEvents::find($event_id)) {
+            wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+        }
+
+        try {
+            $timezone = function_exists('wp_timezone') ? wp_timezone() : new \DateTimeZone('UTC');
+            $start = new \DateTimeImmutable($date . ' ' . $start_time, $timezone);
+            $end = new \DateTimeImmutable($date . ' ' . $end_time, $timezone);
+        } catch (\Exception $exception) {
+            wp_send_json_error(array('message' => __('Date ou horaire invalide.', 'mj-member')), 400);
+        }
+
+        if ($end <= $start) {
+            wp_send_json_error(array('message' => __('L\'heure de fin doit être postérieure au début.', 'mj-member')), 400);
+        }
+
+        MjEventOccurrences::add_for_event($event_id, array(array(
+            'start' => $start->format('Y-m-d H:i:s'),
+            'end' => $end->format('Y-m-d H:i:s'),
+            'status' => MjEventOccurrences::STATUS_ACTIVE,
+            'source' => MjEventOccurrences::SOURCE_MANUAL,
+        )));
+
+        wp_send_json_success(array(
+            'message' => __('Occurrence créée.', 'mj-member'),
+        ));
+    }
+
+    private function canManageCalendarOccurrences(): bool
+    {
+        if (current_user_can(Config::capability())) {
+            return true;
+        }
+
+        $member = \Mj\Member\Classes\Crud\MjMembers::getByWpUserId(get_current_user_id());
+        $role = is_array($member) && isset($member['role']) ? (string) $member['role'] : '';
+
+        return in_array($role, array(
+            \Mj\Member\Classes\Crud\MjRoles::COORDINATEUR,
+            \Mj\Member\Classes\Crud\MjRoles::ANIMATEUR,
+        ), true);
     }
 }
