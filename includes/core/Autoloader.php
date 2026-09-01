@@ -39,7 +39,11 @@ final class Autoloader
 
         self::$legacyMap = $legacyMap;
 
-        spl_autoload_register([self::class, 'loadClass']);
+        // Prepend: le plugin doit résoudre ses propres classes avant l'autoloader
+        // Composer. Sinon, sur un FS insensible à la casse (Docker Desktop/NTFS),
+        // Composer charge includes/Classes/Foo.php et le plugin includes/classes/Foo.php
+        // — même fichier, deux casses, require_once ne déduplique pas → redéclaration.
+        spl_autoload_register([self::class, 'loadClass'], true, true);
         self::$registered = true;
     }
 

@@ -1,0 +1,22 @@
+# 2. Page "Mon Compte" Elementor
+
+- [x] Créer template/composant Elementor "Mes informations" utilisable sur la page mon compte
+    - [x] Permettre au membre de modifier ses informations personnelles et sa photo.
+    - [x] Créer template/composant Elementor  qui Afficher le statut de la cotisation (dernier paiement, montant, rappel si dû). Si la cotisation a expirée on peut créer le liens vers le stripe. 
+    - [x] Quand je suis tuteur je dois payer pour mes enfants (afficher la cotisation des enfants dans le template/composant Elementor du statut cotisation)
+    - [x] Créer template/composant Elementor pour Lister les événements / stages auxquels le membre est inscrit.
+- [x] Ajouter un widget Elementor affichant une colonne avec les liens "Mon compte".
+- [x] Chaque lien de mon compte peux être modifier dans le panel de control du componant (les liens pointes vers une pages)
+- [x] Ajoute un current_page pour savoir quel lien est actif dans le menu "Mon compte"
+- [x] Retirer le popup sur le bouton "Mon compte" de le widget login. Mettre un lien direct vers la page "Mon compte"
+- [x] La taille du texte des liens dans le menu "Mon compte" doit être plus petit.
+- [x] Le titre est "Mon espace" et nom "Mon espace MJ"
+- [x] Mes données personnelles : Page mon-compte
+- [x] Mes photos
+- [x] Mes inscription : Page inscriptions
+- [x] Animateurs : Page animateurs
+- [x] le lien de déconnection ne doit pas être modifié dans le panel elementor. (logout wordpress par defaut)
+- [x] La configuration des liens se fait dans le settings du module et plus dans le panel elementor du widget.
+- [x] Retirer le lien animateur
+- [x] Ajouter un lien Gestion Evenements Uniquement pour les membres qui sont animateurs => page evenements.
+- [x] Ajouter un lien Gestion des membres Uniquement pour les membres qui sont animateurs

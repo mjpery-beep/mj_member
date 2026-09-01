@@ -19,8 +19,8 @@ final class Config
     {
         self::$pluginFile = $pluginFile;
 
-        self::defineIfMissing('MJ_MEMBER_VERSION', '2.23.0');
-        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.95.0');
+        self::defineIfMissing('MJ_MEMBER_VERSION', '2.22.0');
+        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.85.0');
         self::defineIfMissing('MJ_MEMBER_PATH', plugin_dir_path($pluginFile));
         self::defineIfMissing('MJ_MEMBER_URL', plugin_dir_url($pluginFile));
         self::defineIfMissing('MJ_MEMBER_CAPABILITY', 'mj_manage_members');
@@ -72,27 +72,27 @@ final class Config
 
     public static function capability(): string
     {
-        return defined('MJ_MEMBER_CAPABILITY') ? constant('MJ_MEMBER_CAPABILITY') : 'mj_manage_members';
+        return constant('MJ_MEMBER_CAPABILITY');
     }
 
     public static function contactCapability(): string
     {
-        return defined('MJ_MEMBER_CONTACT_CAPABILITY') ? constant('MJ_MEMBER_CONTACT_CAPABILITY') : 'mj_manage_contact_messages';
+        return constant('MJ_MEMBER_CONTACT_CAPABILITY');
     }
 
     public static function hoursCapability(): string
     {
-        return defined('MJ_MEMBER_HOURS_CAPABILITY') ? constant('MJ_MEMBER_HOURS_CAPABILITY') : 'mj_member_log_hours';
+        return constant('MJ_MEMBER_HOURS_CAPABILITY');
     }
 
     public static function todosCapability(): string
     {
-        return defined('MJ_MEMBER_TODOS_CAPABILITY') ? constant('MJ_MEMBER_TODOS_CAPABILITY') : 'mj_member_manage_todos';
+        return constant('MJ_MEMBER_TODOS_CAPABILITY');
     }
 
     public static function documentsCapability(): string
     {
-        return defined('MJ_MEMBER_DOCUMENTS_CAPABILITY') ? constant('MJ_MEMBER_DOCUMENTS_CAPABILITY') : 'mj_member_manage_documents';
+        return constant('MJ_MEMBER_DOCUMENTS_CAPABILITY');
     }
 
     public static function paymentExpirationDays(): int
@@ -282,20 +282,6 @@ final class Config
 
         $option = \get_option('mj_member_nextcloud_root_folder', '');
         return is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
-    }
-
-    public static function nextcloudEventsFolder(): string
-    {
-        $option = \get_option('mj_member_nextcloud_events_folder', '');
-        $folder = is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
-        return $folder !== '' ? $folder : 'evenements';
-    }
-
-    public static function nextcloudMembersFolder(): string
-    {
-        $option = \get_option('mj_member_nextcloud_members_folder', '');
-        $folder = is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
-        return $folder !== '' ? $folder : 'membres';
     }
 
     /**

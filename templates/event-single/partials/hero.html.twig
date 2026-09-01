@@ -1,0 +1,32 @@
+{% set type_label = hero.type_label|default('') %}
+{% set schedule = hero.schedule_summary|default('') %}
+{% set status_label = hero.status_label|default('') %}
+{% set status_key = hero.status_key|default('') %}
+{% set active_status = hero.active_status|default('') %}
+{% set title = hero.title|default('') %}
+{% set date_label = hero.date_label|default('') %}
+{% set cover_url = hero.cover_url|default('') %}
+{% set cover_alt = hero.cover_alt|default(title) %}
+
+<section class="mj-member-event-single__hero">
+    <div class="mj-member-event-single__badges">
+        {% if type_label %}
+            <span class="mj-member-event-single__badge">{{ type_label }}</span>
+        {% endif %}
+        {% if schedule %}
+            <span class="mj-member-event-single__badge mj-member-event-single__badge--schedule">{{ schedule }}</span>
+        {% endif %}
+        {% if status_label and status_key != active_status %}
+            <span class="mj-member-event-single__badge mj-member-event-single__status">{{ status_label }}</span>
+        {% endif %}
+    </div>
+    <h1 class="mj-member-event-single__title">{{ title }}</h1>
+    {% if date_label %}
+        <p class="mj-member-event-single__date">{{ date_label }}</p>
+    {% endif %}
+    {% if cover_url %}
+        <div class="mj-member-event-single__hero-cover">
+            <img src="{{ cover_url|esc_url }}" alt="{{ cover_alt|esc_attr }}" loading="lazy" />
+        </div>
+    {% endif %}
+</section>

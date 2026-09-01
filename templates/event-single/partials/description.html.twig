@@ -1,0 +1,21 @@
+{% set content_html = description.content_html|default('') %}
+{% set resource_url = description.resource_url|default('') %}
+{% set resource_label = description.resource_label|default(__('Dossier pédagogique', 'mj-member')) %}
+{% set resource_icon = description.resource_icon|default('&#128193;') %}
+
+<article class="mj-member-event-single__card mj-member-event-single__description">
+    {% if content_html %}
+        {{ content_html|wp_kses_post }}
+    {% else %}
+        <p>{{ __('Les informations detaillees seront bientot disponibles.', 'mj-member') }}</p>
+    {% endif %}
+
+    {% if resource_url %}
+        <p class="mj-member-event-single__description-resource">
+            <a href="{{ resource_url|esc_url }}" target="_blank" rel="noopener">
+                <span class="mj-member-event-single__description-resource-icon" aria-hidden="true">{{ resource_icon|wp_kses_post }}</span>
+                <span>{{ resource_label }}</span>
+            </a>
+        </p>
+    {% endif %}
+</article>

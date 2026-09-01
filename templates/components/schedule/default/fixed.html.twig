@@ -1,0 +1,13 @@
+<div class="mj-schedule mj-schedule--fixed">
+    {% if summary %}
+        <p class="mj-schedule__summary">{{ summary }}</p>
+    {% endif %}
+
+    {% if primary_label %}
+        <p class="mj-schedule__primary">{{ primary_label }}</p>
+    {% endif %}
+
+    {% if next_occurrence_label %}
+        <p class="mj-schedule__next">{{ next_occurrence_label }}</p>
+    {% endif %}
+</div>

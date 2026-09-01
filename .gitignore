@@ -1,8 +1,43 @@
-# Generated dependencies
+# ── Dépendances générées ──
 /vendor/
 /node_modules/
 /package-lock.json
+
+# ── data/ : on suit les fixtures / seed / définitions de pages (comme master),
+#    PAS les uploads rapatriés de la prod (certifs, docs RH, notes de frais,
+#    médias importés — ~2,4 Go, données personnelles).
+/data/*
+!/data/fixtures/
+!/data/pages/
+!/data/certifs/
+/data/certifs/*
+!/data/certifs/.htaccess
+!/data/certifs/index.php
+/data/fixtures/media/
+/data/fixtures/mj_members.jsonl
+/data/fixtures/config_mj_member.json
+/data/fixtures/posts.json
+
+# ── Scratch / perso ──
 /user-grimlins/
-data/fixtures/mj_members.jsonl
-data/fixtures/config_mj_member.json
-data/fixtures/posts.json
+/grim-gif/
+/tmp/
+/screen-capture/
+
+# ── Caches & logs ──
+.phpunit.result.cache
+*.log
+debug.log
+
+# ── OS / éditeur ──
+.DS_Store
+Thumbs.db
+
+# ── Résidus ──
+/.git-rewrite/
+/calendar_content.txt
+/calendar_full.txt
+/calendar_patch.txt
+/calendar_section.txt
+/tmp_calendar.txt
+/tmp_calendar_content.txt

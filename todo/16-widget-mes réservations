@@ -1,0 +1,6 @@
+# 16. Module "Mes réservations"
+
+- [x] Ajouter un module "Mon compte" qui récupère les réservations du membre connecté via `mj_member_member_registrations`.
+- [x] Afficher pour chaque réservation le statut, les dates, le lieu, le paiement et les occurrences dans le widget Elementor.
+- [ ] Travailler l'ui/ux pour une meilleure expérience utilisateur. (faire comme un tableau de bord récapitulatif)
+- [ ] Permettre la gestion des désinscriptions et annulations directement depuis le widget.

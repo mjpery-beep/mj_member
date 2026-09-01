@@ -1,5 +1,5 @@
 {
-    "generated_at": "2026-06-30 09:44:35",
+    "generated_at": "2026-07-19 23:55:42",
     "tables": {
         "mj_badges": {
             "table": "wp_mj_mj_badges",
@@ -28,13 +28,13 @@
         "mj_event_locations": {
             "table": "wp_mj_mj_event_locations",
             "file": "mj_event_locations.jsonl",
-            "rows": 18,
+            "rows": 19,
             "kind": "table"
         },
         "mj_members": {
             "table": "wp_mj_mj_members",
             "file": "mj_members.jsonl",
-            "rows": 218,
+            "rows": 225,
             "kind": "table"
         },
         "wp_pages": {
@@ -52,7 +52,7 @@
         "wp_media": {
             "table": "wp_media",
             "file": "wp_media.json",
-            "rows": 379,
+            "rows": 391,
             "kind": "source"
         },
         "wp_theme_settings": {
@@ -70,7 +70,7 @@
         "config_mj_member": {
             "table": "config_mj_member",
             "file": "config_mj_member.json",
-            "rows": 106,
+            "rows": 117,
             "kind": "source"
         },
         "config_supertool": {

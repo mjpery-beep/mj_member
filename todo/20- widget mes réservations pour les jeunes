@@ -1,0 +1,9 @@
+## 16. Widget "Mes Réservations" pour les Jeunes
+- [x] Settings "Liens « Mon compte »", Mes inscriptions affiche : uniquement réservé aux jeunes membres.
+- [x] Limiter l'affichage « Mes réservations » sur la page événement aux participations du membre connecté.
+- [x] Rafraîchir en direct le panneau « Mes réservations » après une inscription ou une annulation.
+- [x] Permettre l’annulation d’une réservation directement depuis le panneau.
+- [ ] Affiche un qr code de paiement pour les réservations en attente de paiement.
+- [ ] Intégrer une section « Actions à réaliser » qui consolide les réservations comportant un paiement en attente ou nécessitant une question à l’animateur, en listant l’action attendue et le canal recommandé (mail, téléphone, formulaire interne).
+- [ ] Harmoniser le style graphique avec celui du widget photo (typographies, couleurs d’accent, bordures) en factorisant les classes CSS communes et en assurant la compatibilité avec le thème sombre.
+- [ ] Ajouter des filtres dynamiques (evenement passés / future, statut de réservation, type d’activité) pour faciliter la recherche et la gestion des réservations.
