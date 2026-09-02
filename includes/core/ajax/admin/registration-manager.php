@@ -5678,6 +5678,23 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
         }
 
+        // Les membres déjà assignés restent sélectionnables même s'ils ont perdu leur rôle.
+        $current_event_id = is_object($event) && isset($event->id) ? (int) $event->id : 0;
+        if ($current_event_id > 0) {
+            $this->appendAssignedMembersToReferences(
+                MjEventAnimateurs::get_ids_by_event($current_event_id),
+                $animateurs,
+                $available_animateur_ids
+            );
+            if (class_exists(MjEventVolunteers::class)) {
+                $this->appendAssignedMembersToReferences(
+                    MjEventVolunteers::get_ids_by_event($current_event_id),
+                    $volunteers,
+                    $available_volunteer_ids
+                );
+            }
+        }
+
         return array(
             'article_categories' => $article_categories,
             'articles' => $articles,
@@ -5692,6 +5709,27 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'volunteer_assignments_ready' => class_exists(MjEventVolunteers::class) ? MjEventVolunteers::is_ready() : false,
             'animateur_column_supported' => $this->eventsSupportsPrimaryAnimateur(),
         );
+    }
+
+    private function appendAssignedMembersToReferences($assigned_ids, array &$members, array &$available_ids) {
+        if (!is_array($assigned_ids)) {
+            return;
+        }
+
+        foreach ($assigned_ids as $assigned_id) {
+            $assigned_id = (int) $assigned_id;
+            if ($assigned_id <= 0 || isset($available_ids[$assigned_id])) {
+                continue;
+            }
+
+            $assigned_member = MjMembers::getById($assigned_id);
+            if (!$assigned_member || !isset($assigned_member->id)) {
+                continue;
+            }
+
+            $available_ids[$assigned_id] = true;
+            $members[] = $assigned_member;
+        }
     }
 
     private function userCanManageLocations($auth) {
