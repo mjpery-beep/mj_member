@@ -913,8 +913,8 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
                     continue;
                 }
 
-                $batch_uuid = isset($batch['batch_uuid']) ? sanitize_text_field((string) $batch['batch_uuid']) : '';
-                if ($batch_uuid === '') {
+                $batch_id = isset($batch['id']) ? (int) $batch['id'] : 0;
+                if ($batch_id <= 0) {
                     continue;
                 }
 
@@ -926,7 +926,7 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
                     : sprintf(__('Lot du %s', 'mj-member'), wp_date('d/m/Y H:i', strtotime((string) ($batch['created_at'] ?? 'now'))));
                 $count = isset($batch['occurrences_count']) ? max(0, (int) $batch['occurrences_count']) : 0;
 
-                $options[$event_id . ':' . $batch_uuid] = sprintf('%s - %s (%d)', $event_title, $title, $count);
+                $options[$event_id . ':' . $batch_id] = sprintf('%s - %s (%d)', $event_title, $title, $count);
             }
         }
 

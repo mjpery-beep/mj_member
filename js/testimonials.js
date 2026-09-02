@@ -1625,7 +1625,8 @@
                         nonce: config.nonce,
                         page: this.page + 1,
                         per_page: this.perPage,
-                        featured_only: config.featuredOnly ? '1' : ''
+                        featured_only: config.featuredOnly ? '1' : '',
+                        base_url: config.baseUrl || window.location.href
                     }
                 });
 
@@ -1658,6 +1659,10 @@
             const baseUrl = (typeof config.baseUrl === 'string' && config.baseUrl) ? config.baseUrl : window.location.href;
             const postUrl = t.postUrl || this.buildPostUrl(baseUrl, t.id);
             const shareUrl = t.shareUrl || this.buildShareUrl(t.id, postUrl);
+            const status = t.status || 'approved';
+            const isFeatured = !!t.featured;
+            const canManage = !!t.canManage;
+            const canToggleFeatured = !!t.canToggleFeatured;
 
             // Avatar
             const avatarInner = t.memberAvatarUrl
@@ -1749,6 +1754,35 @@
                    </button>`
                 : '';
 
+            const featuredBadgeHtml = isFeatured
+                ? '<span class="mj-feed-post__featured-badge" title="Mis en avant">&#11088;</span>'
+                : '';
+            const toggleFeaturedHtml = canToggleFeatured
+                ? `<button type="button" class="mj-feed-post__owner-action mj-feed-post__owner-action--featured" data-action="toggle-featured">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="${isFeatured ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    <span>${this.escapeHtml(isFeatured ? 'Retirer la mise en avant' : 'Mettre en avant')}</span>
+                </button>`
+                : '';
+            const ownerMenuHtml = canManage
+                ? `${featuredBadgeHtml}
+                <div class="mj-feed-post__owner-menu">
+                    <button type="button" class="mj-feed-post__owner-menu-toggle" data-action="toggle-owner-menu" aria-label="Options du temoignage">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                    </button>
+                    <div class="mj-feed-post__owner-dropdown" style="display:none;">
+                        <button type="button" class="mj-feed-post__owner-action" data-action="edit-testimonial">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <span>Modifier</span>
+                        </button>
+                        ${toggleFeaturedHtml}
+                        <button type="button" class="mj-feed-post__owner-action mj-feed-post__owner-action--danger" data-action="delete-testimonial">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            <span>Supprimer</span>
+                        </button>
+                    </div>
+                </div>`
+                : '';
+
             // Comment form (only if logged in)
             let commentFormHtml = '';
             if (config.isLoggedIn) {
@@ -1764,14 +1798,15 @@
             }
 
             return `
-                <article class="mj-feed-post-wrapper" data-post-id="${t.id}" data-post-url="${this.escapeHtml(postUrl)}" data-share-url="${this.escapeHtml(shareUrl)}" data-post-status="approved">
-                    <div class="mj-feed-post" data-id="${t.id}" data-member-id="${t.memberId || ''}" data-created-at="${this.escapeHtml(t.createdAt || '')}" data-photos="${this.escapeHtml(JSON.stringify(t.photos || []))}" data-videos="${this.escapeHtml(JSON.stringify(t.videos || []))}">
+                <article class="mj-feed-post-wrapper${status === 'pending' ? ' mj-feed-post-wrapper--pending' : ''}" data-post-id="${t.id}" data-post-url="${this.escapeHtml(postUrl)}" data-share-url="${this.escapeHtml(shareUrl)}" data-post-status="${this.escapeHtml(status)}">
+                    <div class="mj-feed-post${status === 'pending' ? ' mj-feed-post--pending' : ''}${isFeatured ? ' mj-feed-post--featured' : ''}" data-id="${t.id}" data-featured="${isFeatured ? '1' : '0'}" data-member-id="${t.memberId || ''}" data-created-at="${this.escapeHtml(t.createdAt || '')}" data-photos="${this.escapeHtml(JSON.stringify(t.photos || []))}" data-videos="${this.escapeHtml(JSON.stringify(t.videos || []))}">
                         <div class="mj-feed-post__header">
                             <div class="mj-feed-post__avatar">${avatarInner}</div>
                             <div class="mj-feed-post__meta">
                                 <span class="mj-feed-post__author">${this.escapeHtml(t.memberName)}</span>
                                 ${dateHtml}
                             </div>
+                            ${ownerMenuHtml}
                         </div>
                         ${contentHtml}
                         ${memberMentionsHtml}

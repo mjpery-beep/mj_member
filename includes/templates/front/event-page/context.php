@@ -132,10 +132,10 @@ function mj_member_render_event_page_fallback(array $payload): string
                     <span class="mj-event-page__badge"><?php echo esc_html($hero['type_label']); ?></span>
                 <?php endif; ?>
                 <h1 class="mj-event-page__title"><?php echo esc_html($hero['title'] ?? ''); ?></h1>
-                <?php if ($schedulePreview !== '') : ?>
-                    <p class="mj-event-page__date mj-event-page__date--preview"><?php echo nl2br(esc_html($schedulePreview)); ?></p>
-                <?php elseif ($inlineScheduleHtml !== '') : ?>
+                <?php if ($inlineScheduleHtml !== '') : ?>
                     <?php echo $inlineScheduleHtml; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                <?php elseif ($schedulePreview !== '') : ?>
+                    <p class="mj-event-page__date mj-event-page__date--preview"><?php echo nl2br(esc_html($schedulePreview)); ?></p>
                 <?php elseif (!empty($hero['schedule_component'])) : ?>
                     <?php echo $hero['schedule_component']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 <?php elseif ($scheduleSummary !== '') : ?>

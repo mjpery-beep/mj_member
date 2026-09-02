@@ -1080,6 +1080,8 @@ foreach ($occurrence_batch_ids as $occurrence_batch_id) {
 }
 
 $selected_batch_modes = array();
+$selected_batch_plans = array();
+$selected_batch_occurrence_ids = $selected_batch_ids;
 if (!empty($selected_batch_ids) && $event_id > 0 && class_exists(MjEventOccurrenceGenerationBatches::class)) {
     $batches = MjEventOccurrenceGenerationBatches::get_for_event($event_id, false);
     foreach ($batches as $batch) {
@@ -1087,17 +1089,24 @@ if (!empty($selected_batch_ids) && $event_id > 0 && class_exists(MjEventOccurren
             continue;
         }
 
-        $batch_id = isset($batch['batch_uuid']) ? (string) $batch['batch_uuid'] : '';
+        $batch_id = isset($batch['id']) ? (string) (int) $batch['id'] : '';
         if ($batch_id === '' || !isset($selected_batch_ids[$batch_id])) {
             continue;
+        }
+
+        $batch_uuid = isset($batch['batch_uuid']) ? sanitize_text_field((string) $batch['batch_uuid']) : '';
+        if ($batch_uuid !== '') {
+            $selected_batch_occurrence_ids[$batch_uuid] = true;
         }
 
         $config = isset($batch['config_snapshot']) && is_string($batch['config_snapshot'])
             ? json_decode($batch['config_snapshot'], true)
             : array();
-        $mode = is_array($config) && isset($config['mode']) ? sanitize_key((string) $config['mode']) : '';
+        $plan = is_array($config) ? $sanitize_occurrence_generator_plan($config) : array();
+        $mode = isset($plan['mode']) ? sanitize_key((string) $plan['mode']) : '';
         if (in_array($mode, array('weekly', 'monthly'), true)) {
             $selected_batch_modes[$mode] = true;
+            $selected_batch_plans[] = $plan;
         }
     }
 }
@@ -1105,9 +1114,9 @@ if (!empty($selected_batch_ids) && $event_id > 0 && class_exists(MjEventOccurren
 if (!empty($selected_batch_ids)) {
     $occurrences = array_values(array_filter(
         $occurrences,
-        static function (array $occurrence) use ($selected_batch_ids): bool {
+        static function (array $occurrence) use ($selected_batch_occurrence_ids): bool {
             $batch_id = isset($occurrence['generation_batch_id']) ? (string) $occurrence['generation_batch_id'] : '';
-            return $batch_id !== '' && isset($selected_batch_ids[$batch_id]);
+            return $batch_id !== '' && isset($selected_batch_occurrence_ids[$batch_id]);
         }
     ));
 
@@ -1115,15 +1124,19 @@ if (!empty($selected_batch_ids)) {
         $occurrences = array_slice($occurrences, 0, $max_occurrences);
     }
 
-    $weekly_schedule = $build_weekly_schedule_from_occurrences($occurrences, $show_date_range);
-
-    if (count($selected_batch_modes) === 1) {
+    if (count($selected_batch_modes) === 1 && count($selected_batch_plans) === 1) {
         $schedule_mode = 'recurring';
+        $selected_plan = $selected_batch_plans[0];
         if (isset($selected_batch_modes['monthly'])) {
-            $weekly_schedule['is_weekly'] = false;
-            $weekly_schedule['is_monthly'] = true;
+            $weekly_schedule = $build_monthly_schedule_from_generator($selected_plan, $show_date_range);
+        } else {
+            $weekly_schedule = $build_weekly_schedule_from_generator($selected_plan, $show_date_range);
         }
+    } else {
+        $weekly_schedule = $build_weekly_schedule_from_occurrences($occurrences, $show_date_range);
     }
+
+    $show_next_occurrence_label = false;
 }
 
 if (!empty($occurrences) && empty($weekly_schedule['days']) && empty($weekly_schedule['series_items'])) {
@@ -1396,7 +1409,7 @@ if (class_exists(ScheduleDisplayHelper::class)) {
     $schedule_component = ScheduleDisplayHelper::render(
         $schedule_data,
         array(
-            'variant' => 'event-single',
+            'variant' => 'event-schedule-widget',
             'extra_context' => $extra_context,
         )
     );
@@ -1539,6 +1552,9 @@ echo $schedule_component;
 
 .mj-event-schedule__time-icon {
     display: inline-flex;
+    align-items: center;
+    font-size: 0.9rem;
+    line-height: 1;
     color: var(--mj-schedule-icon-color);
 }
 

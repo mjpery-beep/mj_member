@@ -206,7 +206,9 @@ final class EventPageViewBuilder
         $weeklySchedule = $this->resolveWeeklySchedule($schedule);
         $schedulePreview = isset($schedule['schedule_preview']) ? (string) $schedule['schedule_preview'] : '';
         $schedulePreviewRows = $this->buildSchedulePreviewRows($schedulePreview);
-        $inlineScheduleHtml = $schedulePreview !== '' ? '' : self::renderInlineScheduleHtml($schedule);
+        // Toujours recalculer depuis les occurrences réelles : schedule_preview est un texte
+        // mis en cache lors de la génération du lot et peut devenir périmé après édition manuelle.
+        $inlineScheduleHtml = self::renderInlineScheduleHtml($schedule);
 
         return array(
             'title' => isset($event['title']) ? (string) $event['title'] : '',

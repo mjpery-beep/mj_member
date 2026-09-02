@@ -503,6 +503,15 @@ final class TestimonialsController implements AjaxHandlerInterface {
         $page = isset($_POST['page']) ? max(1, (int) $_POST['page']) : 1;
         $per_page = isset($_POST['per_page']) ? min(50, max(1, (int) $_POST['per_page'])) : 10;
         $featured_only = isset($_POST['featured_only']) && $_POST['featured_only'] === '1';
+        $base_url = isset($_POST['base_url']) ? esc_url_raw(wp_unslash($_POST['base_url'])) : '';
+        if ($base_url === '' || !wp_http_validate_url($base_url)) {
+            $base_url = home_url('/temoignages/');
+        }
+
+        $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+        $current_member_id = $current_member && isset($current_member->id) ? (int) $current_member->id : 0;
+        $current_member_role = $current_member && isset($current_member->role) ? (string) $current_member->role : '';
+        $is_animator = in_array($current_member_role, array('animateur', 'coordinateur'), true);
 
         $query_args = array(
             'page' => $page,
@@ -548,20 +557,36 @@ final class TestimonialsController implements AjaxHandlerInterface {
             }
 
             $link_preview = MjTestimonials::get_link_preview($t);
+            $testimonial_id = (int) $t->id;
+            $testimonial_member_id = isset($t->member_id) ? (int) $t->member_id : 0;
+            $testimonial_status = isset($t->status) ? (string) $t->status : MjTestimonials::STATUS_APPROVED;
+            $is_owner = $current_member_id > 0 && $testimonial_member_id === $current_member_id;
+            $can_manage = $is_owner || $is_animator;
+            $post_url = add_query_arg(array('post' => $testimonial_id), $base_url);
+            $share_url = add_query_arg(array(
+                'mj_testimonial_share' => $testimonial_id,
+                'target' => $post_url,
+            ), home_url('/'));
 
             $items[] = array(
-                'id' => (int) $t->id,
+                'id' => $testimonial_id,
                 'content' => isset($t->content) ? self::linkifyMemberMentions(self::linkifyEventMentions($t->content)) : '',
                 'rawContent' => isset($t->content) ? $t->content : '',
                 'photos' => $photos,
                 'videos' => $videos,
                 'linkPreview' => $link_preview,
-                'memberId' => isset($t->member_id) ? (int) $t->member_id : 0,
+                'memberId' => $testimonial_member_id,
                 'memberName' => $member_name,
                 'memberInitial' => $member_initial,
                 'memberAvatarUrl' => $member_avatar_url,
                 'createdAgo' => $created_ago,
                 'createdAt' => isset($t->created_at) ? $t->created_at : '',
+                'status' => $testimonial_status,
+                'featured' => !empty($t->featured),
+                'canManage' => $can_manage,
+                'canToggleFeatured' => $is_animator,
+                'postUrl' => $post_url,
+                'shareUrl' => $share_url,
                 'mentionedMembers' => isset($t->content) ? self::extractMentionedMembers($t->content) : array(),
             );
         }
