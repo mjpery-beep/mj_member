@@ -52,11 +52,11 @@ final class EventPageViewBuilder
             ? $inlineSchedule['days']
             : array();
 
-        $isFromGenerator = !empty($weeklySchedule['from_generator']);
-        $inlineScheduleCompact = $isFromGenerator
-            ? $builder->buildInlineScheduleCompactLabel($schedule)
-            : '';
-        $inlineScheduleManual = !$isFromGenerator
+        // Préférer le résumé groupé par jour de semaine (ex: "Lundi 15h-20h, Mercredi 12h-18h")
+        // dès qu'un motif hebdomadaire cohérent se dégage des occurrences, peu importe que le
+        // planning provienne d'un générateur récurrent ou d'occurrences ajoutées manuellement.
+        $inlineScheduleCompact = $builder->buildInlineScheduleCompactLabel($schedule);
+        $inlineScheduleManual = $inlineScheduleCompact === ''
             ? $builder->buildManualOccurrencesDisplay($schedule)
             : array();
 
@@ -827,9 +827,20 @@ final class EventPageViewBuilder
                 $timeRangesByWeekday[$weekdayIndex] = array();
             }
 
-            if ($timeRange !== '' && !in_array($timeRange, $timeRangesByWeekday[$weekdayIndex], true)) {
-                $timeRangesByWeekday[$weekdayIndex][] = $timeRange;
+            if ($timeRange === '') {
+                continue;
             }
+
+            // Compte les occurrences par plage horaire pour ne retenir que la plus fréquente
+            // (les occurrences passées peuvent porter d'anciens horaires corrigés depuis).
+            if (!isset($timeRangesByWeekday[$weekdayIndex][$timeRange])) {
+                $timeRangesByWeekday[$weekdayIndex][$timeRange] = array('count' => 0, 'last_seen' => 0);
+            }
+            $timeRangesByWeekday[$weekdayIndex][$timeRange]['count']++;
+            $timeRangesByWeekday[$weekdayIndex][$timeRange]['last_seen'] = max(
+                $timeRangesByWeekday[$weekdayIndex][$timeRange]['last_seen'],
+                $startTimestamp
+            );
         }
 
         if (count($timeRangesByWeekday) < 2) {
@@ -842,32 +853,28 @@ final class EventPageViewBuilder
         $weekdaySignatures = array();
         foreach ($timeRangesByWeekday as $weekdayIndex => $ranges) {
             $weekdayLabel = $weekdayLabels[$weekdayIndex] ?? '';
-            if ($weekdayLabel === '') {
+            if ($weekdayLabel === '' || empty($ranges)) {
                 continue;
             }
 
+            // Retient la plage horaire la plus fréquente pour ce jour (départage par la plus récente).
+            uasort($ranges, static function (array $left, array $right): int {
+                if ($left['count'] !== $right['count']) {
+                    return $right['count'] <=> $left['count'];
+                }
+                return $right['last_seen'] <=> $left['last_seen'];
+            });
+            $winningRange = (string) array_key_first($ranges);
+
             $weekdayNames[] = $weekdayLabel;
-            $normalizedRanges = array_values(array_filter(array_map('strval', $ranges), static function ($value) {
-                return trim($value) !== '';
-            }));
-            $signature = implode(' / ', array_unique($normalizedRanges));
-            $weekdaySignatures[$weekdayIndex] = $signature;
+            $weekdaySignatures[$weekdayIndex] = $winningRange;
         }
 
         if (empty($weekdayNames)) {
             return '';
         }
 
-        // If all weekdays share exactly the same time range, keep the short sentence.
-        $uniqueSignatures = array_values(array_unique(array_values($weekdaySignatures)));
-        if (count($uniqueSignatures) === 1 && trim((string) $uniqueSignatures[0]) !== '') {
-            $styledNames = array_map(static function (string $n) { return '<span class="mj-event-page__schedule-inline-day">' . esc_html($n) . '</span>'; }, $weekdayNames);
-            $weekdaysLabel = $this->formatNaturalList($styledNames);
-            $timeLabel = $this->normalizeTimeRangeForSentence((string) $uniqueSignatures[0]);
-            return sprintf(__('Tous les %1$s ⌚ %2$s', 'mj-member'), $weekdaysLabel, esc_html($timeLabel));
-        }
-
-        // Otherwise, group weekdays by time range and build a sentence per group.
+        // Regroupe les jours partageant la même plage horaire, une ligne par groupe.
         $weekdaysBySignature = array();
         foreach ($weekdaySignatures as $weekdayIndex => $signature) {
             $key = trim((string) $signature);
@@ -877,7 +884,7 @@ final class EventPageViewBuilder
             $weekdaysBySignature[$key][] = $weekdayLabels[$weekdayIndex] ?? '';
         }
 
-        $clauses = array();
+        $lines = array();
         foreach ($weekdaysBySignature as $signature => $names) {
             $names = array_values(array_filter($names, static function ($value) {
                 return is_string($value) && trim($value) !== '';
@@ -886,28 +893,16 @@ final class EventPageViewBuilder
                 continue;
             }
             $timeLabel = $this->normalizeTimeRangeForSentence((string) $signature);
-            $clauses[] = $this->buildCompactWeekdayClause($names, $timeLabel);
+            $clause = $this->buildCompactWeekdayClause($names, $timeLabel);
+            $lines[] = ucfirst($clause);
         }
 
-        if (empty($clauses)) {
+        if (empty($lines)) {
             $styledNames = array_map(static function (string $n) { return '<span class="mj-event-page__schedule-inline-day">' . esc_html($n) . '</span>'; }, $weekdayNames);
             return sprintf(__('Tous les %s', 'mj-member'), $this->formatNaturalList($styledNames));
         }
 
-        $first = (string) array_shift($clauses);
-        if (str_starts_with($first, 'les ')) {
-            $sentence = 'Tous ' . $first;
-        } elseif (str_starts_with($first, 'le ')) {
-            $sentence = ucfirst($first);
-        } else {
-            $sentence = $first;
-        }
-
-        if (!empty($clauses)) {
-            $sentence .= ' et ' . implode(' et ', $clauses);
-        }
-
-        return $sentence;
+        return implode('<br>', $lines);
     }
 
     /**
