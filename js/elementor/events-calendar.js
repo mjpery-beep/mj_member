@@ -648,7 +648,41 @@
 
         // ---- Delete occurrence handler & add-event day buttons ----
         if (config && config.ajaxUrl && config.deleteNonce) {
+            function closeDayActionMenus() {
+                toArray(root.querySelectorAll('.mj-cal-mobile__day-actions.is-open')).forEach(function(actions) {
+                    actions.classList.remove('is-open');
+                });
+                toArray(root.querySelectorAll('.mj-cal-mobile__day-menu')).forEach(function(menu) {
+                    menu.hidden = true;
+                });
+                toArray(root.querySelectorAll('.mj-cal-mobile__day-menu-toggle[aria-expanded="true"]')).forEach(function(toggle) {
+                    toggle.setAttribute('aria-expanded', 'false');
+                });
+            }
+
             root.addEventListener('click', function(e) {
+                var dayMenuToggle = e.target.closest('.mj-cal-mobile__day-menu-toggle');
+                if (dayMenuToggle) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    var dayActions = dayMenuToggle.closest('.mj-cal-mobile__day-actions');
+                    var dayMenu = dayActions ? dayActions.querySelector('.mj-cal-mobile__day-menu') : null;
+                    var isDayMenuOpen = dayMenu && !dayMenu.hidden;
+                    closeDayActionMenus();
+
+                    if (dayMenu && !isDayMenuOpen) {
+                        dayMenu.hidden = false;
+                        dayActions.classList.add('is-open');
+                        dayMenuToggle.setAttribute('aria-expanded', 'true');
+                    }
+                    return;
+                }
+
+                if (e.target.closest('.mj-cal-mobile__day-menu')) {
+                    closeDayActionMenus();
+                }
+
                 var menuToggle = e.target.closest('.mj-member-events-calendar__event-menu-toggle');
                 if (menuToggle) {
                     e.preventDefault();
@@ -799,9 +833,10 @@
             });
 
             document.addEventListener('click', function(e) {
-                if (root.contains(e.target) && e.target.closest('.mj-member-events-calendar__event-actions')) {
+                if (root.contains(e.target) && e.target.closest('.mj-member-events-calendar__event-actions, .mj-cal-mobile__day-actions')) {
                     return;
                 }
+                closeDayActionMenus();
                 toArray(root.querySelectorAll('.mj-member-events-calendar__event-menu')).forEach(function(menu) {
                     menu.hidden = true;
                 });
@@ -811,6 +846,12 @@
                 toArray(root.querySelectorAll('.mj-member-events-calendar__event-menu-toggle[aria-expanded="true"]')).forEach(function(toggle) {
                     toggle.setAttribute('aria-expanded', 'false');
                 });
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeDayActionMenus();
+                }
             });
         }
 
@@ -840,6 +881,23 @@
             });
         }
 
+        function appendMobileDayAction(menu, attributeName, dayKey, icon, label, modifierClass) {
+            var action = document.createElement('button');
+            action.type = 'button';
+            action.className = 'mj-cal-mobile__day-menu-action' + (modifierClass ? ' ' + modifierClass : '');
+            action.setAttribute('role', 'menuitem');
+            action.setAttribute(attributeName, dayKey);
+            var iconNode = document.createElement('span');
+            iconNode.className = 'mj-cal-mobile__day-menu-icon';
+            iconNode.setAttribute('aria-hidden', 'true');
+            iconNode.textContent = icon;
+            var labelNode = document.createElement('span');
+            labelNode.textContent = label;
+            action.appendChild(iconNode);
+            action.appendChild(labelNode);
+            menu.appendChild(action);
+        }
+
         function buildMobileList(mobileList) {
             var mobileCalendar = mobileList.closest('.mj-cal-mobile');
             if (!mobileCalendar) {
@@ -857,7 +915,48 @@
 
                 var heading = document.createElement('h4');
                 heading.className = 'mj-cal-mobile__event-day-title';
-                heading.textContent = formatMobileDayLabel(dayKey);
+                var headingLabel = document.createElement('span');
+                headingLabel.textContent = formatMobileDayLabel(dayKey);
+                heading.appendChild(headingLabel);
+
+                var canCreateEvent = !!ccmInstance;
+                var canCreateOccurrence = !!(config && config.ajaxUrl && config.deleteNonce);
+                var canCreateTask = !!(config && config.todoNonce);
+                var canCreateLeave = !!(config && config.canCreateLeaveRequest && window.MjLeaveRequestsWidget && typeof window.MjLeaveRequestsWidget.openCreateModal === 'function');
+
+                if (canCreateEvent || canCreateOccurrence || canCreateTask || canCreateLeave) {
+                    var actions = document.createElement('div');
+                    actions.className = 'mj-cal-mobile__day-actions';
+
+                    var menuToggle = document.createElement('button');
+                    menuToggle.type = 'button';
+                    menuToggle.className = 'mj-cal-mobile__day-menu-toggle';
+                    menuToggle.setAttribute('aria-label', 'Actions du ' + formatMobileDayLabel(dayKey));
+                    menuToggle.setAttribute('aria-expanded', 'false');
+                    menuToggle.setAttribute('aria-haspopup', 'menu');
+                    menuToggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>';
+
+                    var menu = document.createElement('div');
+                    menu.className = 'mj-cal-mobile__day-menu';
+                    menu.setAttribute('role', 'menu');
+                    menu.hidden = true;
+                    if (canCreateEvent) {
+                        appendMobileDayAction(menu, 'data-calendar-create-day', dayKey, '+', 'Créer un événement');
+                    }
+                    if (canCreateOccurrence) {
+                        appendMobileDayAction(menu, 'data-calendar-create-occurrence-day', dayKey, '↻', 'Créer une occurrence');
+                    }
+                    if (canCreateTask) {
+                        appendMobileDayAction(menu, 'data-calendar-create-task-day', dayKey, '✓', 'Créer une tâche');
+                    }
+                    if (canCreateLeave) {
+                        appendMobileDayAction(menu, 'data-calendar-create-leave-day', dayKey, '🏖️', 'Créer un congé', 'mj-cal-mobile__day-menu-action--leave');
+                    }
+
+                    actions.appendChild(menuToggle);
+                    actions.appendChild(menu);
+                    heading.appendChild(actions);
+                }
                 section.appendChild(heading);
                 section.appendChild(document.importNode(tpl.content, true));
                 mobileList.appendChild(section);
@@ -2723,6 +2822,9 @@
             var eventPadding = typeof options.eventPadding === 'number' ? options.eventPadding : 6;
             var textSize = typeof options.textSize === 'number' ? options.textSize : 12;
             var textScale = textSize / 12;
+            function scaledCanvasSize(size) {
+                return Math.max(1, Math.round(size * textScale * 10) / 10);
+            }
             var theme = normalizePrintTheme(options.theme);
             var hasDarkBackground = theme === 'dark' || theme === 'dark-light-days';
             var hasDarkDayCards = theme === 'dark' || theme === 'light-dark-days';
@@ -2793,20 +2895,20 @@
                     height += innerWidth + 4;
                 }
 
-                measureCtx.font = '700 ' + (12 * textScale) + 'px Arial, sans-serif';
+                measureCtx.font = '700 ' + scaledCanvasSize(12) + 'px Arial, sans-serif';
                 var titleLines = wrapCanvasText(measureCtx, eventItem.title || '', Math.max(60, innerWidth - 20));
-                height += Math.max(14, Math.min(titleLines.length, 3) * 14);
+                height += Math.max(scaledCanvasSize(14), Math.min(titleLines.length, 3) * scaledCanvasSize(14));
 
                 if (options.timeRange && eventItem.meta) {
-                    height += 14;
+                    height += scaledCanvasSize(14);
                 }
                 if (eventItem.type) {
-                    height += 18;
+                    height += scaledCanvasSize(18);
                 }
                 if (options.details && eventItem.details) {
-                    measureCtx.font = '400 10px Arial, sans-serif';
+                    measureCtx.font = '400 ' + scaledCanvasSize(10) + 'px Arial, sans-serif';
                     var detailLines = wrapCanvasText(measureCtx, eventItem.details, Math.max(60, innerWidth));
-                    height += Math.min(detailLines.length, 4) * 12;
+                    height += Math.min(detailLines.length, 4) * scaledCanvasSize(12);
                 }
 
                 return Math.max(42, height);
@@ -2894,19 +2996,19 @@
 
             for (var pi = 0; pi < periods.length; pi += 1) {
                 var period = periods[pi];
-                ctx.font = '700 26px Arial, sans-serif';
+                ctx.font = '700 ' + scaledCanvasSize(26) + 'px Arial, sans-serif';
                 ctx.fillStyle = palette.heading;
                 ctx.textAlign = 'center';
-                ctx.fillText(String(period.title || ''), canvasWidth / 2, cursorY + 26);
+                ctx.fillText(String(period.title || ''), canvasWidth / 2, cursorY + scaledCanvasSize(26));
                 ctx.textAlign = 'left';
-                cursorY += 40;
+                cursorY += scaledCanvasSize(40);
 
-                ctx.font = '700 11px Arial, sans-serif';
+                ctx.font = '700 ' + scaledCanvasSize(11) + 'px Arial, sans-serif';
                 ctx.fillStyle = palette.weekday;
                 if (!removeEmptyDays) {
                     for (var wdi = 0; wdi < weekdayLabels.length; wdi += 1) {
                         var weekdayX = pagePadding + (wdi * (dayWidth + weekdayGap));
-                        ctx.fillText(weekdayLabels[wdi], weekdayX + 4, cursorY + 11);
+                        ctx.fillText(weekdayLabels[wdi], weekdayX + 4, cursorY + scaledCanvasSize(11));
                     }
                     cursorY += weekdayHeight + blockGap;
                 }
@@ -2951,10 +3053,10 @@
                                 var compactInnerY = compactCellY + dayPadding;
                                 var compactInnerWidth = compactDayWidthToDraw - (dayPadding * 2);
 
-                                ctx.font = '700 13px Arial, sans-serif';
+                                ctx.font = '700 ' + scaledCanvasSize(13) + 'px Arial, sans-serif';
                                 ctx.fillStyle = palette.dayHead;
-                                ctx.fillText(String(compactCell.dayHeading || compactCell.dayNumber || ''), compactInnerX, compactInnerY + 13);
-                                compactInnerY += 22;
+                                ctx.fillText(String(compactCell.dayHeading || compactCell.dayNumber || ''), compactInnerX, compactInnerY + scaledCanvasSize(13));
+                                compactInnerY += scaledCanvasSize(22);
 
                                 for (var compactEventIndex = 0; compactEventIndex < (compactCell.events || []).length; compactEventIndex += 1) {
                                     var compactEventItem = compactCell.events[compactEventIndex];
@@ -2993,26 +3095,26 @@
                                     }
 
                                     var compactTitleOffsetX = compactContentX;
-                                    ctx.font = '700 12px Arial, sans-serif';
+                                    ctx.font = '700 ' + scaledCanvasSize(12) + 'px Arial, sans-serif';
                                     ctx.fillStyle = palette.eventTitle;
                                     if (options.eventEmoji && compactEventItem.emoji) {
-                                        ctx.fillText(String(compactEventItem.emoji), compactContentX, compactContentY + 12);
-                                        compactTitleOffsetX += 18;
+                                        ctx.fillText(String(compactEventItem.emoji), compactContentX, compactContentY + scaledCanvasSize(12));
+                                        compactTitleOffsetX += scaledCanvasSize(18);
                                     }
                                     var compactTitleLines = wrapCanvasText(ctx, compactEventItem.title || '', Math.max(60, compactContentWidth - (compactTitleOffsetX - compactContentX)));
-                                    drawCanvasTextBlock(ctx, compactTitleLines, compactTitleOffsetX, compactContentY + 11, 14, 3);
-                                    compactContentY += Math.max(16, Math.min(compactTitleLines.length, 3) * 14);
+                                    drawCanvasTextBlock(ctx, compactTitleLines, compactTitleOffsetX, compactContentY + scaledCanvasSize(11), scaledCanvasSize(14), 3);
+                                    compactContentY += Math.max(scaledCanvasSize(16), Math.min(compactTitleLines.length, 3) * scaledCanvasSize(14));
 
-                                    ctx.font = '400 10px Arial, sans-serif';
+                                    ctx.font = '400 ' + scaledCanvasSize(10) + 'px Arial, sans-serif';
                                     ctx.fillStyle = palette.eventMeta;
                                     if (options.timeRange && compactEventItem.meta) {
-                                        ctx.fillText(String(compactEventItem.meta), compactContentX, compactContentY + 10);
-                                        compactContentY += 14;
+                                        ctx.fillText(String(compactEventItem.meta), compactContentX, compactContentY + scaledCanvasSize(10));
+                                        compactContentY += scaledCanvasSize(14);
                                     }
 
                                     if (compactEventItem.type) {
                                         var compactPillText = String(compactEventItem.type);
-                                        ctx.font = '600 10px Arial, sans-serif';
+                                        ctx.font = '600 ' + scaledCanvasSize(10) + 'px Arial, sans-serif';
                                         var compactPillWidth = Math.min(compactContentWidth, ctx.measureText(compactPillText).width + 16);
                                         ctx.save();
                                         drawRoundedRect(ctx, compactContentX, compactContentY, compactPillWidth, 16, 999);
@@ -3027,15 +3129,15 @@
                                         ctx.stroke();
                                         ctx.restore();
                                         ctx.fillStyle = compactEventItem.accentColor || palette.pillText;
-                                        ctx.fillText(compactPillText, compactContentX + 8, compactContentY + 11);
-                                        compactContentY += 20;
+                                        ctx.fillText(compactPillText, compactContentX + 8, compactContentY + scaledCanvasSize(11));
+                                        compactContentY += scaledCanvasSize(20);
                                     }
 
                                     if (options.details && compactEventItem.details) {
-                                        ctx.font = '400 10px Arial, sans-serif';
+                                        ctx.font = '400 ' + scaledCanvasSize(10) + 'px Arial, sans-serif';
                                         ctx.fillStyle = palette.eventMeta;
                                         var compactDetailLines = wrapCanvasText(ctx, compactEventItem.details, Math.max(60, compactContentWidth));
-                                        drawCanvasTextBlock(ctx, compactDetailLines, compactContentX, compactContentY + 10, 12, 4);
+                                        drawCanvasTextBlock(ctx, compactDetailLines, compactContentX, compactContentY + scaledCanvasSize(10), scaledCanvasSize(12), 4);
                                     }
 
                                     compactInnerY += compactEventHeight + 6;
@@ -3086,10 +3188,10 @@
                             var innerY = cellY + dayPadding;
                             var innerWidth = dayWidth - (dayPadding * 2);
 
-                            ctx.font = '700 13px Arial, sans-serif';
+                            ctx.font = '700 ' + scaledCanvasSize(13) + 'px Arial, sans-serif';
                             ctx.fillStyle = palette.dayHead;
-                            ctx.fillText(String(cell.dayNumber || ''), innerX, innerY + 13);
-                            innerY += 22;
+                            ctx.fillText(String(cell.dayNumber || ''), innerX, innerY + scaledCanvasSize(13));
+                            innerY += scaledCanvasSize(22);
 
                             for (var ei = 0; ei < (cell.events || []).length; ei += 1) {
                                 var eventItem = cell.events[ei];
@@ -3128,26 +3230,26 @@
                                 }
 
                                 var titleOffsetX = contentX;
-                                ctx.font = '700 12px Arial, sans-serif';
+                                ctx.font = '700 ' + scaledCanvasSize(12) + 'px Arial, sans-serif';
                                 ctx.fillStyle = palette.eventTitle;
                                 if (options.eventEmoji && eventItem.emoji) {
-                                    ctx.fillText(String(eventItem.emoji), contentX, contentY + 12);
-                                    titleOffsetX += 18;
+                                    ctx.fillText(String(eventItem.emoji), contentX, contentY + scaledCanvasSize(12));
+                                    titleOffsetX += scaledCanvasSize(18);
                                 }
                                 var titleLines = wrapCanvasText(ctx, eventItem.title || '', Math.max(60, contentWidth - (titleOffsetX - contentX)));
-                                drawCanvasTextBlock(ctx, titleLines, titleOffsetX, contentY + 11, 14, 3);
-                                contentY += Math.max(16, Math.min(titleLines.length, 3) * 14);
+                                drawCanvasTextBlock(ctx, titleLines, titleOffsetX, contentY + scaledCanvasSize(11), scaledCanvasSize(14), 3);
+                                contentY += Math.max(scaledCanvasSize(16), Math.min(titleLines.length, 3) * scaledCanvasSize(14));
 
-                                ctx.font = '400 10px Arial, sans-serif';
+                                ctx.font = '400 ' + scaledCanvasSize(10) + 'px Arial, sans-serif';
                                 ctx.fillStyle = palette.eventMeta;
                                 if (options.timeRange && eventItem.meta) {
-                                    ctx.fillText(String(eventItem.meta), contentX, contentY + 10);
-                                    contentY += 14;
+                                    ctx.fillText(String(eventItem.meta), contentX, contentY + scaledCanvasSize(10));
+                                    contentY += scaledCanvasSize(14);
                                 }
 
                                 if (eventItem.type) {
                                     var pillText = String(eventItem.type);
-                                    ctx.font = '600 10px Arial, sans-serif';
+                                    ctx.font = '600 ' + scaledCanvasSize(10) + 'px Arial, sans-serif';
                                     var pillWidth = Math.min(contentWidth, ctx.measureText(pillText).width + 16);
                                     ctx.save();
                                     drawRoundedRect(ctx, contentX, contentY, pillWidth, 16, 999);
@@ -3162,15 +3264,15 @@
                                     ctx.stroke();
                                     ctx.restore();
                                     ctx.fillStyle = eventItem.accentColor || palette.pillText;
-                                    ctx.fillText(pillText, contentX + 8, contentY + 11);
-                                    contentY += 20;
+                                    ctx.fillText(pillText, contentX + 8, contentY + scaledCanvasSize(11));
+                                    contentY += scaledCanvasSize(20);
                                 }
 
                                 if (options.details && eventItem.details) {
-                                    ctx.font = '400 10px Arial, sans-serif';
+                                    ctx.font = '400 ' + scaledCanvasSize(10) + 'px Arial, sans-serif';
                                     ctx.fillStyle = palette.eventMeta;
                                     var detailLines = wrapCanvasText(ctx, eventItem.details, Math.max(60, contentWidth));
-                                    drawCanvasTextBlock(ctx, detailLines, contentX, contentY + 10, 12, 4);
+                                    drawCanvasTextBlock(ctx, detailLines, contentX, contentY + scaledCanvasSize(10), scaledCanvasSize(12), 4);
                                 }
 
                                 innerY += eventHeight + 6;
