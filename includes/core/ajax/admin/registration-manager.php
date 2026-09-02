@@ -7976,9 +7976,16 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $end_day = clone $start_day;
         }
 
-        $build_row = static function (\DateTime $day_obj) use ($timezone, $start_time, $end_time, $occurrence_status_db, $batch_id): ?array {
-            $start_at = \DateTime::createFromFormat('Y-m-d H:i:s', $day_obj->format('Y-m-d') . ' ' . $start_time . ':00', $timezone);
-            $end_at = \DateTime::createFromFormat('Y-m-d H:i:s', $day_obj->format('Y-m-d') . ' ' . $end_time . ':00', $timezone);
+        $weekday_by_n = array(1 => 'mon', 2 => 'tue', 3 => 'wed', 4 => 'thu', 5 => 'fri', 6 => 'sat', 7 => 'sun');
+        $overrides = isset($config['overrides']) && is_array($config['overrides']) ? $config['overrides'] : array();
+
+        $build_row = static function (\DateTime $day_obj) use ($timezone, $start_time, $end_time, $overrides, $weekday_by_n, $occurrence_status_db, $batch_id): ?array {
+            $weekday = $weekday_by_n[(int) $day_obj->format('N')] ?? '';
+            $override = $weekday !== '' && isset($overrides[$weekday]) && is_array($overrides[$weekday]) ? $overrides[$weekday] : array();
+            $row_start_time = isset($override['start']) && preg_match('/^\d{2}:\d{2}$/', (string) $override['start']) ? $override['start'] : $start_time;
+            $row_end_time = isset($override['end']) && preg_match('/^\d{2}:\d{2}$/', (string) $override['end']) ? $override['end'] : $end_time;
+            $start_at = \DateTime::createFromFormat('Y-m-d H:i:s', $day_obj->format('Y-m-d') . ' ' . $row_start_time . ':00', $timezone);
+            $end_at = \DateTime::createFromFormat('Y-m-d H:i:s', $day_obj->format('Y-m-d') . ' ' . $row_end_time . ':00', $timezone);
             if (!$start_at instanceof \DateTime || !$end_at instanceof \DateTime) {
                 return null;
             }
