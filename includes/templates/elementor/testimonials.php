@@ -232,7 +232,7 @@ $localize_data = array(
 
 $localize_data['isSingleMode'] = $is_single_mode;
 $localize_data['singlePostId'] = $single_post_id;
-$localize_data['baseUrl'] = remove_query_arg(['post', 'mj_testimonial_id']);
+$localize_data['baseUrl'] = home_url('/mon-compte/temoignages/');
 global $mj_testimonial_clean_urls_active;
 $localize_data['cleanUrlsActive'] = !empty($mj_testimonial_clean_urls_active);
 $localize_data['isAnimator'] = $is_animator ?? false;

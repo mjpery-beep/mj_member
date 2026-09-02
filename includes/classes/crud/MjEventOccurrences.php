@@ -405,13 +405,13 @@ class MjEventOccurrences {
         global $wpdb;
         $table = self::table_name();
 
-        return (int) $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT COUNT(*) FROM {$table} WHERE event_id = %d AND source = %s AND (generation_batch_id IS NULL OR generation_batch_id = '')",
-                $event_id,
-                self::SOURCE_GENERATED
-            )
+        $query = $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table} WHERE event_id = %d AND source = %s AND (generation_batch_id IS NULL OR generation_batch_id = '')",
+            $event_id,
+            self::SOURCE_GENERATED
         );
+
+        return (int) $wpdb->get_var($query);
     }
 
     /**

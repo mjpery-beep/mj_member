@@ -2845,7 +2845,7 @@
             // Save
             $content.find('[data-action="save-edit"]').on('click', function() {
                 const newContent = $content.find('.mj-feed-post__edit-textarea').val().trim();
-                const hasMedia = editPhotos.length > 0 || editVideoId > 0;
+                const hasMedia = editPhotos.length > 0 || editVideos.length > 0;
 
                 if (!newContent && !hasMedia) {
                     showEditStatus('Le témoignage doit contenir au moins du texte, une photo ou une vidéo.', 'error');

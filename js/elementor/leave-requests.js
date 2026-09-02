@@ -80,6 +80,14 @@
         return `${year}-${m}-${d}`;
     };
 
+    const typeRequiresDocument = (type) => !!(type && (type.requires_document || type.requiresDocument));
+    const typeRequiresValidation = (type) => {
+        if (!type) return true;
+        if (typeof type.requires_validation !== 'undefined') return !!type.requires_validation;
+        if (typeof type.requiresValidation !== 'undefined') return !!type.requiresValidation;
+        return true;
+    };
+
     const getMonthName = (month) => {
         const months = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
                         'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
@@ -159,10 +167,11 @@
     };
 
     // Calendar Picker Component
-    function CalendarPicker({ selectedDates, onToggleDate, minDate, workSchedule, reservedDates, types }) {
+    function CalendarPicker({ selectedDates, onToggleDate, minDate, workSchedule, reservedDates, types, initialViewDate }) {
         const today = new Date();
-        const [viewYear, setViewYear] = useState(today.getFullYear());
-        const [viewMonth, setViewMonth] = useState(today.getMonth());
+        const initialView = initialViewDate ? new Date(initialViewDate) : today;
+        const [viewYear, setViewYear] = useState(Number.isNaN(initialView.getTime()) ? today.getFullYear() : initialView.getFullYear());
+        const [viewMonth, setViewMonth] = useState(Number.isNaN(initialView.getTime()) ? today.getMonth() : initialView.getMonth());
         const weekdays = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
         const i18n = mjLeaveRequests.i18n;
         const daysInMonth = getDaysInMonth(viewYear, viewMonth);
@@ -677,18 +686,18 @@
     }
 
     // Leave Request Form Component
-    function LeaveRequestForm({ onClose, onSuccess, types, quotas, usage, workSchedule, reservedDates }) {
+    function LeaveRequestForm({ onClose, onSuccess, types, quotas, usage, workSchedule, reservedDates, initialDates }) {
         const i18n = mjLeaveRequests.i18n;
         const [typeId, setTypeId] = useState(null);
-        const [dates, setDates] = useState([]);
+        const [dates, setDates] = useState(Array.isArray(initialDates) ? initialDates : []);
         const [reason, setReason] = useState('');
         const [file, setFile] = useState(null);
         const [loading, setLoading] = useState(false);
         const [error, setError] = useState('');
 
         const selectedType = useMemo(() => types.find(t => t.id === typeId), [types, typeId]);
-        const requiresDocument = selectedType?.requires_document;
-        const requiresValidation = selectedType?.requires_validation;
+        const requiresDocument = typeRequiresDocument(selectedType);
+        const requiresValidation = typeRequiresValidation(selectedType);
 
         const toggleDate = (dateStr) => {
             setDates(prev => 
@@ -767,7 +776,7 @@
                             quota !== null && h('span', { class: 'mj-leave-requests__type-option-quota' }, 
                                 `${used} / ${quota}`
                             ),
-                            !type.requires_validation && h('span', { class: 'mj-leave-requests__type-option-auto' }, i18n.autoApproved)
+                            !typeRequiresValidation(type) && h('span', { class: 'mj-leave-requests__type-option-auto' }, i18n.autoApproved)
                         );
                     })
                 )
@@ -780,7 +789,8 @@
                     onToggleDate: toggleDate,
                     workSchedule,
                     reservedDates,
-                    types
+                    types,
+                    initialViewDate: dates[0] || null
                 }),
                 dates.length > 0 
                     ? h('div', { class: 'mj-leave-requests__selected-dates' },
@@ -1271,7 +1281,7 @@
                                 onChange: () => setTypeId(type.id)
                             }),
                             h('span', { class: 'mj-leave-requests__type-option-name' }, type.name),
-                            !type.requires_validation && h('span', { class: 'mj-leave-requests__type-option-auto' }, i18n.autoApproved)
+                            !typeRequiresValidation(type) && h('span', { class: 'mj-leave-requests__type-option-auto' }, i18n.autoApproved)
                         );
                     })
                 )
@@ -1519,6 +1529,67 @@
             })
         );
     }
+
+    function ExternalCreateRequestModal({ initialDates, onClose, onSuccess }) {
+        const [open, setOpen] = useState(true);
+        const close = () => {
+            setOpen(false);
+            if (typeof onClose === 'function') {
+                onClose();
+            }
+        };
+        const handleSuccess = (data) => {
+            if (typeof onSuccess === 'function') {
+                onSuccess(data);
+            }
+            close();
+        };
+
+        return h(Modal, {
+            isOpen: open,
+            onClose: close,
+            title: mjLeaveRequests.i18n.newRequest || 'Nouvelle demande'
+        },
+            h(LeaveRequestForm, {
+                onClose: close,
+                onSuccess: handleSuccess,
+                types: mjLeaveRequests.types || [],
+                quotas: mjLeaveRequests.quotas || {},
+                usage: mjLeaveRequests.usage || {},
+                workSchedule: mjLeaveRequests.workSchedule || null,
+                reservedDates: mjLeaveRequests.reservedDates || {},
+                initialDates: initialDates || []
+            })
+        );
+    }
+
+    window.MjLeaveRequestsWidget = Object.assign(window.MjLeaveRequestsWidget || {}, {
+        openCreateModal: function(options) {
+            options = options || {};
+            if (!document || !document.body || !mjLeaveRequests.isAnimateur) {
+                return false;
+            }
+
+            const mount = document.createElement('div');
+            mount.className = 'mj-leave-requests-widget mj-leave-requests-widget--external-modal';
+            document.body.appendChild(mount);
+
+            const cleanup = () => {
+                render(null, mount);
+                if (mount.parentNode) {
+                    mount.parentNode.removeChild(mount);
+                }
+            };
+
+            render(h(ExternalCreateRequestModal, {
+                initialDates: Array.isArray(options.initialDates) ? options.initialDates : [],
+                onClose: cleanup,
+                onSuccess: options.onSuccess
+            }), mount);
+
+            return true;
+        }
+    });
 
     // Initialize widget
     function init() {

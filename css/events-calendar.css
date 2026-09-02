@@ -412,6 +412,8 @@ button.mj-member-events-calendar__today-button:disabled {
 }
 
 button.mj-member-events-calendar__day-add {
+    appearance: none !important;
+    -webkit-appearance: none !important;
     display: none;
     align-items: center;
     justify-content: center;
@@ -431,6 +433,12 @@ button.mj-member-events-calendar__day-add {
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
+.mj-member-events-calendar button.mj-member-events-calendar__day-add {
+    background: transparent !important;
+    color: #94a3b8 !important;
+    box-shadow: none !important;
+}
+
 .mj-member-events-calendar__day-add svg {
     display: block;
     flex-shrink: 0;
@@ -446,6 +454,27 @@ button.mj-member-events-calendar__day-add {
     margin-top: 2px;
 }
 
+.mj-member-events-calendar__day-add--task {
+    margin-top: 2px;
+}
+
+.mj-member-events-calendar__day-add--leave {
+    margin-top: 2px;
+    border-style: solid;
+    border-color: rgba(20, 184, 166, 0.42);
+    color: #0f766e;
+}
+
+.mj-member-events-calendar button.mj-member-events-calendar__day-add--leave {
+    border-color: rgba(20, 184, 166, 0.42) !important;
+    color: #0f766e !important;
+}
+
+.mj-member-events-calendar__day-add-emoji {
+    line-height: 1;
+    font-size: 0.78rem;
+}
+
 .mj-member-events-calendar__day:hover .mj-member-events-calendar__day-add,
 .mj-member-events-calendar__day:focus-within .mj-member-events-calendar__day-add {
     display: inline-flex;
@@ -456,6 +485,20 @@ button.mj-member-events-calendar__day-add {
     background: var(--mj-events-calendar-accent, #6366f1);
     border-color: var(--mj-events-calendar-accent, #6366f1);
     color: #ffffff;
+}
+
+.mj-member-events-calendar button.mj-member-events-calendar__day-add:hover,
+.mj-member-events-calendar button.mj-member-events-calendar__day-add:focus-visible {
+    background: var(--mj-events-calendar-accent, #6366f1) !important;
+    border-color: var(--mj-events-calendar-accent, #6366f1) !important;
+    color: #ffffff !important;
+}
+
+.mj-member-events-calendar button.mj-member-events-calendar__day-add--leave:hover,
+.mj-member-events-calendar button.mj-member-events-calendar__day-add--leave:focus-visible {
+    background: #0f766e !important;
+    border-color: #0f766e !important;
+    color: #ffffff !important;
 }
 
 .mj-member-events-calendar__day-add:focus-visible {
@@ -1576,6 +1619,8 @@ button.mj-member-events-calendar__day-add {
 }
 
 .mj-cal-mobile__modal-create-event {
+    appearance: none !important;
+    -webkit-appearance: none !important;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1593,10 +1638,37 @@ button.mj-member-events-calendar__day-add {
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
+.mj-member-events-calendar button.mj-cal-mobile__modal-create-event {
+    background: transparent !important;
+    color: #64748b !important;
+    box-shadow: none !important;
+}
+
+.mj-member-events-calendar button.mj-cal-mobile__modal-create-event--leave {
+    border-color: rgba(20, 184, 166, 0.42) !important;
+    color: #0f766e !important;
+}
+
 .mj-cal-mobile__modal-create-event:active {
     background: var(--mj-events-calendar-accent, #6366f1);
     border-color: var(--mj-events-calendar-accent, #6366f1);
     color: #ffffff;
+}
+
+.mj-member-events-calendar button.mj-cal-mobile__modal-create-event:hover,
+.mj-member-events-calendar button.mj-cal-mobile__modal-create-event:focus-visible,
+.mj-member-events-calendar button.mj-cal-mobile__modal-create-event:active {
+    background: var(--mj-events-calendar-accent, #6366f1) !important;
+    border-color: var(--mj-events-calendar-accent, #6366f1) !important;
+    color: #ffffff !important;
+}
+
+.mj-member-events-calendar button.mj-cal-mobile__modal-create-event--leave:hover,
+.mj-member-events-calendar button.mj-cal-mobile__modal-create-event--leave:focus-visible,
+.mj-member-events-calendar button.mj-cal-mobile__modal-create-event--leave:active {
+    background: #0f766e !important;
+    border-color: #0f766e !important;
+    color: #ffffff !important;
 }
 
 .mj-member-events-calendar--force-mobile {
@@ -2086,6 +2158,125 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
 }
 
 .mj-calendar-occurrence-modal__footer [data-occurrence-submit]:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.mj-calendar-task-modal[hidden] {
+    display: none;
+}
+
+.mj-calendar-task-modal {
+    position: fixed;
+    z-index: 100000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+}
+
+.mj-calendar-task-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.56);
+}
+
+.mj-calendar-task-modal__dialog {
+    position: relative;
+    width: min(520px, 100%);
+    max-height: min(760px, 100%);
+    overflow: auto;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.mj-calendar-task-modal__header,
+.mj-calendar-task-modal__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.mj-calendar-task-modal__header h2 {
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.mj-calendar-task-modal__header button,
+.mj-calendar-task-modal__footer button {
+    width: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #0f172a;
+    padding: 7px 12px;
+    cursor: pointer;
+}
+
+.mj-calendar-task-modal__header button {
+    padding: 0 8px;
+    border: 0;
+    font-size: 1.5rem;
+}
+
+.mj-calendar-task-modal__body {
+    display: grid;
+    gap: 14px;
+    padding: 16px 20px;
+}
+
+.mj-calendar-task-modal__field {
+    display: grid;
+    gap: 5px;
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.mj-calendar-task-modal__field input,
+.mj-calendar-task-modal__field textarea,
+.mj-calendar-task-modal__field select {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 9px 10px;
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: #0f172a;
+}
+
+.mj-calendar-task-modal__field textarea {
+    resize: vertical;
+}
+
+.mj-calendar-task-modal__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.mj-calendar-task-modal__feedback {
+    min-height: 1.25em;
+    margin: 0;
+    color: #b91c1c;
+    font-size: 0.85rem;
+}
+
+.mj-calendar-task-modal__footer {
+    border-top: 1px solid #e2e8f0;
+    border-bottom: 0;
+}
+
+.mj-calendar-task-modal__footer [data-task-submit] {
+    border-color: var(--mj-events-calendar-accent, #6366f1);
+    background: var(--mj-events-calendar-accent, #6366f1);
+    color: #ffffff;
+}
+
+.mj-calendar-task-modal__footer [data-task-submit]:disabled {
     cursor: not-allowed;
     opacity: 0.55;
 }

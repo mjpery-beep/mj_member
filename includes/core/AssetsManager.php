@@ -334,7 +334,7 @@ final class AssetsManager
         self::registerScript('mj-member-member-account', 'js/member-account.js', array(), false);
         self::registerScript('mj-member-create-event-modal', 'js/create-event-modal.js', array('mj-member-utils', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-occurrence-editor'));
         self::registerStyle('mj-member-create-event-modal', 'css/create-event-modal.css');
-        self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils', 'mj-member-create-event-modal', 'mj-member-regmgr-services'));
+        self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils', 'mj-member-create-event-modal', 'mj-member-regmgr-services', 'mj-member-leave-requests'));
         self::registerScript('mj-member-registrations-widget', 'js/elementor/registrations-widget.js', array('mj-member-utils'));
         self::registerScript('mj-member-event-attendance-kiosk', 'js/elementor/event-attendance-kiosk.js', array('mj-member-utils'));
         self::registerScript('mj-member-attendance-summary', 'js/elementor/attendance-summary.js', array());
@@ -577,6 +577,7 @@ final class AssetsManager
             case 'events-calendar':
                 // Reuse occurrence editor styles inside the shared create-event modal.
                 wp_enqueue_style('mj-member-registration-manager');
+                self::requirePackage('leave-requests');
                 wp_enqueue_style('mj-member-events-calendar');
                 wp_enqueue_script('mj-member-events-calendar');
                 break;

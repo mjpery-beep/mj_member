@@ -478,6 +478,145 @@
             };
         }
 
+        // ---- Create task modal (inspired by the todo widget's create form) ----
+        var taskModal = null;
+
+        function createTaskModal() {
+            if (taskModal) {
+                return taskModal;
+            }
+
+            var modal = document.createElement('div');
+            modal.className = 'mj-calendar-task-modal';
+            modal.hidden = true;
+
+            var projectOptions = '<option value="0">Aucun dossier</option>';
+            (Array.isArray(config.todoProjects) ? config.todoProjects : []).forEach(function(project) {
+                if (!project || !project.id) {
+                    return;
+                }
+                projectOptions += '<option value="' + project.id + '">' + escapeHtml(project.title || '') + '</option>';
+            });
+
+            var assigneeOptions = '';
+            (Array.isArray(config.todoAssignableMembers) ? config.todoAssignableMembers : []).forEach(function(member) {
+                if (!member || !member.id) {
+                    return;
+                }
+                var selected = member.isSelf ? ' selected' : '';
+                assigneeOptions += '<option value="' + member.id + '"' + selected + '>' + escapeHtml(member.name || '') + '</option>';
+            });
+
+            modal.innerHTML = '<div class="mj-calendar-task-modal__backdrop" data-task-close></div>' +
+                '<section class="mj-calendar-task-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="mj-calendar-task-title">' +
+                    '<header class="mj-calendar-task-modal__header"><h2 id="mj-calendar-task-title">Créer une tâche</h2><button type="button" data-task-close aria-label="Fermer">&times;</button></header>' +
+                    '<div class="mj-calendar-task-modal__body">' +
+                        '<label class="mj-calendar-task-modal__field">Titre<input type="text" data-task-title maxlength="190" placeholder="Ex : Préparer le matériel"></label>' +
+                        '<label class="mj-calendar-task-modal__field">Description<textarea data-task-description rows="3" placeholder="Détails de la tâche (facultatif)"></textarea></label>' +
+                        '<div class="mj-calendar-task-modal__row">' +
+                            '<label class="mj-calendar-task-modal__field">Échéance<input type="date" data-task-due-date></label>' +
+                            '<label class="mj-calendar-task-modal__field">Dossier<select data-task-project>' + projectOptions + '</select></label>' +
+                        '</div>' +
+                        '<label class="mj-calendar-task-modal__field">Assigné(s)<select data-task-assignees multiple size="4">' + assigneeOptions + '</select></label>' +
+                        '<p class="mj-calendar-task-modal__feedback" data-task-feedback aria-live="polite"></p>' +
+                    '</div>' +
+                    '<footer class="mj-calendar-task-modal__footer"><button type="button" data-task-close>Annuler</button><button type="button" data-task-submit>Créer la tâche</button></footer>' +
+                '</section>';
+            document.body.appendChild(modal);
+
+            function close() {
+                modal.hidden = true;
+            }
+
+            toArray(modal.querySelectorAll('[data-task-close]')).forEach(function(button) {
+                button.addEventListener('click', close);
+            });
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' && !modal.hidden) {
+                    close();
+                }
+            });
+            modal._close = close;
+            taskModal = modal;
+            return modal;
+        }
+
+        function openTaskModal(day) {
+            if (!config || !config.ajaxUrl || !config.todoNonce) {
+                return;
+            }
+            var modal = createTaskModal();
+            var titleInput = modal.querySelector('[data-task-title]');
+            var descriptionInput = modal.querySelector('[data-task-description]');
+            var dueDateInput = modal.querySelector('[data-task-due-date]');
+            var projectSelect = modal.querySelector('[data-task-project]');
+            var assigneesSelect = modal.querySelector('[data-task-assignees]');
+            var feedback = modal.querySelector('[data-task-feedback]');
+            var submit = modal.querySelector('[data-task-submit]');
+
+            titleInput.value = '';
+            descriptionInput.value = '';
+            dueDateInput.value = day || '';
+            projectSelect.value = '0';
+            feedback.textContent = '';
+            submit.disabled = false;
+            modal.hidden = false;
+            titleInput.focus();
+
+            submit.onclick = function() {
+                var title = titleInput.value.trim();
+                if (!title) {
+                    feedback.textContent = 'Merci de saisir un titre.';
+                    titleInput.focus();
+                    return;
+                }
+
+                var formData = new FormData();
+                formData.append('action', config.todoCreateAction || 'mj_member_todos_create');
+                formData.append('nonce', config.todoNonce);
+                formData.append('title', title);
+                formData.append('description', descriptionInput.value.trim());
+                formData.append('due_date', dueDateInput.value || '');
+                formData.append('project_id', projectSelect.value || '0');
+                toArray(assigneesSelect.selectedOptions || []).forEach(function(option) {
+                    formData.append('assigned_member_ids[]', option.value);
+                });
+
+                submit.disabled = true;
+                feedback.textContent = 'Création en cours...';
+                fetch(config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: formData })
+                    .then(function(response) { return response.json(); })
+                    .then(function(response) {
+                        if (!response || !response.success) {
+                            throw new Error(response && response.data && response.data.message ? response.data.message : 'Impossible de créer la tâche.');
+                        }
+                        window.location.reload();
+                    })
+                    .catch(function(error) {
+                        feedback.textContent = error.message;
+                        submit.disabled = false;
+                    });
+            };
+        }
+
+        function openLeaveRequestModal(day) {
+            if (!day || !window.MjLeaveRequestsWidget || typeof window.MjLeaveRequestsWidget.openCreateModal !== 'function') {
+                window.alert('Impossible de charger le formulaire de congé.');
+                return;
+            }
+
+            var opened = window.MjLeaveRequestsWidget.openCreateModal({
+                initialDates: [day],
+                onSuccess: function() {
+                    window.location.reload();
+                }
+            });
+
+            if (!opened) {
+                window.alert('Vous n\'avez pas accès aux demandes de congé.');
+            }
+        }
+
         if (config && config.openEventPageModal) {
             root.addEventListener('click', function(e) {
                 var eventLink = e.target.closest('a.mj-member-events-calendar__event-trigger, a.mj-member-events-calendar__mobile-link');
@@ -555,6 +694,28 @@
                     e.preventDefault();
                     e.stopPropagation();
                     openOccurrenceModal(occurrenceBtn.getAttribute('data-calendar-create-occurrence-day') || '');
+                    return;
+                }
+
+                var taskBtn = e.target.closest('[data-calendar-create-task-day]');
+                if (taskBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (mobileModal && !mobileModal.hidden && taskBtn.closest('[data-calendar-mobile-modal]')) {
+                        closeMobileModal();
+                    }
+                    openTaskModal(taskBtn.getAttribute('data-calendar-create-task-day') || '');
+                    return;
+                }
+
+                var leaveBtn = e.target.closest('[data-calendar-create-leave-day]');
+                if (leaveBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (mobileModal && !mobileModal.hidden && leaveBtn.closest('[data-calendar-mobile-modal]')) {
+                        closeMobileModal();
+                    }
+                    openLeaveRequestModal(leaveBtn.getAttribute('data-calendar-create-leave-day') || '');
                     return;
                 }
 
@@ -771,6 +932,22 @@
                 occurrenceBtn.setAttribute('data-calendar-create-occurrence-day', dayKey);
                 occurrenceBtn.textContent = 'Créer une occurrence';
                 mobileModalBody.appendChild(occurrenceBtn);
+            }
+            if (config && config.todoNonce) {
+                var taskBtn = document.createElement('button');
+                taskBtn.type = 'button';
+                taskBtn.className = 'mj-cal-mobile__modal-create-event';
+                taskBtn.setAttribute('data-calendar-create-task-day', dayKey);
+                taskBtn.textContent = 'Créer une tâche';
+                mobileModalBody.appendChild(taskBtn);
+            }
+            if (config && config.canCreateLeaveRequest && window.MjLeaveRequestsWidget && typeof window.MjLeaveRequestsWidget.openCreateModal === 'function') {
+                var leaveBtn = document.createElement('button');
+                leaveBtn.type = 'button';
+                leaveBtn.className = 'mj-cal-mobile__modal-create-event mj-cal-mobile__modal-create-event--leave';
+                leaveBtn.setAttribute('data-calendar-create-leave-day', dayKey);
+                leaveBtn.textContent = '🏖️ Créer un congé';
+                mobileModalBody.appendChild(leaveBtn);
             }
             if (mobileModalDate) {
                 var dateParts = dayKey.split('-');

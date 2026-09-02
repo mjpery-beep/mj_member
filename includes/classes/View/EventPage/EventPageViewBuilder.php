@@ -857,6 +857,13 @@ final class EventPageViewBuilder
                 continue;
             }
 
+            // Ignore les jours qui n'apparaissent qu'une seule fois : ce sont des occurrences
+            // exceptionnelles ponctuelles, pas un vrai créneau hebdomadaire récurrent.
+            $totalForWeekday = array_sum(array_column($ranges, 'count'));
+            if ($totalForWeekday < 2) {
+                continue;
+            }
+
             // Retient la plage horaire la plus fréquente pour ce jour (départage par la plus récente).
             uasort($ranges, static function (array $left, array $right): int {
                 if ($left['count'] !== $right['count']) {

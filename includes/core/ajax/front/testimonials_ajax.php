@@ -505,7 +505,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
         $featured_only = isset($_POST['featured_only']) && $_POST['featured_only'] === '1';
         $base_url = isset($_POST['base_url']) ? esc_url_raw(wp_unslash($_POST['base_url'])) : '';
         if ($base_url === '' || !wp_http_validate_url($base_url)) {
-            $base_url = home_url('/temoignages/');
+            $base_url = home_url('/mon-compte/temoignages/');
         }
 
         $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;

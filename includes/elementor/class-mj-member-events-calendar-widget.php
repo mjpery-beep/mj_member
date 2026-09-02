@@ -1349,6 +1349,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'since' => $occurrence_since,
                         'until' => $occurrence_until,
                         'include_past' => true,
+                        'include_cancelled' => true,
                         'max' => 400,
                     )
                 );
@@ -1560,6 +1561,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     $normalized_entry['cancellation_reason'] = sanitize_text_field((string) $occurrence['cancellation_reason']);
                 } elseif (!empty($occurrence['reason']) && !is_array($occurrence['reason'])) {
                     $normalized_entry['cancellation_reason'] = sanitize_text_field((string) $occurrence['reason']);
+                } elseif (!empty($occurrence_meta['cancellation_reason']) && !is_array($occurrence_meta['cancellation_reason'])) {
+                    $normalized_entry['cancellation_reason'] = sanitize_text_field((string) $occurrence_meta['cancellation_reason']);
                 } elseif (!empty($occurrence_meta['reason']) && !is_array($occurrence_meta['reason'])) {
                     $normalized_entry['cancellation_reason'] = sanitize_text_field((string) $occurrence_meta['reason']);
                 }
@@ -3010,6 +3013,18 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         echo '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8m4-4H8"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>';
                         echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer une occurrence', 'mj-member') . '</span>';
                         echo '</button>';
+                        if (class_exists(MjTodos::class)) {
+                            echo '<button type="button" class="mj-member-events-calendar__day-add mj-member-events-calendar__day-add--task" data-calendar-create-task-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Créer une tâche ce jour', 'mj-member') . '" title="' . esc_attr__('Créer une tâche ce jour', 'mj-member') . '">';
+                            echo '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+                            echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer une tâche', 'mj-member') . '</span>';
+                            echo '</button>';
+                        }
+                        if (class_exists(MjLeaveTypes::class)) {
+                            echo '<button type="button" class="mj-member-events-calendar__day-add mj-member-events-calendar__day-add--leave" data-calendar-create-leave-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Créer une demande de congé ce jour', 'mj-member') . '" title="' . esc_attr__('Créer une demande de congé ce jour', 'mj-member') . '">';
+                            echo '<span class="mj-member-events-calendar__day-add-emoji" aria-hidden="true">🏖️</span>';
+                            echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer un congé', 'mj-member') . '</span>';
+                            echo '</button>';
+                        }
                     }
 
                     echo '</div>';
@@ -3452,8 +3467,33 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         if ($can_edit_events) {
             $instance_config['deleteNonce'] = wp_create_nonce('mj_calendar_delete_occurrence');
             $instance_config['registrationManagerNonce'] = wp_create_nonce('mj-registration-manager');
+            $instance_config['canCreateLeaveRequest'] = class_exists(MjLeaveTypes::class);
             $ccm_config = \Mj\Member\Classes\View\CreateEventModalRenderer::buildConfig();
             $instance_config = array_merge($instance_config, $ccm_config);
+
+            if (class_exists(MjTodos::class)) {
+                $instance_config['todoNonce'] = wp_create_nonce('mj_member_todo_widget');
+                $instance_config['todoCreateAction'] = 'mj_member_todos_create';
+
+                $todo_projects = array();
+                if (class_exists(MjTodoProjects::class)) {
+                    foreach (MjTodoProjects::get_all(array('orderby' => 'title', 'order' => 'ASC')) as $todo_project) {
+                        $project_id = isset($todo_project['id']) ? (int) $todo_project['id'] : 0;
+                        if ($project_id <= 0) {
+                            continue;
+                        }
+                        $todo_projects[] = array(
+                            'id' => $project_id,
+                            'title' => isset($todo_project['title']) ? sanitize_text_field((string) $todo_project['title']) : '',
+                        );
+                    }
+                }
+                $instance_config['todoProjects'] = $todo_projects;
+
+                $instance_config['todoAssignableMembers'] = function_exists('mj_member_todo_fetch_assignable_members')
+                    ? mj_member_todo_fetch_assignable_members()
+                    : array();
+            }
         }
 
 

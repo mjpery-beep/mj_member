@@ -87,7 +87,7 @@
             if (isGuestAccountTrigger && self.config.accountGuestRedirect) {
                 directHref = self.config.accountGuestRedirect;
             }
-            var isDirectLink = name !== 'testimonials' && !!(directHref && directHref !== '#' && directHref !== '');
+            var isDirectLink = !!(directHref && directHref !== '#' && directHref !== '');
 
             // Touch : tap → dropdown, long press (500ms) → navigate
             var longPressTimer = null;
