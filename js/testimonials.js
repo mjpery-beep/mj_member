@@ -1799,7 +1799,7 @@
 
             return `
                 <article class="mj-feed-post-wrapper${status === 'pending' ? ' mj-feed-post-wrapper--pending' : ''}" data-post-id="${t.id}" data-post-url="${this.escapeHtml(postUrl)}" data-share-url="${this.escapeHtml(shareUrl)}" data-post-status="${this.escapeHtml(status)}">
-                    <div class="mj-feed-post${status === 'pending' ? ' mj-feed-post--pending' : ''}${isFeatured ? ' mj-feed-post--featured' : ''}" data-id="${t.id}" data-featured="${isFeatured ? '1' : '0'}" data-member-id="${t.memberId || ''}" data-created-at="${this.escapeHtml(t.createdAt || '')}" data-photos="${this.escapeHtml(JSON.stringify(t.photos || []))}" data-videos="${this.escapeHtml(JSON.stringify(t.videos || []))}">
+                    <div class="mj-feed-post${status === 'pending' ? ' mj-feed-post--pending' : ''}${isFeatured ? ' mj-feed-post--featured' : ''}" data-id="${t.id}" data-featured="${isFeatured ? '1' : '0'}" data-member-id="${t.memberId || ''}" data-created-at="${this.escapeHtml(t.createdAt || '')}" data-photos="${encodeURIComponent(JSON.stringify(t.photos || []))}" data-videos="${encodeURIComponent(JSON.stringify(t.videos || []))}">
                         <div class="mj-feed-post__header">
                             <div class="mj-feed-post__avatar">${avatarInner}</div>
                             <div class="mj-feed-post__meta">
@@ -1900,6 +1900,21 @@
      */
     function getWrapper(el) {
         return $(el).closest('.mj-feed-post-wrapper');
+    }
+
+    function parseMediaAttribute($post, attribute) {
+        const value = $post.attr(attribute);
+        if (!value) return [];
+
+        try {
+            return JSON.parse(value) || [];
+        } catch (error) {
+            try {
+                return JSON.parse(decodeURIComponent(value)) || [];
+            } catch (decodedError) {
+                return [];
+            }
+        }
     }
     
     /**
@@ -2542,19 +2557,26 @@
             // Get current media from data attributes
             let editPhotos = [];
             let editVideos = [];
-
-            try {
-                const photosData = $post.attr('data-photos');
-                if (photosData) editPhotos = JSON.parse(photosData);
-            } catch(e) {}
-
-            try {
-                const videosData = $post.attr('data-videos');
-                if (videosData) editVideos = JSON.parse(videosData);
-            } catch(e) {}
+            // Only true once the user actually adds/removes media in this edit session,
+            // so we never send photo_ids/video_ids (and wipe existing media) just because
+            // the preview failed to load them.
+            let mediaTouched = false;
 
             // Hide original media slider during edit
             const $origSlider = $wrapper.find('.mj-feed-post__slider');
+
+            try {
+                editPhotos = parseMediaAttribute($post, 'data-photos');
+            } catch(e) {}
+
+            try {
+                editVideos = parseMediaAttribute($post, 'data-videos');
+            } catch(e) {}
+
+            if (!editPhotos.length && !editVideos.length && $origSlider.find('img, video').length) {
+                console.warn('[Testimonials] Le formulaire d\'édition n\'a pas pu charger les médias existants (data-photos/data-videos manquants). Les médias existants ne seront pas modifiés tant qu\'aucune action n\'est faite dessus.');
+            }
+
             $origSlider.hide();
 
             // --- Build the edit media grid ---
@@ -2712,6 +2734,7 @@
                     ev.preventDefault();
                     const photoId = parseInt($(this).data('photo-id'));
                     editPhotos = editPhotos.filter(function(p) { return p.id !== photoId; });
+                    mediaTouched = true;
                     refreshMediaPreview();
                 });
 
@@ -2720,6 +2743,7 @@
                     ev.preventDefault();
                     const vid = parseInt($(this).data('video-id'), 10);
                     editVideos = editVideos.filter(function(v) { return v.id !== vid; });
+                    mediaTouched = true;
                     refreshMediaPreview();
                 });
 
@@ -2765,6 +2789,7 @@
                 }).done(function(response) {
                     if (response.success && response.data && response.data.id) {
                         editPhotos.push({ id: response.data.id, url: response.data.url || response.data.thumb });
+                        mediaTouched = true;
                         showEditStatus('', '');
                         refreshMediaPreview();
                     } else {
@@ -2815,6 +2840,7 @@
                     }
                     if (resp && resp.success && resp.data && resp.data.id) {
                         editVideos.push({ id: resp.data.id, url: resp.data.url });
+                        mediaTouched = true;
                         showEditStatus('', '');
                         refreshMediaPreview();
                     } else {
@@ -2861,10 +2887,15 @@
                     action: 'mj_front_testimonial_edit',
                     _wpnonce: config.nonce,
                     testimonial_id: testimonialId,
-                    content: newContent,
-                    photo_ids: JSON.stringify(editPhotos.map(function(p) { return p.id; })),
-                    video_ids: JSON.stringify(editVideos.map(function(v) { return v.id; }))
+                    content: newContent
                 };
+
+                // Only send photo_ids/video_ids if the user actually touched the media in
+                // this session, otherwise omit them so existing media is left untouched server-side.
+                if (mediaTouched) {
+                    postData.photo_ids = JSON.stringify(editPhotos.map(function(p) { return p.id; }));
+                    postData.video_ids = JSON.stringify(editVideos.map(function(v) { return v.id; }));
+                }
 
                 if (config.isAnimator) {
                     const dateVal = $content.find('.mj-feed-post__edit-date').val();
@@ -3016,7 +3047,7 @@
             if ($wrapper.find('.mj-pery-social-form').length) return;
 
             let photos = [];
-            try { photos = JSON.parse($post.attr('data-photos') || '[]'); } catch(e) {}
+            photos = parseMediaAttribute($post, 'data-photos');
             photos = Array.isArray(photos) ? photos.filter(function(photo) { return photo && parseInt(photo.id, 10) > 0; }) : [];
 
             const platformLabels = {
@@ -3160,9 +3191,9 @@
                 ? 'Témoignage de ' + author + ' · MJ Pery\n' + cleanContent.substring(0, 200) + (cleanContent.length > 200 ? '...' : '')
                 : cleanContent.substring(0, 220) + (cleanContent.length > 220 ? '...' : '');
             let photos = [];
-            try { photos = JSON.parse($post.attr('data-photos') || '[]'); } catch(e) {}
+            photos = parseMediaAttribute($post, 'data-photos');
             let videos = [];
-            try { videos = JSON.parse($post.attr('data-videos') || '[]'); } catch(e) {}
+            videos = parseMediaAttribute($post, 'data-videos');
             const mediaUrls = [
                 ...photos.slice(0, 4).map(p => p.url || p.full).filter(Boolean),
                 ...videos.slice(0, 1).map(v => v.poster).filter(Boolean),

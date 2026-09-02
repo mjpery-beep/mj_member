@@ -8,6 +8,8 @@
 
 namespace Mj\Member\Core\Ajax\Front;
 
+use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Contracts\AjaxHandlerInterface;
 
 if (!defined('ABSPATH')) {
@@ -21,6 +23,8 @@ final class EventsController implements AjaxHandlerInterface {
         add_action('wp_ajax_mj_member_register_event', [$this, 'registerEvent']);
         add_action('wp_ajax_mj_member_unregister_event', [$this, 'unregisterEvent']);
         add_action('wp_ajax_mj_member_calendar_print_prefs_save', [$this, 'saveCalendarPrintPreferences']);
+        add_action('wp_ajax_mj_member_calendar_print_preset_save', [$this, 'saveCalendarPrintPreset']);
+        add_action('wp_ajax_mj_member_calendar_print_preset_delete', [$this, 'deleteCalendarPrintPreset']);
         add_action('wp_ajax_nopriv_mj_member_ajax_login', [$this, 'login']);
     }
 
@@ -54,6 +58,115 @@ final class EventsController implements AjaxHandlerInterface {
         update_user_meta(get_current_user_id(), 'mj_member_calendar_print_prefs', $prefs);
 
         wp_send_json_success(array('prefs' => $prefs));
+    }
+
+    /**
+     * AJAX: Create or update a shared calendar print preset.
+     */
+    public function saveCalendarPrintPreset(): void {
+        if (!wp_doing_ajax()) {
+            return;
+        }
+
+        check_ajax_referer('mj_member_calendar_print_presets', 'nonce');
+        $this->assertCanManageCalendarPrintPresets();
+
+        $name = isset($_POST['name']) ? sanitize_text_field(wp_unslash((string) $_POST['name'])) : '';
+        if ($name === '') {
+            wp_send_json_error(array('message' => __('Donne un nom au preset.', 'mj-member')), 400);
+        }
+        $name = mb_substr($name, 0, 100);
+
+        $prefs_json = isset($_POST['prefs']) ? wp_unslash((string) $_POST['prefs']) : '';
+        $decoded = json_decode($prefs_json, true);
+        if (!is_array($decoded)) {
+            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')), 400);
+        }
+
+        $presets = self::getCalendarPrintPresets();
+        $preset_id = isset($_POST['presetId']) ? sanitize_key(wp_unslash((string) $_POST['presetId'])) : '';
+        if ($preset_id !== '' && isset($presets[$preset_id])) {
+            $presets[$preset_id]['name'] = $name;
+            $presets[$preset_id]['prefs'] = self::sanitizePrintPreferences($decoded);
+        } else {
+            if (count($presets) >= 30) {
+                wp_send_json_error(array('message' => __('Maximum de 30 presets atteint.', 'mj-member')), 400);
+            }
+            $preset_id = wp_generate_uuid4();
+            $presets[$preset_id] = array(
+                'name' => $name,
+                'prefs' => self::sanitizePrintPreferences($decoded),
+            );
+        }
+
+        update_option('mj_member_calendar_print_presets', $presets, false);
+        wp_send_json_success(array('presetId' => $preset_id, 'presets' => self::getCalendarPrintPresetList()));
+    }
+
+    /**
+     * AJAX: Delete a shared calendar print preset.
+     */
+    public function deleteCalendarPrintPreset(): void {
+        if (!wp_doing_ajax()) {
+            return;
+        }
+
+        check_ajax_referer('mj_member_calendar_print_presets', 'nonce');
+        $this->assertCanManageCalendarPrintPresets();
+
+        $preset_id = isset($_POST['presetId']) ? sanitize_key(wp_unslash((string) $_POST['presetId'])) : '';
+        $presets = self::getCalendarPrintPresets();
+        if ($preset_id === '' || !isset($presets[$preset_id])) {
+            wp_send_json_error(array('message' => __('Preset introuvable.', 'mj-member')), 404);
+        }
+
+        unset($presets[$preset_id]);
+        update_option('mj_member_calendar_print_presets', $presets, false);
+        wp_send_json_success(array('presets' => self::getCalendarPrintPresetList()));
+    }
+
+    /**
+     * @return array<string,array{name:string,prefs:array<string,mixed>}>
+     */
+    public static function getCalendarPrintPresets(): array {
+        $stored = get_option('mj_member_calendar_print_presets', array());
+        if (!is_array($stored)) {
+            return array();
+        }
+
+        $presets = array();
+        foreach ($stored as $preset_id => $preset) {
+            $clean_id = sanitize_key((string) $preset_id);
+            if ($clean_id === '' || !is_array($preset) || empty($preset['name']) || !isset($preset['prefs']) || !is_array($preset['prefs'])) {
+                continue;
+            }
+            $presets[$clean_id] = array(
+                'name' => sanitize_text_field((string) $preset['name']),
+                'prefs' => self::sanitizePrintPreferences($preset['prefs']),
+            );
+        }
+
+        return $presets;
+    }
+
+    /**
+     * @return list<array{id:string,name:string,prefs:array<string,mixed>}>
+     */
+    public static function getCalendarPrintPresetList(): array {
+        $list = array();
+        foreach (self::getCalendarPrintPresets() as $preset_id => $preset) {
+            $preset['id'] = $preset_id;
+            $list[] = $preset;
+        }
+        return $list;
+    }
+
+    private function assertCanManageCalendarPrintPresets(): void {
+        $member = MjMembers::getByWpUserId(get_current_user_id());
+        $role = $member ? (string) ($member->toArray()['role'] ?? '') : '';
+        if (!in_array($role, MjRoles::getStaffRoles(), true)) {
+            wp_send_json_error(array('message' => __('Tu n\'as pas les droits pour gérer les presets.', 'mj-member')), 403);
+        }
     }
 
     /**

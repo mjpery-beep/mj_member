@@ -1103,6 +1103,10 @@
         var printHideEmptyDaysInput = root.querySelector('[data-print-option="hide-empty-days"]');
         var printPageBreakLabel = root.querySelector('[data-print-option-page-break-label]');
         var printTypeFiltersWrap = root.querySelector('[data-print-type-filters]');
+        var printPresetSelect = root.querySelector('[data-print-preset-select]');
+        var printPresetNameInput = root.querySelector('[data-print-preset-name]');
+        var savePrintPresetBtn = root.querySelector('[data-calendar-action="save-print-preset"]');
+        var deletePrintPresetBtn = root.querySelector('[data-calendar-action="delete-print-preset"]');
         var printTypeFilterInputs = [];
         var printSelectedMonthKey = '';
         var printSelectedWeekStartKey = '';
@@ -1112,6 +1116,7 @@
         var printPrefsEnabled = !!(printConfig && printConfig.userPrefsEnabled && printConfig.ajaxUrl && printConfig.prefsNonce);
         var printPrefsFromServer = (printConfig && printConfig.userPrefs && typeof printConfig.userPrefs === 'object') ? printConfig.userPrefs : null;
         var printPrefsSaveTimer = null;
+        var printPresets = Array.isArray(printConfig.presets) ? printConfig.presets : [];
         var isApplyingPrintPrefs = false;
         var hasAppliedPrintPrefs = false;
         var lastPrintSnapshot = null;
@@ -1943,6 +1948,72 @@
                 weekStartKey: printSelectedWeekStartKey || '',
                 selectedTypes: selectedTypes
             };
+        }
+
+        function renderPrintPresets(selectedId) {
+            if (!printPresetSelect) {
+                return;
+            }
+            printPresetSelect.innerHTML = '<option value="">Choisir un preset</option>';
+            printPresets.forEach(function(preset) {
+                if (!preset || !preset.id || !preset.name) {
+                    return;
+                }
+                var option = document.createElement('option');
+                option.value = String(preset.id);
+                option.textContent = String(preset.name);
+                option.selected = option.value === String(selectedId || '');
+                printPresetSelect.appendChild(option);
+            });
+        }
+
+        function updatePrintPresets(presets, selectedId) {
+            printPresets = Array.isArray(presets) ? presets : [];
+            renderPrintPresets(selectedId);
+        }
+
+        function savePrintPreset() {
+            if (!printConfig.canManagePresets || !printConfig.ajaxUrl || !printConfig.presetsNonce || !printPresetNameInput) {
+                return;
+            }
+            var name = (printPresetNameInput.value || '').trim();
+            if (!name) {
+                printPresetNameInput.focus();
+                return;
+            }
+            var formData = new FormData();
+            formData.append('action', 'mj_member_calendar_print_preset_save');
+            formData.append('nonce', String(printConfig.presetsNonce));
+            formData.append('presetId', printPresetSelect ? String(printPresetSelect.value || '') : '');
+            formData.append('name', name);
+            formData.append('prefs', JSON.stringify(collectPrintPrefsFromInputs()));
+            fetch(printConfig.ajaxUrl, { method: 'POST', body: formData, credentials: 'same-origin' })
+                .then(function(response) { return response.json(); })
+                .then(function(payload) {
+                    if (payload && payload.success && payload.data) {
+                        updatePrintPresets(payload.data.presets, payload.data.presetId);
+                    }
+                }).catch(function() {});
+        }
+
+        function deletePrintPreset() {
+            if (!printConfig.canManagePresets || !printConfig.ajaxUrl || !printConfig.presetsNonce || !printPresetSelect || !printPresetSelect.value) {
+                return;
+            }
+            var formData = new FormData();
+            formData.append('action', 'mj_member_calendar_print_preset_delete');
+            formData.append('nonce', String(printConfig.presetsNonce));
+            formData.append('presetId', String(printPresetSelect.value));
+            fetch(printConfig.ajaxUrl, { method: 'POST', body: formData, credentials: 'same-origin' })
+                .then(function(response) { return response.json(); })
+                .then(function(payload) {
+                    if (payload && payload.success && payload.data) {
+                        updatePrintPresets(payload.data.presets, '');
+                        if (printPresetNameInput) {
+                            printPresetNameInput.value = '';
+                        }
+                    }
+                }).catch(function() {});
         }
 
         function savePrintPrefsNow() {
@@ -3549,12 +3620,39 @@
         }
 
         renderPrintTypeFilters();
+        renderPrintPresets();
         buildPrintPeriodEntries();
         setDefaultPrintPeriodSelection();
         renderPrintPeriodSelectors();
         if (!hasAppliedPrintPrefs && printPrefsFromServer) {
             applyPrintPrefsToInputs(printPrefsFromServer);
             hasAppliedPrintPrefs = true;
+        }
+
+        if (printPresetSelect) {
+            printPresetSelect.addEventListener('change', function() {
+                var selected = printPresets.find(function(preset) {
+                    return preset && String(preset.id) === String(printPresetSelect.value);
+                });
+                if (!selected) {
+                    if (printPresetNameInput) {
+                        printPresetNameInput.value = '';
+                    }
+                    return;
+                }
+                if (printPresetNameInput) {
+                    printPresetNameInput.value = selected.name || '';
+                }
+                applyPrintPrefsToInputs(selected.prefs || {});
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+        if (savePrintPresetBtn) {
+            savePrintPresetBtn.addEventListener('click', savePrintPreset);
+        }
+        if (deletePrintPresetBtn) {
+            deletePrintPresetBtn.addEventListener('click', deletePrintPreset);
         }
 
         document.addEventListener('keydown', function(e) {

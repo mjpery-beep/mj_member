@@ -2798,6 +2798,24 @@ button.mj-member-events-calendar__print-button:focus-visible {
     min-height: 0;
 }
 
+.mj-cal-print__presets {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #cbd5e1;
+}
+
+.mj-cal-print__preset-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.mj-cal-print__preset-actions .mj-cal-print__ghost {
+    flex: 1;
+    padding: 0 8px;
+}
+
 .mj-cal-print__option {
     display: flex;
     flex-direction: column;
@@ -2814,7 +2832,8 @@ button.mj-member-events-calendar__print-button:focus-visible {
 }
 
 .mj-cal-print__option > select,
-.mj-cal-print__option > input[type="number"] {
+.mj-cal-print__option > input[type="number"],
+.mj-cal-print__option > input[type="text"] {
     width: 100%;
     border: 1px solid #cbd5e1;
     border-radius: 8px;

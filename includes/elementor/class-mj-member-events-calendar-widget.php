@@ -3304,6 +3304,22 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '</div>';
             echo '<div class="mj-cal-print__body">';
             echo '<div class="mj-cal-print__options">';
+            echo '<div class="mj-cal-print__presets">';
+            echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Preset', 'mj-member') . '</span>';
+            echo '<select data-print-preset-select><option value="">' . esc_html__('Choisir un preset', 'mj-member') . '</option></select>';
+            echo '</label>';
+            if ($can_edit_events) {
+                echo '<label class="mj-cal-print__option">';
+                echo '<span>' . esc_html__('Nom du preset', 'mj-member') . '</span>';
+                echo '<input type="text" maxlength="100" data-print-preset-name />';
+                echo '</label>';
+                echo '<div class="mj-cal-print__preset-actions">';
+                echo '<button type="button" class="mj-cal-print__ghost" data-calendar-action="save-print-preset">' . esc_html__('Enregistrer le preset', 'mj-member') . '</button>';
+                echo '<button type="button" class="mj-cal-print__ghost" data-calendar-action="delete-print-preset">' . esc_html__('Supprimer', 'mj-member') . '</button>';
+                echo '</div>';
+            }
+            echo '</div>';
             echo '<label class="mj-cal-print__option">';
             echo '<input type="checkbox" data-print-option="details"' . ($print_default_details ? ' checked' : '') . ' />';
             echo '<span>' . esc_html__('Afficher les détails', 'mj-member') . '</span>';
@@ -3413,6 +3429,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         $preferred_index = ($preferred_index >= 0) ? $preferred_index : 0;
         $print_user_prefs = array();
+        $print_presets = \Mj\Member\Core\Ajax\Front\EventsController::getCalendarPrintPresetList();
         $print_prefs_enabled = is_user_logged_in();
         if ($print_prefs_enabled) {
             $raw_print_prefs = get_user_meta(get_current_user_id(), 'mj_member_calendar_print_prefs', true);
@@ -3432,6 +3449,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'ajaxUrl' => $print_prefs_enabled ? admin_url('admin-ajax.php') : '',
                 'prefsNonce' => $print_prefs_enabled ? wp_create_nonce('mj_member_calendar_print_prefs') : '',
                 'userPrefs' => $print_user_prefs,
+                'presets' => $print_presets,
+                'canManagePresets' => $can_edit_events,
+                'presetsNonce' => $can_edit_events ? wp_create_nonce('mj_member_calendar_print_presets') : '',
                 'defaultMode' => $print_default_mode,
                 'defaultTheme' => $print_default_theme,
                 'defaultDetails' => $print_default_details,
