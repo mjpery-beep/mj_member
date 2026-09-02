@@ -5,6 +5,7 @@
  */
 
 use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\Crud\MjEventOccurrenceGenerationBatches;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
 
@@ -15,8 +16,8 @@ if (!defined('ABSPATH')) {
 $template_data = isset($template_data) && is_array($template_data) ? $template_data : array();
 
 $event_id = isset($template_data['event_id']) ? (int) $template_data['event_id'] : 0;
-$occurrence_keys = isset($template_data['occurrence_keys']) && is_array($template_data['occurrence_keys'])
-    ? $template_data['occurrence_keys']
+$occurrence_batch_ids = isset($template_data['occurrence_batch_ids']) && is_array($template_data['occurrence_batch_ids'])
+    ? $template_data['occurrence_batch_ids']
     : array();
 $title = isset($template_data['title']) ? (string) $template_data['title'] : '';
 $display_title = !empty($template_data['display_title']);
@@ -980,7 +981,7 @@ $date_debut = (string) $get_event_value('date_debut', '');
 $date_fin = (string) $get_event_value('date_fin', '');
 
 $occurrence_args = array(
-    'max' => !empty($occurrence_keys) ? PHP_INT_MAX : $max_occurrences,
+    'max' => !empty($occurrence_batch_ids) ? PHP_INT_MAX : $max_occurrences,
     'include_past' => (bool) $show_past,
 );
 
@@ -1065,29 +1066,63 @@ if (empty($occurrences) and $event_for_schedule) {
     }
 }
 
-$selected_timestamps = array();
-foreach ($occurrence_keys as $occurrence_key) {
-    $parts = explode(':', (string) $occurrence_key, 2);
+$selected_batch_ids = array();
+foreach ($occurrence_batch_ids as $occurrence_batch_id) {
+    $parts = explode(':', (string) $occurrence_batch_id, 2);
     if (count($parts) !== 2 || (int) $parts[0] !== $event_id) {
         continue;
     }
 
-    $timestamp = (int) $parts[1];
-    if ($timestamp > 0) {
-        $selected_timestamps[$timestamp] = true;
+    $batch_id = sanitize_text_field($parts[1]);
+    if ($batch_id !== '') {
+        $selected_batch_ids[$batch_id] = true;
     }
 }
 
-if (!empty($selected_timestamps)) {
+$selected_batch_modes = array();
+if (!empty($selected_batch_ids) && $event_id > 0 && class_exists(MjEventOccurrenceGenerationBatches::class)) {
+    $batches = MjEventOccurrenceGenerationBatches::get_for_event($event_id, false);
+    foreach ($batches as $batch) {
+        if (!is_array($batch) || ($batch['status'] ?? '') !== MjEventOccurrenceGenerationBatches::STATUS_ACTIVE) {
+            continue;
+        }
+
+        $batch_id = isset($batch['batch_uuid']) ? (string) $batch['batch_uuid'] : '';
+        if ($batch_id === '' || !isset($selected_batch_ids[$batch_id])) {
+            continue;
+        }
+
+        $config = isset($batch['config_snapshot']) && is_string($batch['config_snapshot'])
+            ? json_decode($batch['config_snapshot'], true)
+            : array();
+        $mode = is_array($config) && isset($config['mode']) ? sanitize_key((string) $config['mode']) : '';
+        if (in_array($mode, array('weekly', 'monthly'), true)) {
+            $selected_batch_modes[$mode] = true;
+        }
+    }
+}
+
+if (!empty($selected_batch_ids)) {
     $occurrences = array_values(array_filter(
         $occurrences,
-        static function (array $occurrence) use ($selected_timestamps): bool {
-            return isset($selected_timestamps[(int) ($occurrence['timestamp'] ?? 0)]);
+        static function (array $occurrence) use ($selected_batch_ids): bool {
+            $batch_id = isset($occurrence['generation_batch_id']) ? (string) $occurrence['generation_batch_id'] : '';
+            return $batch_id !== '' && isset($selected_batch_ids[$batch_id]);
         }
     ));
 
     if (count($occurrences) > $max_occurrences) {
         $occurrences = array_slice($occurrences, 0, $max_occurrences);
+    }
+
+    $weekly_schedule = $build_weekly_schedule_from_occurrences($occurrences, $show_date_range);
+
+    if (count($selected_batch_modes) === 1) {
+        $schedule_mode = 'recurring';
+        if (isset($selected_batch_modes['monthly'])) {
+            $weekly_schedule['is_weekly'] = false;
+            $weekly_schedule['is_monthly'] = true;
+        }
     }
 }
 
@@ -1361,7 +1396,7 @@ if (class_exists(ScheduleDisplayHelper::class)) {
     $schedule_component = ScheduleDisplayHelper::render(
         $schedule_data,
         array(
-            'variant' => 'event-schedule-widget',
+            'variant' => 'event-single',
             'extra_context' => $extra_context,
         )
     );

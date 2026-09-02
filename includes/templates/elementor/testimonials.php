@@ -257,7 +257,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
 .mj-pery-social-form__photo-thumb img { width:100%;height:100%;object-fit:cover;display:block;opacity:.5;transition:opacity .15s; }
 .mj-pery-social-form__photo-thumb.is-selected { border-color:#3730a3; }
 .mj-pery-social-form__photo-thumb.is-selected img { opacity:1; }
-.mj-pery-social-form__photo-check { position:absolute;top:2px;right:2px;background:#3730a3;color:#fff;width:18px;height:18px;border-radius:50%;font-size:11px;display:none;align-items:center;justify-content:center; }
+.mj-pery-social-form__photo-check { position:absolute;top:2px;right:2px;background:#3730a3;color:#fff;width:18px;height:18px;border-radius:50%;font-size:11px;display:none;align-items:center;justify-content:center;pointer-events:none; }
 .mj-pery-social-form__photo-thumb.is-selected .mj-pery-social-form__photo-check { display:flex; }
 </style>
 <div id="<?php echo esc_attr($widget_id); ?>" class="mj-testimonials mj-testimonials--layout-<?php echo esc_attr($layout); ?> mj-testimonials--template-<?php echo esc_attr($display_template); ?><?php echo $photo_booth_mode ? ' mj-testimonials--photo-booth' : ''; ?><?php echo $is_single_mode ? ' mj-testimonials--single' : ''; ?>" data-columns="<?php echo esc_attr((string)$columns); ?>">

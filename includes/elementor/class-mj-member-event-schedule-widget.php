@@ -10,6 +10,7 @@ use Elementor\Group_Control_Box_Shadow;
 use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\Crud\MjEventOccurrenceGenerationBatches;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Core\Config;
 
@@ -65,14 +66,14 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         );
 
         $this->add_control(
-            'occurrence_keys',
+            'occurrence_batch_ids',
             array(
-                'label' => __('Dates à afficher', 'mj-member'),
+                'label' => __('Lots d’occurrences à afficher', 'mj-member'),
                 'type' => Controls_Manager::SELECT2,
                 'multiple' => true,
                 'label_block' => true,
-                'options' => $this->get_occurrence_options(),
-                'description' => __('Facultatif : sélectionnez une ou plusieurs occurrences de l\'événement choisi.', 'mj-member'),
+                'options' => $this->get_occurrence_batch_options(),
+                'description' => __('Sélectionnez les lots de l\'événement choisi à afficher.', 'mj-member'),
             )
         );
 
@@ -883,10 +884,10 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         return $options;
     }
 
-    private function get_occurrence_options() {
+    private function get_occurrence_batch_options() {
         $options = array();
 
-        if (!class_exists(MjEvents::class) || !class_exists(MjEventSchedule::class)) {
+        if (!class_exists(MjEvents::class) || !class_exists(MjEventOccurrenceGenerationBatches::class)) {
             return $options;
         }
 
@@ -906,29 +907,26 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
             $event_title = isset($event->title) && $event->title !== ''
                 ? (string) $event->title
                 : __('(Sans titre)', 'mj-member');
-            $occurrences = MjEventSchedule::get_occurrences($event, array(
-                'max' => 200,
-                'include_past' => true,
-                'include_cancelled' => false,
-            ));
-
-            foreach ($occurrences as $occurrence) {
-                $timestamp = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
-                $start = isset($occurrence['start']) ? (string) $occurrence['start'] : '';
-                if ($timestamp <= 0 || $start === '') {
+            $batches = MjEventOccurrenceGenerationBatches::get_for_event($event_id, false);
+            foreach ($batches as $batch) {
+                if (!is_array($batch) || ($batch['status'] ?? '') !== MjEventOccurrenceGenerationBatches::STATUS_ACTIVE) {
                     continue;
                 }
 
-                $end = isset($occurrence['end']) ? (string) $occurrence['end'] : '';
-                $label = $event_title . ' - ' . wp_date('d/m/Y H:i', $timestamp);
-                if ($end !== '') {
-                    $end_timestamp = strtotime($end);
-                    if ($end_timestamp) {
-                        $label .= ' - ' . wp_date('H:i', $end_timestamp);
-                    }
+                $batch_uuid = isset($batch['batch_uuid']) ? sanitize_text_field((string) $batch['batch_uuid']) : '';
+                if ($batch_uuid === '') {
+                    continue;
                 }
 
-                $options[$event_id . ':' . $timestamp] = $label;
+                $summary = isset($batch['summary']) && is_string($batch['summary'])
+                    ? json_decode($batch['summary'], true)
+                    : array();
+                $title = is_array($summary) && !empty($summary['title'])
+                    ? sanitize_text_field((string) $summary['title'])
+                    : sprintf(__('Lot du %s', 'mj-member'), wp_date('d/m/Y H:i', strtotime((string) ($batch['created_at'] ?? 'now'))));
+                $count = isset($batch['occurrences_count']) ? max(0, (int) $batch['occurrences_count']) : 0;
+
+                $options[$event_id . ':' . $batch_uuid] = sprintf('%s - %s (%d)', $event_title, $title, $count);
             }
         }
 
@@ -946,8 +944,8 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         }
 
         $event_id = isset($settings['event_id']) ? (int) $settings['event_id'] : 0;
-        $occurrence_keys = isset($settings['occurrence_keys']) && is_array($settings['occurrence_keys'])
-            ? $settings['occurrence_keys']
+        $occurrence_batch_ids = isset($settings['occurrence_batch_ids']) && is_array($settings['occurrence_batch_ids'])
+            ? $settings['occurrence_batch_ids']
             : array();
         $title = isset($settings['title']) ? (string) $settings['title'] : '';
         $display_title = isset($settings['display_title']) && $settings['display_title'] === 'yes';
@@ -973,7 +971,7 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
 
         $template_data = array(
             'event_id' => $event_id,
-            'occurrence_keys' => $occurrence_keys,
+            'occurrence_batch_ids' => $occurrence_batch_ids,
             'title' => $title,
             'display_title' => $display_title,
             'max_occurrences' => $max_occurrences,

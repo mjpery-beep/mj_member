@@ -972,6 +972,9 @@ final class AssetsManager
         $draggableModalPath = Config::path() . 'js/elementor/draggable-modal-icon-editor.js';
         $draggableModalVersion = file_exists($draggableModalPath) ? filemtime($draggableModalPath) : Config::version();
 
+        $eventSchedulePath = Config::path() . 'js/elementor/event-schedule-editor.js';
+        $eventScheduleVersion = file_exists($eventSchedulePath) ? filemtime($eventSchedulePath) : Config::version();
+
         wp_enqueue_script(
             'mj-member-dock-tabs-editor',
             Config::url() . 'js/elementor/dock-tabs-editor.js',
@@ -985,6 +988,14 @@ final class AssetsManager
             Config::url() . 'js/elementor/draggable-modal-icon-editor.js',
             array('nested-elements'),
             $draggableModalVersion,
+            true
+        );
+
+        wp_enqueue_script(
+            'mj-member-event-schedule-editor',
+            Config::url() . 'js/elementor/event-schedule-editor.js',
+            array('jquery'),
+            $eventScheduleVersion,
             true
         );
     }
