@@ -7,7 +7,6 @@
  * @package MjMember
  */
 
-
 (function () {
     'use strict';
 

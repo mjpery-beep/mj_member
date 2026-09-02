@@ -1090,6 +1090,7 @@
         var printPadPageInput = root.querySelector('[data-print-option="pad-page"]');
         var printPadDayInput = root.querySelector('[data-print-option="pad-day"]');
         var printPadEventInput = root.querySelector('[data-print-option="pad-event"]');
+        var printTextSizeInput = root.querySelector('[data-print-option="text-size"]');
         var printThemeInput = root.querySelector('[data-print-option="theme"]');
         var printSpanInput = root.querySelector('[data-print-option="span"]');
         var printDetailsInput = root.querySelector('[data-print-option="details"]');
@@ -1887,6 +1888,9 @@
             if (printPadEventInput && typeof prefs.padEvent !== 'undefined') {
                 printPadEventInput.value = String(prefs.padEvent);
             }
+            if (printTextSizeInput && typeof prefs.textSize !== 'undefined') {
+                printTextSizeInput.value = String(prefs.textSize);
+            }
 
             if (typeof prefs.monthKey === 'string' && /^\d{4}-\d{2}$/.test(prefs.monthKey)) {
                 printSelectedMonthKey = prefs.monthKey;
@@ -1944,6 +1948,7 @@
                 padPage: getPrintPaddingValue(printPadPageInput, 0, 24, 10),
                 padDay: getPrintPaddingValue(printPadDayInput, 0, 16, 6),
                 padEvent: getPrintPaddingValue(printPadEventInput, 0, 16, 6),
+                textSize: getPrintPaddingValue(printTextSizeInput, 8, 20, 12),
                 monthKey: printSelectedMonthKey || '',
                 weekStartKey: printSelectedWeekStartKey || '',
                 selectedTypes: selectedTypes
@@ -2483,6 +2488,11 @@
             var pagePaddingCss = typeof options.pagePadding === 'number' ? options.pagePadding : 10;
             var dayPaddingCss = typeof options.dayPadding === 'number' ? options.dayPadding : 6;
             var eventPaddingCss = typeof options.eventPadding === 'number' ? options.eventPadding : 6;
+            var textSizeCss = typeof options.textSize === 'number' ? options.textSize : 12;
+            var textScale = textSizeCss / 12;
+            function scaledTextSize(size) {
+                return Math.round(size * textScale * 10) / 10;
+            }
             return [
                 '<!doctype html>',
                 '<html lang="fr">',
@@ -2492,24 +2502,24 @@
                 '<title>' + escapeHtml(title) + '</title>',
                 '<style>',
                 'body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:' + pagePaddingCss + 'px;color:' + pageText + ';background:' + pageBg + ';}',
-                'h2{font-size:26px;margin:0 0 14px;padding-bottom:6px;border-bottom:1px solid ' + titleBorder + ';color:' + titleColor + ';text-align:center;}',
+                'h2{font-size:' + scaledTextSize(26) + 'px;margin:0 0 14px;padding-bottom:6px;border-bottom:1px solid ' + titleBorder + ';color:' + titleColor + ';text-align:center;}',
                 '.mj-print-cal{display:grid;gap:8px;}',
                 '.mj-print-cal__weekdays,.mj-print-cal__week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}',
                 '.mj-print-cal--compact .mj-print-cal__weekdays{display:none;}',
                 '.mj-print-cal__days{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;}',
-                '.mj-print-cal__weekdays span{font-size:11px;font-weight:700;text-transform:uppercase;color:' + weekdayText + ';padding:2px 4px;}',
+                '.mj-print-cal__weekdays span{font-size:' + scaledTextSize(11) + 'px;font-weight:700;text-transform:uppercase;color:' + weekdayText + ';padding:2px 4px;}',
                 '.mj-print-cal__day{border:1px solid ' + dayBorder + ';border-radius:8px;min-height:80px;padding:' + dayPaddingCss + 'px;display:flex;flex-direction:column;gap:6px;background:' + dayBg + ';}',
                 '.mj-print-cal__day.is-padding{background:' + dayPaddingBg + ';border-style:dashed;}',
-                '.mj-print-cal__day-head{font-size:13px;font-weight:700;color:' + dayHead + ';}',
+                '.mj-print-cal__day-head{font-size:' + scaledTextSize(13) + 'px;font-weight:700;color:' + dayHead + ';}',
                 '.mj-print-cal__events{display:grid;gap:6px;}',
                 '.mj-print-event{border:1px solid ' + eventBorder + ';border-radius:6px;padding:' + eventPaddingCss + 'px;background:' + eventBg + ';display:grid;gap:4px;}',
                 '.mj-print-event-cover{width:100%;aspect-ratio:1 / 1;object-fit:cover;border-radius:4px;display:block;}',
-                '.mj-print-event-title{font-size:12px;font-weight:700;line-height:1.2;display:flex;align-items:center;gap:6px;color:' + eventTitle + ';}',
-                '.mj-print-event-emoji{font-size:13px;line-height:1;}',
+                '.mj-print-event-title{font-size:' + scaledTextSize(12) + 'px;font-weight:700;line-height:1.2;display:flex;align-items:center;gap:6px;color:' + eventTitle + ';}',
+                '.mj-print-event-emoji{font-size:' + scaledTextSize(13) + 'px;line-height:1;}',
                 '.mj-print-event-title-text{display:inline;}',
-                '.mj-print-event-meta,.mj-print-event-details{font-size:10px;color:' + eventMeta + ';line-height:1.3;}',
-                '.mj-print-event-type-label{display:inline-flex;align-items:center;align-self:flex-start;border:1px solid ' + typeLabelBorder + ';border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;line-height:1.2;background:' + typeLabelBg + ';color:' + typeLabelColor + ';}',
-                '.mj-print-empty{font-size:13px;color:' + emptyText + ';}',
+                '.mj-print-event-meta,.mj-print-event-details{font-size:' + scaledTextSize(10) + 'px;color:' + eventMeta + ';line-height:1.3;}',
+                '.mj-print-event-type-label{display:inline-flex;align-items:center;align-self:flex-start;border:1px solid ' + typeLabelBorder + ';border-radius:999px;padding:2px 8px;font-size:' + scaledTextSize(10) + 'px;font-weight:600;line-height:1.2;background:' + typeLabelBg + ';color:' + typeLabelColor + ';}',
+                '.mj-print-empty{font-size:' + scaledTextSize(13) + 'px;color:' + emptyText + ';}',
                 '.mj-print-period + .mj-print-period{margin-top:14px;}',
                 '.mj-print-doc-image{margin:0 0 12px;overflow:hidden;}',
                 '.mj-print-doc-image img{display:block;width:calc(100% + ' + (pagePaddingCss * 2) + 'px);max-width:none;height:auto;margin-left:-' + pagePaddingCss + 'px;}',
@@ -2711,6 +2721,8 @@
             var pagePadding = typeof options.pagePadding === 'number' ? options.pagePadding : 10;
             var dayPadding = typeof options.dayPadding === 'number' ? options.dayPadding : 6;
             var eventPadding = typeof options.eventPadding === 'number' ? options.eventPadding : 6;
+            var textSize = typeof options.textSize === 'number' ? options.textSize : 12;
+            var textScale = textSize / 12;
             var theme = normalizePrintTheme(options.theme);
             var hasDarkBackground = theme === 'dark' || theme === 'dark-light-days';
             var hasDarkDayCards = theme === 'dark' || theme === 'light-dark-days';
@@ -2781,7 +2793,7 @@
                     height += innerWidth + 4;
                 }
 
-                measureCtx.font = '700 12px Arial, sans-serif';
+                measureCtx.font = '700 ' + (12 * textScale) + 'px Arial, sans-serif';
                 var titleLines = wrapCanvasText(measureCtx, eventItem.title || '', Math.max(60, innerWidth - 20));
                 height += Math.max(14, Math.min(titleLines.length, 3) * 14);
 
@@ -3221,6 +3233,7 @@
             var pagePadding = getPrintPaddingValue(printPadPageInput, 0, 24, 10);
             var dayPadding = getPrintPaddingValue(printPadDayInput, 0, 16, 6);
             var eventPadding = getPrintPaddingValue(printPadEventInput, 0, 16, 6);
+            var textSize = getPrintPaddingValue(printTextSizeInput, 8, 20, 12);
             var pageBreak = isPageBreakEnabled();
             var selectedTypesMap = getSelectedPrintTypesMap();
             var selectedMonthStartIndex = getSelectedMonthStartIndex();
@@ -3246,6 +3259,7 @@
                 pagePadding: pagePadding,
                 dayPadding: dayPadding,
                 eventPadding: eventPadding,
+                textSize: textSize,
                 pageBreak: pageBreak
             };
 
@@ -3551,6 +3565,17 @@
                 queueSavePrintPrefs();
             });
             printPadEventInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+
+        if (printTextSizeInput) {
+            printTextSizeInput.addEventListener('input', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+            printTextSizeInput.addEventListener('change', function() {
                 refreshPrintPreview();
                 queueSavePrintPrefs();
             });

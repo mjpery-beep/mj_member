@@ -3361,6 +3361,10 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<input type="range" min="0" max="16" step="1" value="6" data-print-option="pad-event" />';
             echo '</label>';
             echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Taille du texte', 'mj-member') . '</span>';
+            echo '<input type="range" min="8" max="20" step="1" value="12" data-print-option="text-size" />';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
             echo '<span>' . esc_html__('Période', 'mj-member') . '</span>';
             echo '<select data-print-option="mode">';
             echo '<option value="week"' . selected($print_default_mode, 'week', false) . '>' . esc_html__('Semaine', 'mj-member') . '</option>';
