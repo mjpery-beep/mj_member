@@ -193,6 +193,147 @@
 
         var occurrenceModal = null;
         var occurrenceEvents = null;
+        var occurrenceEditorHost = null;
+        var occurrenceEditorMount = null;
+
+        function createRegMgrApi() {
+            if (!config || !config.ajaxUrl || !config.registrationManagerNonce) {
+                return null;
+            }
+            if (window.MjRegMgrServices && typeof window.MjRegMgrServices.createApiService === 'function') {
+                return window.MjRegMgrServices.createApiService({
+                    ajaxUrl: config.ajaxUrl,
+                    nonce: config.registrationManagerNonce
+                });
+            }
+            return null;
+        }
+
+        function normalizeOccurrenceTarget(eventData, occurrenceTs) {
+            var occurrences = eventData && Array.isArray(eventData.occurrences) ? eventData.occurrences : [];
+            if (!occurrences.length || !occurrenceTs) {
+                return occurrences.length ? occurrences[0] : null;
+            }
+            var targetTs = parseInt(occurrenceTs, 10) || 0;
+            return occurrences.find(function(occurrence) {
+                if (!occurrence) {
+                    return false;
+                }
+                if (occurrence.timestamp && parseInt(occurrence.timestamp, 10) === targetTs) {
+                    return true;
+                }
+                var startValue = occurrence.start || (occurrence.date && occurrence.startTime ? occurrence.date + ' ' + occurrence.startTime + ':00' : '');
+                if (!startValue) {
+                    return false;
+                }
+                var parsed = Date.parse(String(startValue).replace(' ', 'T'));
+                return !Number.isNaN(parsed) && Math.floor(parsed / 1000) === targetTs;
+            }) || occurrences[0] || null;
+        }
+
+        function ensureOccurrenceEditorHost() {
+            if (occurrenceEditorHost) {
+                return occurrenceEditorHost;
+            }
+            if (!document || !document.body) {
+                return null;
+            }
+            occurrenceEditorHost = document.createElement('div');
+            occurrenceEditorHost.className = 'mj-member-events-calendar__occurrence-editor-host';
+            occurrenceEditorMount = document.createElement('div');
+            occurrenceEditorMount.className = 'mj-member-events-calendar__occurrence-editor-mount';
+            occurrenceEditorHost.appendChild(occurrenceEditorMount);
+            document.body.appendChild(occurrenceEditorHost);
+            return occurrenceEditorHost;
+        }
+
+        function renderOccurrenceEditor(eventData, editorData, targetOccurrence) {
+            var preact = window.preact;
+            var render = window.preactRender || (preact && preact.render);
+            var OccurrenceEditor = window.MjRegMgrOccurrenceEditor || {};
+            var Panel = typeof OccurrenceEditor.OccurrenceEncoderPanel === 'function'
+                ? OccurrenceEditor.OccurrenceEncoderPanel
+                : null;
+            var api = createRegMgrApi();
+
+            if (!preact || typeof render !== 'function' || !Panel || !api || !ensureOccurrenceEditorHost()) {
+                return false;
+            }
+
+            var h = preact.h;
+            var eventId = eventData && eventData.id ? parseInt(eventData.id, 10) : 0;
+            if (!eventId) {
+                return false;
+            }
+
+            var Host = function() {
+                var hooks = window.preactHooks || {};
+                var useState = hooks.useState;
+                if (typeof useState !== 'function') {
+                    return null;
+                }
+                var state = useState(eventData);
+                var currentEvent = state[0];
+                var setCurrentEvent = state[1];
+
+                return h(Panel, {
+                    event: currentEvent,
+                    occurrences: Array.isArray(currentEvent.occurrences) ? currentEvent.occurrences : [],
+                    initialEditorOccurrenceId: targetOccurrence && targetOccurrence.id ? String(targetOccurrence.id) : '',
+                    calendarContextEvents: [],
+                    calendarContextQuery: {},
+                    strings: {},
+                    locale: (config && config.locale) || 'fr',
+                    apiPost: api.post,
+                    globalLocationOptions: editorData && editorData.form && editorData.form.options ? editorData.form.options.locations : null,
+                    globalMemberOptions: editorData && editorData.form && editorData.form.options ? editorData.form.options.animateurs : null,
+                    globalVolunteerOptions: editorData && editorData.form && editorData.form.options ? editorData.form.options.volunteers : null,
+                    onPersistOccurrences: function(nextOccurrences, scheduleSummary, generatorPlan, options) {
+                        return api.saveEventOccurrences(eventId, nextOccurrences, scheduleSummary, generatorPlan, options).then(function(response) {
+                            if (response && response.event) {
+                                setCurrentEvent(response.event);
+                            }
+                            window.location.reload();
+                            return response;
+                        });
+                    },
+                    onBatchesUpdate: function(batches) {
+                        setCurrentEvent(function(previous) {
+                            return previous ? Object.assign({}, previous, { occurrenceGenerationBatches: batches }) : previous;
+                        });
+                    },
+                    onNotify: function(notice) {
+                        if (notice && notice.message) {
+                            window.alert(notice.message);
+                        }
+                    }
+                });
+            };
+
+            render(h(Host), occurrenceEditorMount);
+            return true;
+        }
+
+        function openExistingOccurrenceEditor(eventId, occurrenceTs) {
+            var api = createRegMgrApi();
+            if (!api || !eventId) {
+                return false;
+            }
+            Promise.all([
+                api.getEventDetails(eventId),
+                api.getEventEditor(eventId)
+            ]).then(function(results) {
+                var eventData = results[0] && results[0].event ? results[0].event : null;
+                var editorData = results[1] || null;
+                var targetOccurrence = normalizeOccurrenceTarget(eventData, occurrenceTs);
+                if (!targetOccurrence || !renderOccurrenceEditor(eventData, editorData, targetOccurrence)) {
+                    window.location.href = '/mon-compte/gestionnaire/?event=' + encodeURIComponent(String(eventId)) + '#mj-event-occurrence-editor';
+                }
+            }).catch(function(error) {
+                window.alert(error && error.message ? error.message : 'Impossible de charger l\'éditeur d\'occurrence.');
+            });
+            return true;
+        }
 
         function createOccurrenceModal() {
             if (occurrenceModal) {
@@ -369,6 +510,34 @@
         // ---- Delete occurrence handler & add-event day buttons ----
         if (config && config.ajaxUrl && config.deleteNonce) {
             root.addEventListener('click', function(e) {
+                var menuToggle = e.target.closest('.mj-member-events-calendar__event-menu-toggle');
+                if (menuToggle) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    var actions = menuToggle.closest('.mj-member-events-calendar__event-actions');
+                    var menu = actions ? actions.querySelector('.mj-member-events-calendar__event-menu') : null;
+                    var isOpen = menu && !menu.hidden;
+                    toArray(root.querySelectorAll('.mj-member-events-calendar__event-actions.is-open')).forEach(function(openActions) {
+                        openActions.classList.remove('is-open');
+                    });
+                    toArray(root.querySelectorAll('.mj-member-events-calendar__event-menu')).forEach(function(openMenu) {
+                        openMenu.hidden = true;
+                    });
+                    toArray(root.querySelectorAll('.mj-member-events-calendar__event-menu-toggle[aria-expanded="true"]')).forEach(function(openToggle) {
+                        openToggle.setAttribute('aria-expanded', 'false');
+                    });
+
+                    if (menu && !isOpen) {
+                        menu.hidden = false;
+                        if (actions) {
+                            actions.classList.add('is-open');
+                        }
+                        menuToggle.setAttribute('aria-expanded', 'true');
+                    }
+                    return;
+                }
+
                 var addBtn = e.target.closest('[data-calendar-create-day]');
                 if (addBtn && ccmInstance) {
                     e.preventDefault();
@@ -386,6 +555,17 @@
                     e.preventDefault();
                     e.stopPropagation();
                     openOccurrenceModal(occurrenceBtn.getAttribute('data-calendar-create-occurrence-day') || '');
+                    return;
+                }
+
+                var occurrenceEditBtn = e.target.closest('.mj-member-events-calendar__event-occurrence-edit');
+                if (occurrenceEditBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openExistingOccurrenceEditor(
+                        parseInt(occurrenceEditBtn.getAttribute('data-edit-occurrence-event'), 10) || 0,
+                        parseInt(occurrenceEditBtn.getAttribute('data-edit-occurrence-ts'), 10) || 0
+                    );
                     return;
                 }
 
@@ -454,6 +634,21 @@
                     alert('Erreur r\u00e9seau. Veuillez r\u00e9essayer.');
                     btn.classList.remove('is-loading');
                     btn.disabled = false;
+                });
+            });
+
+            document.addEventListener('click', function(e) {
+                if (root.contains(e.target) && e.target.closest('.mj-member-events-calendar__event-actions')) {
+                    return;
+                }
+                toArray(root.querySelectorAll('.mj-member-events-calendar__event-menu')).forEach(function(menu) {
+                    menu.hidden = true;
+                });
+                toArray(root.querySelectorAll('.mj-member-events-calendar__event-actions.is-open')).forEach(function(actions) {
+                    actions.classList.remove('is-open');
+                });
+                toArray(root.querySelectorAll('.mj-member-events-calendar__event-menu-toggle[aria-expanded="true"]')).forEach(function(toggle) {
+                    toggle.setAttribute('aria-expanded', 'false');
                 });
             });
         }

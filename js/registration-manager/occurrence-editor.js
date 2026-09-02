@@ -44,6 +44,7 @@
         var globalLocationOptions = props.globalLocationOptions || null;
         var globalMemberOptions = props.globalMemberOptions || null;
         var globalVolunteerOptions = props.globalVolunteerOptions || null;
+        var initialEditorOccurrenceId = props.initialEditorOccurrenceId ? String(props.initialEditorOccurrenceId) : '';
 
         var _loadedGlobalOptions = useState({ locations: [], members: [], volunteers: [] });
         var loadedGlobalOptions = _loadedGlobalOptions[0];
@@ -182,6 +183,7 @@
         var occurrenceEditorModal = useModal();
         var occurrenceGeneratorModal = useModal();
         var modalReopenGuardUntilRef = useRef(0);
+        var initialEditorOpenedRef = useRef('');
 
         var openOccurrenceEditor = useCallback(function (dateIso) {
             if (Date.now() < modalReopenGuardUntilRef.current) {
@@ -2856,6 +2858,20 @@
             setEditorState(createEditorState(occurrence));
             openOccurrenceEditor(occurrence.date || '');
         }, [setSelectedOccurrenceId, setEditorState, openOccurrenceEditor]);
+
+        useEffect(function () {
+            if (!initialEditorOccurrenceId || initialEditorOpenedRef.current === initialEditorOccurrenceId) {
+                return;
+            }
+            var targetOccurrence = localOccurrences.find(function (occurrence) {
+                return occurrence && String(occurrence.id) === initialEditorOccurrenceId;
+            }) || null;
+            if (!targetOccurrence) {
+                return;
+            }
+            initialEditorOpenedRef.current = initialEditorOccurrenceId;
+            openEditorForOccurrence(targetOccurrence);
+        }, [initialEditorOccurrenceId, localOccurrences, openEditorForOccurrence]);
 
         var handleCancelEdit = useCallback(function () {
             modalReopenGuardUntilRef.current = Date.now() + 300;

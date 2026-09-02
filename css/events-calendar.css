@@ -1914,6 +1914,26 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
     text-decoration: none;
 }
 
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-toggle:hover,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-toggle:focus-visible,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-toggle[aria-expanded="true"] {
+    background: var(--mj-events-calendar-accent, #6366f1);
+    border-color: var(--mj-events-calendar-accent, #6366f1);
+    color: #ffffff;
+}
+
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-item:hover,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-item:focus-visible {
+    background: var(--mj-events-calendar-accent-soft, #eef2ff);
+    color: var(--mj-events-calendar-accent, #6366f1);
+}
+
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-item.mj-member-events-calendar__event-delete:hover,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-item.mj-member-events-calendar__event-delete:focus-visible {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
 .mj-calendar-occurrence-modal[hidden] {
     display: none;
 }
@@ -2280,91 +2300,172 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
 }
 
 /* ==========================================================================
-   Actions container (edit + delete â€“ animateur / coordinateur only)
-   ========================================================================== */
+    Actions menu (animateur / coordinateur only)
+    ========================================================================== */
 
 .mj-member-events-calendar__event-actions {
     position: absolute;
     top: 4px;
     right: 4px;
     display: inline-flex;
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
     gap: 0;
-    border-radius: 7px;
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    overflow: visible;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease;
-    z-index: 5;
-    overflow: hidden;
+    z-index: 360;
 }
 
 .mj-member-events-calendar__event:hover .mj-member-events-calendar__event-actions,
-.mj-member-events-calendar__event:focus-within .mj-member-events-calendar__event-actions {
+.mj-member-events-calendar__event:focus-within .mj-member-events-calendar__event-actions,
+.mj-member-events-calendar__event-actions.is-open {
     opacity: 1;
     pointer-events: auto;
 }
 
-a.mj-member-events-calendar__event-edit,
-button.mj-member-events-calendar__event-edit,
-button.mj-member-events-calendar__event-delete {
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-toggle,
+.mj-member-events-calendar .mj-member-events-calendar__event-menu-toggle {
+    appearance: none !important;
+    -webkit-appearance: none !important;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
-    background: transparent;
-    background-color: transparent;
-    color: #64748b;
-    transition: background 0.15s ease, color 0.15s ease;
-    text-decoration: none !important;
-    line-height: 1;
-    border: none;
-    border-radius: 0;
-    padding: 0;
-    margin: 0;
-    font-size: inherit;
-    font-weight: inherit;
-    white-space: normal;
-    text-align: center;
-    cursor: pointer;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    user-select: none;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    border: 1px solid rgba(255, 255, 255, 0.72) !important;
+    border-radius: 999px !important;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.96)) !important;
+    color: #334155 !important;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.88) !important;
+    cursor: pointer !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-a.mj-member-events-calendar__event-edit svg,
-button.mj-member-events-calendar__event-edit svg,
-button.mj-member-events-calendar__event-delete svg {
+
+.mj-member-events-calendar__event-menu-toggle svg {
     display: block;
     flex-shrink: 0;
-    width: 13px;
-    height: 13px;
+    width: 16px;
+    height: 16px;
 }
 
-/* Visual divider between the two buttons */
-a.mj-member-events-calendar__event-edit,
-button.mj-member-events-calendar__event-edit {
-    border-right: 1px solid rgba(0, 0, 0, 0.08);
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-toggle:hover,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-toggle:focus-visible,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-toggle[aria-expanded="true"] {
+    background: linear-gradient(135deg, var(--mj-events-calendar-accent, #6366f1), #0f172a) !important;
+    border-color: rgba(255, 255, 255, 0.9) !important;
+    color: #ffffff !important;
+    transform: translateY(-1px);
 }
 
-button.mj-member-events-calendar__event-edit:hover,
-a.mj-member-events-calendar__event-edit:hover {
-    background: var(--mj-events-calendar-accent, #6366f1);
-    color: #ffffff;
+.mj-member-events-calendar__event-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: max-content;
+    min-width: 214px;
+    max-width: min(260px, calc(100vw - 24px));
+    padding: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 8px;
+    background: linear-gradient(180deg, #ffffff, #f8fafc);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+    z-index: 370;
+}
+
+.mj-member-events-calendar__event-menu::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    right: 11px;
+    width: 9px;
+    height: 9px;
+    border-left: 1px solid rgba(148, 163, 184, 0.28);
+    border-top: 1px solid rgba(148, 163, 184, 0.28);
+    background: #ffffff;
+    transform: rotate(45deg);
+}
+
+.mj-member-events-calendar__event-menu[hidden] {
+    display: none !important;
+}
+
+.mj-member-events-calendar__event-menu-item,
+a.mj-member-events-calendar__event-menu-item,
+button.mj-member-events-calendar__event-menu-item,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-item {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 36px !important;
+    padding: 8px 10px !important;
+    border: 0 !important;
+    border-radius: 7px !important;
+    background: transparent !important;
+    color: #334155 !important;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2 !important;
+    text-align: left !important;
+    text-decoration: none !important;
+    white-space: nowrap;
+    cursor: pointer !important;
+    box-shadow: none !important;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mj-member-events-calendar__event-menu-item > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mj-member-events-calendar__event-menu-emoji {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    border-radius: 7px;
+    background: rgba(15, 23, 42, 0.06);
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.mj-member-events-calendar__event-menu-item:hover,
+.mj-member-events-calendar__event-menu-item:focus-visible,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-item:hover,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-item:focus-visible {
+    background: var(--mj-events-calendar-accent-soft, #eef2ff) !important;
+    color: var(--mj-events-calendar-accent, #6366f1) !important;
     text-decoration: none !important;
 }
 
-.mj-member-events-calendar button.mj-member-events-calendar__event-delete:hover {
-    background: #ef4444;
-    color: #ffffff;
+.mj-member-events-calendar__event-menu-item:hover .mj-member-events-calendar__event-menu-emoji,
+.mj-member-events-calendar__event-menu-item:focus-visible .mj-member-events-calendar__event-menu-emoji {
+    background: rgba(99, 102, 241, 0.14);
 }
 
-button.mj-member-events-calendar__event-edit:focus-visible,
-button.mj-member-events-calendar__event-delete:focus-visible {
-    outline: 2px solid var(--mj-events-calendar-accent, #6366f1);
-    outline-offset: -2px;
+.mj-member-events-calendar__event-menu-item.mj-member-events-calendar__event-delete:hover,
+.mj-member-events-calendar__event-menu-item.mj-member-events-calendar__event-delete:focus-visible,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-item.mj-member-events-calendar__event-delete:hover,
+.mj-member-events-calendar button.mj-member-events-calendar__event-menu-item.mj-member-events-calendar__event-delete:focus-visible {
+    background: #fee2e2 !important;
+    color: #b91c1c !important;
+}
+
+.mj-member-events-calendar__event-menu-item.mj-member-events-calendar__event-delete:hover .mj-member-events-calendar__event-menu-emoji,
+.mj-member-events-calendar__event-menu-item.mj-member-events-calendar__event-delete:focus-visible .mj-member-events-calendar__event-menu-emoji {
+    background: rgba(185, 28, 28, 0.1);
 }
 
 button.mj-member-events-calendar__event-delete.is-loading {

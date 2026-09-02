@@ -2971,9 +2971,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                     $todo_entry_id = isset($todo_entry_parts[1]) ? (int) $todo_entry_parts[1] : 0;
                                     $todo_page_url = home_url('/mon-compte/todo/?section=todos' . ($todo_entry_id > 0 ? '&todo_id=' . $todo_entry_id : ''));
                                     echo '<div class="mj-member-events-calendar__event-actions">';
-                                    echo '<a class="mj-member-events-calendar__event-edit" href="' . esc_url($todo_page_url) . '" title="' . esc_attr__('Voir la tâche', 'mj-member') . '" aria-label="' . esc_attr__('Voir la tâche', 'mj-member') . '">';
-                                    echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-                                    echo '</a>';
+                                    echo '<button type="button" class="mj-member-events-calendar__event-menu-toggle" aria-haspopup="menu" aria-expanded="false" title="' . esc_attr__('Actions', 'mj-member') . '" aria-label="' . esc_attr__('Actions de la tâche', 'mj-member') . '">';
+                                    echo '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>';
+                                    echo '</button>';
+                                    echo '<div class="mj-member-events-calendar__event-menu" role="menu" hidden>';
+                                    echo '<a class="mj-member-events-calendar__event-menu-item" role="menuitem" href="' . esc_url($todo_page_url) . '"><span class="mj-member-events-calendar__event-menu-emoji" aria-hidden="true">✅</span><span>' . esc_html__('Voir la tâche', 'mj-member') . '</span></a>';
+                                    echo '</div>';
                                     echo '</div>';
                                 } else {
                                     // Parse event_id from occurrence key (format: "eventId:timestamp")
@@ -2982,12 +2985,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                     $occ_start_ts = isset($occ_parts[1]) ? (int) $occ_parts[1] : 0;
                                     $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $occ_event_id);
                                     echo '<div class="mj-member-events-calendar__event-actions">';
-                                    echo '<a class="mj-member-events-calendar__event-edit" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
-                                    echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-                                    echo '</a>';
-                                    echo '<button type="button" class="mj-member-events-calendar__event-delete" data-delete-event="' . esc_attr($occ_event_id) . '" data-delete-ts="' . esc_attr($occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
-                                    echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                                    echo '<button type="button" class="mj-member-events-calendar__event-menu-toggle" aria-haspopup="menu" aria-expanded="false" title="' . esc_attr__('Actions', 'mj-member') . '" aria-label="' . esc_attr__('Actions de l\'événement', 'mj-member') . '">';
+                                    echo '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>';
                                     echo '</button>';
+                                    echo '<div class="mj-member-events-calendar__event-menu" role="menu" hidden>';
+                                    echo '<a class="mj-member-events-calendar__event-menu-item" role="menuitem" href="' . esc_url($edit_url) . '"><span class="mj-member-events-calendar__event-menu-emoji" aria-hidden="true">✏️</span><span>' . esc_html__('Éditer l\'événement', 'mj-member') . '</span></a>';
+                                    echo '<button type="button" class="mj-member-events-calendar__event-menu-item mj-member-events-calendar__event-delete" role="menuitem" data-delete-event="' . esc_attr($occ_event_id) . '" data-delete-ts="' . esc_attr($occ_start_ts) . '"><span class="mj-member-events-calendar__event-menu-emoji" aria-hidden="true">🗑️</span><span>' . esc_html__('Supprimer l\'occurrence', 'mj-member') . '</span></button>';
+                                    echo '<button type="button" class="mj-member-events-calendar__event-menu-item mj-member-events-calendar__event-occurrence-edit" role="menuitem" data-edit-occurrence-event="' . esc_attr($occ_event_id) . '" data-edit-occurrence-ts="' . esc_attr($occ_start_ts) . '"><span class="mj-member-events-calendar__event-menu-emoji" aria-hidden="true">📅</span><span>' . esc_html__('Éditer l\'occurrence', 'mj-member') . '</span></button>';
+                                    echo '</div>';
                                     echo '</div>';
                                 }
                             }
@@ -3215,9 +3220,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $mobile_todo_id = isset($mobile_todo_parts[1]) ? (int) $mobile_todo_parts[1] : 0;
                             $todo_page_url = home_url('/mon-compte/todo/?section=todos' . ($mobile_todo_id > 0 ? '&todo_id=' . $mobile_todo_id : ''));
                             echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
-                            echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($todo_page_url) . '" title="' . esc_attr__('Voir la tâche', 'mj-member') . '" aria-label="' . esc_attr__('Voir la tâche', 'mj-member') . '">';
-                            echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-                            echo '</a>';
+                            echo '<button type="button" class="mj-member-events-calendar__event-menu-toggle" aria-haspopup="menu" aria-expanded="false" title="' . esc_attr__('Actions', 'mj-member') . '" aria-label="' . esc_attr__('Actions de la tâche', 'mj-member') . '">';
+                            echo '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>';
+                            echo '</button>';
+                            echo '<div class="mj-member-events-calendar__event-menu" role="menu" hidden>';
+                            echo '<a class="mj-member-events-calendar__event-menu-item" role="menuitem" href="' . esc_url($todo_page_url) . '"><span class="mj-member-events-calendar__event-menu-emoji" aria-hidden="true">✅</span><span>' . esc_html__('Voir la tâche', 'mj-member') . '</span></a>';
+                            echo '</div>';
                             echo '</div>';
                         } else {
                             $mobile_occ_parts = explode(':', (string) $mobile_event['id'], 2);
@@ -3225,12 +3233,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $mobile_occ_start_ts = isset($mobile_occ_parts[1]) ? (int) $mobile_occ_parts[1] : 0;
                             $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $mobile_occ_event_id);
                             echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
-                            echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
-                            echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-                            echo '</a>';
-                            echo '<button type="button" class="mj-member-events-calendar__event-delete mj-member-events-calendar__event-delete--mobile" data-delete-event="' . esc_attr($mobile_occ_event_id) . '" data-delete-ts="' . esc_attr($mobile_occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
-                            echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                            echo '<button type="button" class="mj-member-events-calendar__event-menu-toggle" aria-haspopup="menu" aria-expanded="false" title="' . esc_attr__('Actions', 'mj-member') . '" aria-label="' . esc_attr__('Actions de l\'événement', 'mj-member') . '">';
+                            echo '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>';
                             echo '</button>';
+                            echo '<div class="mj-member-events-calendar__event-menu" role="menu" hidden>';
+                            echo '<a class="mj-member-events-calendar__event-menu-item" role="menuitem" href="' . esc_url($edit_url) . '"><span class="mj-member-events-calendar__event-menu-emoji" aria-hidden="true">✏️</span><span>' . esc_html__('Éditer l\'événement', 'mj-member') . '</span></a>';
+                            echo '<button type="button" class="mj-member-events-calendar__event-menu-item mj-member-events-calendar__event-delete" role="menuitem" data-delete-event="' . esc_attr($mobile_occ_event_id) . '" data-delete-ts="' . esc_attr($mobile_occ_start_ts) . '"><span class="mj-member-events-calendar__event-menu-emoji" aria-hidden="true">🗑️</span><span>' . esc_html__('Supprimer l\'occurrence', 'mj-member') . '</span></button>';
+                            echo '<button type="button" class="mj-member-events-calendar__event-menu-item mj-member-events-calendar__event-occurrence-edit" role="menuitem" data-edit-occurrence-event="' . esc_attr($mobile_occ_event_id) . '" data-edit-occurrence-ts="' . esc_attr($mobile_occ_start_ts) . '"><span class="mj-member-events-calendar__event-menu-emoji" aria-hidden="true">📅</span><span>' . esc_html__('Éditer l\'occurrence', 'mj-member') . '</span></button>';
+                            echo '</div>';
                             echo '</div>';
                         }
                     }
@@ -3441,6 +3451,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         if ($can_edit_events) {
             $instance_config['deleteNonce'] = wp_create_nonce('mj_calendar_delete_occurrence');
+            $instance_config['registrationManagerNonce'] = wp_create_nonce('mj-registration-manager');
             $ccm_config = \Mj\Member\Classes\View\CreateEventModalRenderer::buildConfig();
             $instance_config = array_merge($instance_config, $ccm_config);
         }
