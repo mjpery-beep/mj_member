@@ -2303,6 +2303,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
         }
 
+        // Add a "Notes" filter type if any day notes exist in the range.
+        if (!empty($notes_by_day_key) && !isset($available_type_filters['note'])) {
+            $available_type_filters['note'] = array(
+                'label' => __('Notes', 'mj-member'),
+                'color' => '#F59E0B',
+            );
+        }
+
         if ($next_event_pointer !== null && isset($months[$next_event_pointer['month_key']])) {
             $months[$next_event_pointer['month_key']]['has_next_event'] = true;
         }
@@ -2659,39 +2667,24 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     echo '<span class="mj-member-events-calendar__day-number">' . esc_html($cell_entry['day_number']) . '</span>';
                     echo '</div>';
 
-                    // Notes render first, ahead of events/tasks/leaves.
+                    // Notes render first, ahead of events/tasks/leaves. Up to
+                    // MJ_DAY_NOTES_PAGE notes shown at once (most recent first),
+                    // with pager arrows to page through the rest.
                     if (!empty($notes_by_day_key[$day_key])) {
                         $day_notes_data = $notes_by_day_key[$day_key];
-                        $latest_note = $day_notes_data[0];
-                        $latest_note_label = $latest_note['title'] !== ''
-                            ? $latest_note['title']
-                            : wp_html_excerpt(wp_strip_all_tags($latest_note['content']), 40, '…');
+                        $notes_page_size = 4;
+                        $notes_total = count($day_notes_data);
 
-                        echo '<div class="mj-member-events-calendar__day-note" data-day-notes="' . esc_attr(wp_json_encode($day_notes_data)) . '" data-note-index="0">';
-                        if ($latest_note['emoji'] !== '') {
-                            echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($latest_note['emoji']) . '</span>';
+                        echo '<div class="mj-member-events-calendar__day-notes" data-day-notes="' . esc_attr(wp_json_encode($day_notes_data)) . '" data-note-page="0" data-page-size="' . esc_attr($notes_page_size) . '">';
+                        foreach (array_slice($day_notes_data, 0, $notes_page_size) as $day_note) {
+                            self::render_day_note_row($day_note);
                         }
-                        echo '<span class="mj-member-events-calendar__day-note-title"' . ($latest_note['color'] !== '' ? ' style="border-left:3px solid ' . esc_attr($latest_note['color']) . ';padding-left:4px;"' : '') . '>' . esc_html($latest_note_label) . '</span>';
-                        if (!empty($latest_note['media'][0]['thumbUrl'])) {
-                            echo '<img class="mj-member-events-calendar__day-note-thumb" src="' . esc_url($latest_note['media'][0]['thumbUrl']) . '" alt="" />';
-                        }
-                        echo '<span class="mj-member-events-calendar__day-note-avatars">';
-                        if (!empty($latest_note['author_avatar'])) {
-                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($latest_note['author_avatar']) . '" alt="" title="' . esc_attr($latest_note['author_name']) . '" />';
-                        }
-                        foreach (array_slice((array) ($latest_note['assigned_avatars'] ?? array()), 0, 3) as $assigned_avatar_url) {
-                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($assigned_avatar_url) . '" alt="" />';
-                        }
-                        echo '</span>';
-                        if (count($day_notes_data) > 1) {
+                        if ($notes_total > $notes_page_size) {
                             echo '<span class="mj-member-events-calendar__day-note-nav">';
-                            echo '<button type="button" data-note-nav="prev" aria-label="' . esc_attr__('Note précédente', 'mj-member') . '" title="' . esc_attr__('Note précédente', 'mj-member') . '">‹</button>';
-                            echo '<span class="mj-member-events-calendar__day-note-nav-count">1/' . count($day_notes_data) . '</span>';
-                            echo '<button type="button" data-note-nav="next" aria-label="' . esc_attr__('Note suivante', 'mj-member') . '" title="' . esc_attr__('Note suivante', 'mj-member') . '">›</button>';
+                            echo '<button type="button" data-note-page-nav="prev" aria-label="' . esc_attr__('Notes précédentes', 'mj-member') . '" title="' . esc_attr__('Notes précédentes', 'mj-member') . '">‹</button>';
+                            echo '<span class="mj-member-events-calendar__day-note-nav-count">1-' . min($notes_page_size, $notes_total) . '/' . $notes_total . '</span>';
+                            echo '<button type="button" data-note-page-nav="next" aria-label="' . esc_attr__('Notes suivantes', 'mj-member') . '" title="' . esc_attr__('Notes suivantes', 'mj-member') . '">›</button>';
                             echo '</span>';
-                        }
-                        if (!empty($latest_note['can_edit'])) {
-                            echo '<button type="button" class="mj-member-events-calendar__day-note-edit" data-note-edit aria-label="' . esc_attr__('Modifier la note', 'mj-member') . '" title="' . esc_attr__('Modifier la note', 'mj-member') . '">✎ ' . esc_html__('Modifier', 'mj-member') . '</button>';
                         }
                         echo '</div>';
                     }
@@ -4667,6 +4660,39 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     /**
      * Normalize a hex color value to the #RRGGBB format.
      */
+    /**
+     * Renders a single day-note row (emoji, title, avatars, edit button).
+     * Used to build up to MJ_DAY_NOTES_PAGE_SIZE rows per day cell.
+     *
+     * @param array<string,mixed> $note
+     */
+    private static function render_day_note_row(array $note): void {
+        $note_label = $note['title'] !== ''
+            ? $note['title']
+            : wp_html_excerpt(wp_strip_all_tags($note['content']), 40, '…');
+
+        echo '<div class="mj-member-events-calendar__day-note" data-note-id="' . esc_attr($note['id']) . '" data-calendar-type-item="1" data-calendar-type="note" data-calendar-type-known="1" data-calendar-count-exclude="1">';
+        if ($note['emoji'] !== '') {
+            echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($note['emoji']) . '</span>';
+        }
+        echo '<span class="mj-member-events-calendar__day-note-title"' . ($note['color'] !== '' ? ' style="border-left:3px solid ' . esc_attr($note['color']) . ';padding-left:4px;"' : '') . '>' . esc_html($note_label) . '</span>';
+        if (!empty($note['media'][0]['thumbUrl'])) {
+            echo '<img class="mj-member-events-calendar__day-note-thumb" src="' . esc_url($note['media'][0]['thumbUrl']) . '" alt="" />';
+        }
+        echo '<span class="mj-member-events-calendar__day-note-avatars">';
+        if (!empty($note['author_avatar'])) {
+            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($note['author_avatar']) . '" alt="" title="' . esc_attr($note['author_name']) . '" />';
+        }
+        foreach (array_slice((array) ($note['assigned_avatars'] ?? array()), 0, 3) as $assigned_avatar_url) {
+            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($assigned_avatar_url) . '" alt="" />';
+        }
+        echo '</span>';
+        if (!empty($note['can_edit'])) {
+            echo '<button type="button" class="mj-member-events-calendar__day-note-edit" data-note-edit aria-label="' . esc_attr__('Modifier la note', 'mj-member') . '" title="' . esc_attr__('Modifier la note', 'mj-member') . '">✎ ' . esc_html__('Modifier', 'mj-member') . '</button>';
+        }
+        echo '</div>';
+    }
+
     private static function normalize_hex_color_value($value) {
         $candidate = sanitize_hex_color($value);
         if (!is_string($candidate) || $candidate === '') {

@@ -488,14 +488,25 @@
     margin-top: 6px;
 }
 
-/* Day cell note preview on the calendar widget */
+/* Day cell note preview on the calendar widget - up to 4 notes stacked,
+   most recent first, with a pager below when there are more. */
+.mj-member-events-calendar__day-notes {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+    margin-bottom: 15px;
+}
+
+.mj-member-events-calendar__day-note.is-filtered-out {
+    display: none;
+}
+
 .mj-member-events-calendar__day-note {
     display: flex;
     align-items: flex-start;
     flex-wrap: wrap;
     gap: 4px;
-    margin-top: 4px;
-    margin-bottom: 15px;
     padding: 3px 6px;
     border-radius: 6px;
     background: #f2f4f7;
@@ -539,9 +550,9 @@
     box-sizing: border-box !important;
     display: flex !important;
     align-items: center !important;
+    align-self: flex-start !important;
     gap: 0 !important;
-    flex: 1 1 100% !important;
-    margin-top: 4px !important;
+    margin: 0 !important;
     border: 1px solid #d0d5dd !important;
     border-radius: 6px !important;
     background: #fff !important;

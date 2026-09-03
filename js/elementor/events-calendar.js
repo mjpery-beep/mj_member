@@ -524,83 +524,91 @@
 
         // ---- Live refresh of the day-note previews after create/edit/delete
         // (no full page reload: also sidesteps any page/element caching) ----
-        function buildDayNoteElement(dayNotesData) {
-            var latest = dayNotesData[0];
-            var el = document.createElement('div');
-            el.className = 'mj-member-events-calendar__day-note';
-            el.setAttribute('data-day-notes', JSON.stringify(dayNotesData));
-            el.setAttribute('data-note-index', '0');
+        var NOTE_PAGE_SIZE = 4;
 
-            if (latest.emoji) {
+        // Applies the currently checked type-filter checkboxes to a single
+        // element (mirrors applyFilters()'s per-item logic, defined further
+        // down but reachable here via closure by call time) and registers it
+        // so a later filter toggle keeps finding it.
+        function applyCurrentFilterToItem(item) {
+            if (typeof typeItems !== 'undefined' && typeItems.indexOf(item) === -1) {
+                typeItems.push(item);
+            }
+            if (typeof filterInputs === 'undefined' || !filterInputs.length) {
+                return;
+            }
+            var activeMap = {};
+            var hasChecked = false;
+            filterInputs.forEach(function (input) {
+                if (input.checked) {
+                    activeMap[input.value] = true;
+                    hasChecked = true;
+                }
+            });
+            var typeKey = item.getAttribute('data-calendar-type') || '';
+            var isKnown = item.getAttribute('data-calendar-type-known') === '1';
+            if (!hasChecked || !isKnown || Object.prototype.hasOwnProperty.call(activeMap, typeKey)) {
+                item.classList.remove('is-filtered-out');
+            } else {
+                item.classList.add('is-filtered-out');
+            }
+        }
+
+        function buildDayNoteRow(note) {
+            var row = document.createElement('div');
+            row.className = 'mj-member-events-calendar__day-note';
+            row.setAttribute('data-note-id', note.id);
+            row.setAttribute('data-calendar-type-item', '1');
+            row.setAttribute('data-calendar-type', 'note');
+            row.setAttribute('data-calendar-type-known', '1');
+            row.setAttribute('data-calendar-count-exclude', '1');
+
+            if (note.emoji) {
                 var emojiEl = document.createElement('span');
                 emojiEl.className = 'mj-member-events-calendar__day-note-emoji';
                 emojiEl.setAttribute('aria-hidden', 'true');
-                emojiEl.textContent = latest.emoji;
-                el.appendChild(emojiEl);
+                emojiEl.textContent = note.emoji;
+                row.appendChild(emojiEl);
             }
 
             var titleEl = document.createElement('span');
             titleEl.className = 'mj-member-events-calendar__day-note-title';
-            if (latest.color) {
-                titleEl.style.borderLeft = '3px solid ' + latest.color;
+            if (note.color) {
+                titleEl.style.borderLeft = '3px solid ' + note.color;
                 titleEl.style.paddingLeft = '4px';
             }
-            titleEl.textContent = latest.title || (latest.content || '').slice(0, 40);
-            el.appendChild(titleEl);
+            titleEl.textContent = note.title || (note.content || '').slice(0, 40);
+            row.appendChild(titleEl);
 
-            var thumbUrl = latest.media && latest.media[0] ? latest.media[0].thumbUrl : '';
+            var thumbUrl = note.media && note.media[0] ? note.media[0].thumbUrl : '';
             if (thumbUrl) {
                 var thumbEl = document.createElement('img');
                 thumbEl.className = 'mj-member-events-calendar__day-note-thumb';
                 thumbEl.src = thumbUrl;
                 thumbEl.alt = '';
-                el.appendChild(thumbEl);
+                row.appendChild(thumbEl);
             }
 
             var avatarsEl = document.createElement('span');
             avatarsEl.className = 'mj-member-events-calendar__day-note-avatars';
-            if (latest.author_avatar) {
+            if (note.author_avatar) {
                 var authorImg = document.createElement('img');
                 authorImg.className = 'mj-member-events-calendar__day-note-avatar';
-                authorImg.src = latest.author_avatar;
+                authorImg.src = note.author_avatar;
                 authorImg.alt = '';
-                if (latest.author_name) authorImg.title = latest.author_name;
+                if (note.author_name) authorImg.title = note.author_name;
                 avatarsEl.appendChild(authorImg);
             }
-            (latest.assigned_avatars || []).slice(0, 3).forEach(function (url) {
+            (note.assigned_avatars || []).slice(0, 3).forEach(function (url) {
                 var img = document.createElement('img');
                 img.className = 'mj-member-events-calendar__day-note-avatar';
                 img.src = url;
                 img.alt = '';
                 avatarsEl.appendChild(img);
             });
-            el.appendChild(avatarsEl);
+            row.appendChild(avatarsEl);
 
-            if (dayNotesData.length > 1) {
-                var navEl = document.createElement('span');
-                navEl.className = 'mj-member-events-calendar__day-note-nav';
-                var prevBtn = document.createElement('button');
-                prevBtn.type = 'button';
-                prevBtn.setAttribute('data-note-nav', 'prev');
-                prevBtn.setAttribute('aria-label', 'Note précédente');
-                prevBtn.setAttribute('title', 'Note précédente');
-                prevBtn.textContent = '‹';
-                var countEl = document.createElement('span');
-                countEl.className = 'mj-member-events-calendar__day-note-nav-count';
-                countEl.textContent = '1/' + dayNotesData.length;
-                var nextBtn = document.createElement('button');
-                nextBtn.type = 'button';
-                nextBtn.setAttribute('data-note-nav', 'next');
-                nextBtn.setAttribute('aria-label', 'Note suivante');
-                nextBtn.setAttribute('title', 'Note suivante');
-                nextBtn.textContent = '›';
-                navEl.appendChild(prevBtn);
-                navEl.appendChild(countEl);
-                navEl.appendChild(nextBtn);
-                el.appendChild(navEl);
-            }
-
-            if (latest.can_edit) {
+            if (note.can_edit) {
                 var editBtn = document.createElement('button');
                 editBtn.type = 'button';
                 editBtn.className = 'mj-member-events-calendar__day-note-edit';
@@ -608,14 +616,73 @@
                 editBtn.setAttribute('aria-label', 'Modifier la note');
                 editBtn.setAttribute('title', 'Modifier la note');
                 editBtn.textContent = '✎ Modifier';
-                el.appendChild(editBtn);
+                row.appendChild(editBtn);
             }
 
-            return el;
+            applyCurrentFilterToItem(row);
+            return row;
+        }
+
+        function renderDayNotesPage(wrapper) {
+            var dayNotesData;
+            try {
+                dayNotesData = JSON.parse(wrapper.getAttribute('data-day-notes') || '[]');
+            } catch (e) {
+                dayNotesData = [];
+            }
+            var page = parseInt(wrapper.getAttribute('data-note-page'), 10) || 0;
+            var total = dayNotesData.length;
+            var start = page * NOTE_PAGE_SIZE;
+            var visible = dayNotesData.slice(start, start + NOTE_PAGE_SIZE);
+
+            toArray(wrapper.querySelectorAll(':scope > .mj-member-events-calendar__day-note')).forEach(function (row) { row.remove(); });
+            var navEl = wrapper.querySelector(':scope > .mj-member-events-calendar__day-note-nav');
+            visible.forEach(function (note) {
+                wrapper.insertBefore(buildDayNoteRow(note), navEl || null);
+            });
+
+            var countEl = wrapper.querySelector('.mj-member-events-calendar__day-note-nav-count');
+            if (countEl) {
+                countEl.textContent = (start + 1) + '-' + (start + visible.length) + '/' + total;
+            }
+        }
+
+        function buildDayNotesWrapper(dayNotesData) {
+            var wrapper = document.createElement('div');
+            wrapper.className = 'mj-member-events-calendar__day-notes';
+            wrapper.setAttribute('data-day-notes', JSON.stringify(dayNotesData));
+            wrapper.setAttribute('data-note-page', '0');
+            wrapper.setAttribute('data-page-size', String(NOTE_PAGE_SIZE));
+
+            if (dayNotesData.length > NOTE_PAGE_SIZE) {
+                var navEl = document.createElement('span');
+                navEl.className = 'mj-member-events-calendar__day-note-nav';
+                var prevBtn = document.createElement('button');
+                prevBtn.type = 'button';
+                prevBtn.setAttribute('data-note-page-nav', 'prev');
+                prevBtn.setAttribute('aria-label', 'Notes précédentes');
+                prevBtn.setAttribute('title', 'Notes précédentes');
+                prevBtn.textContent = '‹';
+                var countEl = document.createElement('span');
+                countEl.className = 'mj-member-events-calendar__day-note-nav-count';
+                var nextBtn = document.createElement('button');
+                nextBtn.type = 'button';
+                nextBtn.setAttribute('data-note-page-nav', 'next');
+                nextBtn.setAttribute('aria-label', 'Notes suivantes');
+                nextBtn.setAttribute('title', 'Notes suivantes');
+                nextBtn.textContent = '›';
+                navEl.appendChild(prevBtn);
+                navEl.appendChild(countEl);
+                navEl.appendChild(nextBtn);
+                wrapper.appendChild(navEl);
+            }
+
+            renderDayNotesPage(wrapper);
+            return wrapper;
         }
 
         function applyDayNotesToDayCell(dayCell, dayNotesData) {
-            var existing = dayCell.querySelector(':scope > .mj-member-events-calendar__day-note');
+            var existing = dayCell.querySelector(':scope > .mj-member-events-calendar__day-notes');
             if (existing) {
                 existing.remove();
             }
@@ -623,7 +690,7 @@
                 return;
             }
             var header = dayCell.querySelector(':scope > .mj-member-events-calendar__day-header');
-            var newEl = buildDayNoteElement(dayNotesData);
+            var newEl = buildDayNotesWrapper(dayNotesData);
             if (header && header.nextSibling) {
                 header.parentNode.insertBefore(newEl, header.nextSibling);
             } else if (header) {
@@ -697,65 +764,29 @@
             renderNoteModal();
         }
 
-        function getCurrentDayNote(container) {
-            if (!container) return null;
-            var index = parseInt(container.getAttribute('data-note-index'), 10) || 0;
+        function getDayNoteById(wrapper, noteId) {
+            if (!wrapper || !noteId) return null;
             try {
-                var notes = JSON.parse(container.getAttribute('data-day-notes') || '[]');
-                return notes[index] || null;
+                var notes = JSON.parse(wrapper.getAttribute('data-day-notes') || '[]');
+                return notes.filter(function (n) { return String(n.id) === String(noteId); })[0] || null;
             } catch (e) {
                 return null;
             }
         }
 
-        function cycleDayNote(container, direction) {
-            if (!container) return;
-            var notes;
+        function pageDayNotes(wrapper, direction) {
+            if (!wrapper) return;
+            var total;
             try {
-                notes = JSON.parse(container.getAttribute('data-day-notes') || '[]');
+                total = JSON.parse(wrapper.getAttribute('data-day-notes') || '[]').length;
             } catch (e) {
                 return;
             }
-            if (!notes.length) return;
-
-            var index = parseInt(container.getAttribute('data-note-index'), 10) || 0;
-            index = direction === 'next' ? (index + 1) % notes.length : (index - 1 + notes.length) % notes.length;
-            container.setAttribute('data-note-index', String(index));
-
-            var note = notes[index];
-            var emojiEl = container.querySelector('.mj-member-events-calendar__day-note-emoji');
-            var titleEl = container.querySelector('.mj-member-events-calendar__day-note-title');
-            var thumbEl = container.querySelector('.mj-member-events-calendar__day-note-thumb');
-
-            if (note.emoji) {
-                if (!emojiEl) {
-                    emojiEl = document.createElement('span');
-                    emojiEl.className = 'mj-member-events-calendar__day-note-emoji';
-                    emojiEl.setAttribute('aria-hidden', 'true');
-                    container.insertBefore(emojiEl, container.firstChild);
-                }
-                emojiEl.textContent = note.emoji;
-            } else if (emojiEl) {
-                emojiEl.remove();
-            }
-            if (titleEl) {
-                titleEl.textContent = note.title || (note.content || '').slice(0, 40);
-                titleEl.style.borderLeft = note.color ? '3px solid ' + note.color : '';
-                titleEl.style.paddingLeft = note.color ? '4px' : '';
-            }
-            if (thumbEl) {
-                var thumbUrl = note.media && note.media[0] ? note.media[0].thumbUrl : '';
-                if (thumbUrl) {
-                    thumbEl.src = thumbUrl;
-                    thumbEl.hidden = false;
-                } else {
-                    thumbEl.hidden = true;
-                }
-            }
-            var countEl = container.querySelector('.mj-member-events-calendar__day-note-nav-count');
-            if (countEl) {
-                countEl.textContent = (index + 1) + '/' + notes.length;
-            }
+            var pageCount = Math.max(1, Math.ceil(total / NOTE_PAGE_SIZE));
+            var page = parseInt(wrapper.getAttribute('data-note-page'), 10) || 0;
+            page = direction === 'next' ? (page + 1) % pageCount : (page - 1 + pageCount) % pageCount;
+            wrapper.setAttribute('data-note-page', String(page));
+            renderDayNotesPage(wrapper);
         }
 
         // ---- Create task modal (inspired by the todo widget's create form) ----
@@ -1044,11 +1075,11 @@
                     return;
                 }
 
-                var noteNavBtn = e.target.closest('[data-note-nav]');
-                if (noteNavBtn) {
+                var notePageBtn = e.target.closest('[data-note-page-nav]');
+                if (notePageBtn) {
                     e.preventDefault();
                     e.stopPropagation();
-                    cycleDayNote(noteNavBtn.closest('.mj-member-events-calendar__day-note'), noteNavBtn.getAttribute('data-note-nav'));
+                    pageDayNotes(notePageBtn.closest('.mj-member-events-calendar__day-notes'), notePageBtn.getAttribute('data-note-page-nav'));
                     return;
                 }
 
@@ -1056,8 +1087,10 @@
                 if (noteEditBtn) {
                     e.preventDefault();
                     e.stopPropagation();
-                    var noteContainer = noteEditBtn.closest('.mj-member-events-calendar__day-note');
-                    var currentNote = getCurrentDayNote(noteContainer);
+                    var noteRow = noteEditBtn.closest('.mj-member-events-calendar__day-note');
+                    var notesWrapper = noteEditBtn.closest('.mj-member-events-calendar__day-notes');
+                    var noteId = noteRow ? noteRow.getAttribute('data-note-id') : null;
+                    var currentNote = getDayNoteById(notesWrapper, noteId);
                     if (currentNote) {
                         openNoteModal(currentNote.note_date, currentNote);
                     }
@@ -1639,6 +1672,9 @@
                 var items = dayNode.querySelectorAll('[data-calendar-type-item]');
                 var visibleCount = 0;
                 toArray(items).forEach(function(item) {
+                    if (item.hasAttribute('data-calendar-count-exclude')) {
+                        return;
+                    }
                     if (!item.classList.contains('is-filtered-out')) {
                         visibleCount += 1;
                     }
