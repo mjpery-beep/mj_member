@@ -43,6 +43,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Todo_Widget' => 'includes/elementor/class-mj-member-todo-widget.php',
             'Mj_Member_Elementor_Documents_Widget' => 'includes/elementor/class-mj-member-documents-widget.php',
             'Mj_Member_Elementor_Idea_Box_Widget' => 'includes/elementor/class-mj-member-idea-box-widget.php',
+            'Mj_Member_Elementor_Day_Notes_Widget' => 'includes/elementor/class-mj-member-day-notes-widget.php',
             'Mj\Member\Elementor\EventsManager' => 'includes/elementor/EventsManager.php',
             'Mj_Member_Elementor_Registration_Manager_Widget' => 'includes/elementor/class-mj-member-registration-manager-widget.php',
             'Mj_Member_Elementor_Event_Attendance_Widget' => 'includes/elementor/class-mj-member-event-attendance-widget.php',

@@ -777,6 +777,28 @@ function mj_member_get_agenda_notes_table_name() {
     return $cached;
 }
 
+function mj_member_get_note_types_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $cached = $wpdb->prefix . 'mj_note_types';
+    return $cached;
+}
+
+function mj_member_get_note_media_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $cached = $wpdb->prefix . 'mj_note_media';
+    return $cached;
+}
+
 function mj_member_get_todo_media_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -2471,6 +2493,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_93($wpdb);
     mj_member_upgrade_to_2_94($wpdb);
     mj_member_upgrade_to_2_95($wpdb);
+    mj_member_upgrade_to_2_96($wpdb);
 
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -7310,6 +7333,65 @@ function mj_member_upgrade_to_2_95($wpdb) {
             $after_clause = '';
         }
         $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN form_position varchar(10) NOT NULL DEFAULT 'inside'{$after_clause}");
+    }
+}
+
+/**
+ * Migration 2.96: day notes — note types, per-note images, and the extra
+ * columns (emoji, note_type_id, series_id) needed for the events-calendar
+ * "Créer une note" feature.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_96($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $note_types_table = mj_member_get_note_types_table_name();
+    $sql_note_types = "CREATE TABLE {$note_types_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        label varchar(100) NOT NULL,
+        color varchar(9) DEFAULT NULL,
+        emoji varchar(16) DEFAULT NULL,
+        sort_order int(11) NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id)
+    ) {$charset_collate};";
+    dbDelta($sql_note_types);
+
+    $note_media_table = mj_member_get_note_media_table_name();
+    $sql_note_media = "CREATE TABLE {$note_media_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        note_id bigint(20) unsigned NOT NULL,
+        attachment_id bigint(20) unsigned NOT NULL,
+        sort_order int(11) NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY note_idx (note_id)
+    ) {$charset_collate};";
+    dbDelta($sql_note_media);
+
+    $agenda_notes_table = mj_member_get_agenda_notes_table_name();
+    if ($agenda_notes_table && mj_member_table_exists($agenda_notes_table)) {
+        if (!mj_member_column_exists($agenda_notes_table, 'emoji')) {
+            $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD COLUMN emoji varchar(16) DEFAULT NULL AFTER title");
+        }
+        if (!mj_member_column_exists($agenda_notes_table, 'note_type_id')) {
+            $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD COLUMN note_type_id bigint(20) unsigned DEFAULT NULL AFTER color");
+        }
+        if (!mj_member_column_exists($agenda_notes_table, 'series_id')) {
+            $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD COLUMN series_id varchar(36) DEFAULT NULL AFTER member_id");
+        }
+        if (!mj_member_index_exists($agenda_notes_table, 'note_type_idx')) {
+            $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD KEY note_type_idx (note_type_id)");
+        }
+        if (!mj_member_index_exists($agenda_notes_table, 'series_idx')) {
+            $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD KEY series_idx (series_id)");
+        }
     }
 }
 

@@ -239,6 +239,17 @@ final class EventsController implements AjaxHandlerInterface {
             $out[$field] = $value;
         }
 
+        if (isset($prefs['textSize'])) {
+            $text_size = (int) $prefs['textSize'];
+            if ($text_size < 8) {
+                $text_size = 8;
+            }
+            if ($text_size > 20) {
+                $text_size = 20;
+            }
+            $out['textSize'] = $text_size;
+        }
+
         if (isset($prefs['monthKey'])) {
             $month_key = trim((string) $prefs['monthKey']);
             if (preg_match('/^\d{4}-\d{2}$/', $month_key)) {

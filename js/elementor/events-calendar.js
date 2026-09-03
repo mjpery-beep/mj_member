@@ -478,6 +478,111 @@
             };
         }
 
+        // ---- Day note modal (Preact form shared with the day-notes management widget) ----
+        var noteModalContainer = null;
+        var noteModalOpen = false;
+        var noteModalCurrent = null;
+
+        function ensureNoteModalContainer() {
+            if (!noteModalContainer) {
+                noteModalContainer = document.createElement('div');
+                noteModalContainer.className = 'mj-day-note-modal-root';
+                document.body.appendChild(noteModalContainer);
+            }
+            return noteModalContainer;
+        }
+
+        function renderNoteModal() {
+            var DayNoteForm = global.MjDayNoteForm;
+            var preactLib = global.preact;
+            if (!DayNoteForm || !preactLib || !preactLib.h || !preactLib.render) {
+                return;
+            }
+            var container = ensureNoteModalContainer();
+            var hh = preactLib.h;
+
+            var noteConfig = {
+                ajaxUrl: config.noteAjaxUrl || config.ajaxUrl,
+                nonce: config.noteNonce,
+                noteTypes: Array.isArray(config.noteTypes) ? config.noteTypes : [],
+                groupOptions: Array.isArray(config.noteGroupOptions) ? config.noteGroupOptions : undefined,
+                members: Array.isArray(config.noteAssignableMembers) ? config.noteAssignableMembers : [],
+            };
+
+            var noteForEdit = noteModalCurrent && noteModalCurrent.id ? noteModalCurrent
+                : (noteModalCurrent ? { note_date: noteModalCurrent.note_date } : null);
+
+            preactLib.render(hh(DayNoteForm.NoteFormModal, {
+                isOpen: noteModalOpen,
+                note: noteForEdit,
+                config: noteConfig,
+                onClose: closeNoteModal,
+                onSaved: function () { window.location.reload(); },
+                onDeleted: function () { window.location.reload(); },
+            }), container);
+        }
+
+        function openNoteModal(dayKey, existingNote) {
+            if (!config || !config.noteNonce) {
+                return;
+            }
+            noteModalCurrent = existingNote || { note_date: dayKey };
+            noteModalOpen = true;
+            renderNoteModal();
+        }
+
+        function closeNoteModal() {
+            noteModalOpen = false;
+            renderNoteModal();
+        }
+
+        function getCurrentDayNote(container) {
+            if (!container) return null;
+            var index = parseInt(container.getAttribute('data-note-index'), 10) || 0;
+            try {
+                var notes = JSON.parse(container.getAttribute('data-day-notes') || '[]');
+                return notes[index] || null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function cycleDayNote(container, direction) {
+            if (!container) return;
+            var notes;
+            try {
+                notes = JSON.parse(container.getAttribute('data-day-notes') || '[]');
+            } catch (e) {
+                return;
+            }
+            if (!notes.length) return;
+
+            var index = parseInt(container.getAttribute('data-note-index'), 10) || 0;
+            index = direction === 'next' ? (index + 1) % notes.length : (index - 1 + notes.length) % notes.length;
+            container.setAttribute('data-note-index', String(index));
+
+            var note = notes[index];
+            var emojiEl = container.querySelector('.mj-member-events-calendar__day-note-emoji');
+            var titleEl = container.querySelector('.mj-member-events-calendar__day-note-title');
+            var thumbEl = container.querySelector('.mj-member-events-calendar__day-note-thumb');
+
+            if (emojiEl) emojiEl.textContent = note.emoji || '📝';
+            if (titleEl) {
+                titleEl.textContent = note.title || (note.content || '').slice(0, 40);
+                titleEl.style.borderLeft = note.color ? '3px solid ' + note.color : '';
+                titleEl.style.paddingLeft = note.color ? '4px' : '';
+            }
+            if (thumbEl) {
+                var thumbUrl = note.media && note.media[0] ? note.media[0].thumbUrl : '';
+                if (thumbUrl) {
+                    thumbEl.src = thumbUrl;
+                    thumbEl.hidden = false;
+                } else {
+                    thumbEl.hidden = true;
+                }
+            }
+        }
+
         // ---- Create task modal (inspired by the todo widget's create form) ----
         var taskModal = null;
 
@@ -753,6 +858,37 @@
                     return;
                 }
 
+                var noteBtn = e.target.closest('[data-calendar-create-note-day]');
+                if (noteBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (mobileModal && !mobileModal.hidden && noteBtn.closest('[data-calendar-mobile-modal]')) {
+                        closeMobileModal();
+                    }
+                    openNoteModal(noteBtn.getAttribute('data-calendar-create-note-day') || '', null);
+                    return;
+                }
+
+                var noteNavBtn = e.target.closest('[data-note-nav]');
+                if (noteNavBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    cycleDayNote(noteNavBtn.closest('.mj-member-events-calendar__day-note'), noteNavBtn.getAttribute('data-note-nav'));
+                    return;
+                }
+
+                var noteEditBtn = e.target.closest('[data-note-edit]');
+                if (noteEditBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var noteContainer = noteEditBtn.closest('.mj-member-events-calendar__day-note');
+                    var currentNote = getCurrentDayNote(noteContainer);
+                    if (currentNote) {
+                        openNoteModal(currentNote.note_date, currentNote);
+                    }
+                    return;
+                }
+
                 var occurrenceEditBtn = e.target.closest('.mj-member-events-calendar__event-occurrence-edit');
                 if (occurrenceEditBtn) {
                     e.preventDefault();
@@ -923,8 +1059,9 @@
                 var canCreateOccurrence = !!(config && config.ajaxUrl && config.deleteNonce);
                 var canCreateTask = !!(config && config.todoNonce);
                 var canCreateLeave = !!(config && config.canCreateLeaveRequest && window.MjLeaveRequestsWidget && typeof window.MjLeaveRequestsWidget.openCreateModal === 'function');
+                var canCreateNote = !!(config && config.noteNonce);
 
-                if (canCreateEvent || canCreateOccurrence || canCreateTask || canCreateLeave) {
+                if (canCreateEvent || canCreateOccurrence || canCreateTask || canCreateLeave || canCreateNote) {
                     var actions = document.createElement('div');
                     actions.className = 'mj-cal-mobile__day-actions';
 
@@ -951,6 +1088,9 @@
                     }
                     if (canCreateLeave) {
                         appendMobileDayAction(menu, 'data-calendar-create-leave-day', dayKey, '🏖️', 'Créer un congé', 'mj-cal-mobile__day-menu-action--leave');
+                    }
+                    if (canCreateNote) {
+                        appendMobileDayAction(menu, 'data-calendar-create-note-day', dayKey, '📝', 'Créer une note', 'mj-cal-mobile__day-menu-action--note');
                     }
 
                     actions.appendChild(menuToggle);
@@ -1047,6 +1187,14 @@
                 leaveBtn.setAttribute('data-calendar-create-leave-day', dayKey);
                 leaveBtn.textContent = '🏖️ Créer un congé';
                 mobileModalBody.appendChild(leaveBtn);
+            }
+            if (config && config.noteNonce) {
+                var noteBtnMobile = document.createElement('button');
+                noteBtnMobile.type = 'button';
+                noteBtnMobile.className = 'mj-cal-mobile__modal-create-event mj-cal-mobile__modal-create-event--note';
+                noteBtnMobile.setAttribute('data-calendar-create-note-day', dayKey);
+                noteBtnMobile.textContent = '📝 Créer une note';
+                mobileModalBody.appendChild(noteBtnMobile);
             }
             if (mobileModalDate) {
                 var dateParts = dayKey.split('-');

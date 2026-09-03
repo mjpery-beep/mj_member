@@ -11,13 +11,17 @@ use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Crud\MjAgendaNotes;
 use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\Crud\MjLeaveRequests;
 use Mj\Member\Classes\Crud\MjLeaveTypes;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjNoteMedia;
+use Mj\Member\Classes\Crud\MjNoteTypes;
 use Mj\Member\Classes\Crud\MjTodos;
 use Mj\Member\Classes\Crud\MjTodoProjects;
+use Mj\Member\Classes\MjAgendaAcl;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
@@ -2165,6 +2169,114 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
         }
 
+        // Fetch day notes ("Créer une note") visible to the current viewer for
+        // the whole displayed range, keyed by day, most recent first — the day
+        // cell only shows the latest note plus arrows to cycle the others.
+        $notes_by_day_key = array();
+        if (!$is_elementor_preview && class_exists(MjAgendaNotes::class)) {
+            $viewer_member_id = 0;
+            $viewer_role = MjRoles::JEUNE;
+            if (class_exists(MjMembers::class)) {
+                $viewer_user_id = get_current_user_id();
+                if ($viewer_user_id) {
+                    $viewer_member = MjMembers::getByWpUserId($viewer_user_id);
+                    if ($viewer_member) {
+                        $viewer_member_id = (int) $viewer_member->id;
+                        $viewer_role = isset($viewer_member->role) ? (string) $viewer_member->role : MjRoles::JEUNE;
+                    }
+                }
+            }
+            $viewer_role = MjAgendaAcl::normalizeRole($viewer_role);
+
+            $note_visibilities = array(MjAgendaNotes::VISIBILITY_ALL, 'role:' . $viewer_role);
+            if (in_array($viewer_role, array(MjRoles::COORDINATEUR, MjRoles::ANIMATEUR, MjRoles::BENEVOLE), true)) {
+                $note_visibilities[] = MjAgendaNotes::VISIBILITY_STAFF;
+            }
+            if ($viewer_role === MjRoles::COORDINATEUR) {
+                foreach (MjAgendaAcl::roles() as $note_role) {
+                    $note_visibilities[] = 'role:' . $note_role;
+                }
+            }
+
+            $notes_date_from = wp_date('Y-m-d', $range_start, $timezone);
+            $notes_date_to = wp_date('Y-m-d', $range_end, $timezone);
+
+            $notes_in_range = MjAgendaNotes::get_by_date_range($notes_date_from, $notes_date_to, array(
+                'visibilities' => array_values(array_unique($note_visibilities)),
+                'author_member_id' => $viewer_member_id,
+                'assigned_member_id' => $viewer_member_id,
+            ));
+
+            if (!empty($notes_in_range)) {
+                $note_member_ids = array();
+                foreach ($notes_in_range as $note_row) {
+                    if (!empty($note_row['author_member_id'])) {
+                        $note_member_ids[(int) $note_row['author_member_id']] = true;
+                    }
+                    if (!empty($note_row['member_id'])) {
+                        $note_member_ids[(int) $note_row['member_id']] = true;
+                    }
+                }
+                $note_avatar_urls = array();
+                foreach (array_keys($note_member_ids) as $note_mid) {
+                    $note_avatar_urls[$note_mid] = function_exists('mj_regmgr_get_member_avatar_url')
+                        ? mj_regmgr_get_member_avatar_url($note_mid)
+                        : '';
+                }
+
+                foreach ($notes_in_range as $note_row) {
+                    $note_day = isset($note_row['note_date']) ? (string) $note_row['note_date'] : '';
+                    if ($note_day === '') {
+                        continue;
+                    }
+
+                    $note_media_rows = class_exists(MjNoteMedia::class)
+                        ? MjNoteMedia::get_all(array('note_id' => (int) $note_row['id']))
+                        : array();
+                    $note_media = array();
+                    foreach ($note_media_rows as $media_row) {
+                        $attachment_id = isset($media_row->attachment_id) ? (int) $media_row->attachment_id : 0;
+                        if ($attachment_id <= 0) {
+                            continue;
+                        }
+                        $note_media[] = array(
+                            'id' => $attachment_id,
+                            'url' => (string) wp_get_attachment_image_url($attachment_id, 'medium'),
+                            'thumbUrl' => (string) wp_get_attachment_image_url($attachment_id, 'thumbnail'),
+                        );
+                    }
+
+                    $note_author_id = (int) $note_row['author_member_id'];
+                    $note_assigned_id = (int) $note_row['member_id'];
+
+                    $notes_by_day_key[$note_day][] = array(
+                        'id' => (int) $note_row['id'],
+                        'title' => (string) $note_row['title'],
+                        'content' => (string) $note_row['content'],
+                        'emoji' => (string) $note_row['emoji'],
+                        'color' => (string) $note_row['color'],
+                        'note_type_id' => (int) $note_row['note_type_id'],
+                        'visibility' => (string) $note_row['visibility'],
+                        'member_id' => $note_assigned_id,
+                        'note_date' => $note_day,
+                        'author_name' => (string) $note_row['author_name'],
+                        'author_avatar' => isset($note_avatar_urls[$note_author_id]) ? $note_avatar_urls[$note_author_id] : '',
+                        'assigned_avatar' => $note_assigned_id > 0 && isset($note_avatar_urls[$note_assigned_id]) ? $note_avatar_urls[$note_assigned_id] : '',
+                        'media' => $note_media,
+                        'created_at' => (string) $note_row['created_at'],
+                        'can_edit' => $note_author_id === $viewer_member_id,
+                    );
+                }
+
+                foreach ($notes_by_day_key as $note_day_key => &$day_notes_list) {
+                    usort($day_notes_list, function ($a, $b) {
+                        return strcmp($b['created_at'], $a['created_at']);
+                    });
+                }
+                unset($day_notes_list);
+            }
+        }
+
         // Add todo filter type if any todos exist
         if ($todos_added) {
             if (!isset($available_type_filters['todo'])) {
@@ -3004,6 +3116,39 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         echo '</ul>';
                     }
 
+                    if (!empty($notes_by_day_key[$day_key])) {
+                        $day_notes_data = $notes_by_day_key[$day_key];
+                        $latest_note = $day_notes_data[0];
+                        $latest_note_label = $latest_note['title'] !== ''
+                            ? $latest_note['title']
+                            : wp_html_excerpt(wp_strip_all_tags($latest_note['content']), 40, '…');
+
+                        echo '<div class="mj-member-events-calendar__day-note" data-day-notes="' . esc_attr(wp_json_encode($day_notes_data)) . '" data-note-index="0">';
+                        echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($latest_note['emoji'] !== '' ? $latest_note['emoji'] : '📝') . '</span>';
+                        echo '<span class="mj-member-events-calendar__day-note-title"' . ($latest_note['color'] !== '' ? ' style="border-left:3px solid ' . esc_attr($latest_note['color']) . ';padding-left:4px;"' : '') . '>' . esc_html($latest_note_label) . '</span>';
+                        if (!empty($latest_note['media'][0]['thumbUrl'])) {
+                            echo '<img class="mj-member-events-calendar__day-note-thumb" src="' . esc_url($latest_note['media'][0]['thumbUrl']) . '" alt="" />';
+                        }
+                        echo '<span class="mj-member-events-calendar__day-note-avatars">';
+                        if (!empty($latest_note['author_avatar'])) {
+                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($latest_note['author_avatar']) . '" alt="" title="' . esc_attr($latest_note['author_name']) . '" />';
+                        }
+                        if (!empty($latest_note['assigned_avatar'])) {
+                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($latest_note['assigned_avatar']) . '" alt="" />';
+                        }
+                        echo '</span>';
+                        if (count($day_notes_data) > 1) {
+                            echo '<span class="mj-member-events-calendar__day-note-nav">';
+                            echo '<button type="button" data-note-nav="prev" aria-label="' . esc_attr__('Note précédente', 'mj-member') . '">‹</button>';
+                            echo '<button type="button" data-note-nav="next" aria-label="' . esc_attr__('Note suivante', 'mj-member') . '">›</button>';
+                            echo '</span>';
+                        }
+                        if (!empty($latest_note['can_edit'])) {
+                            echo '<button type="button" class="mj-member-events-calendar__day-note-edit" data-note-edit aria-label="' . esc_attr__('Modifier la note', 'mj-member') . '">✎</button>';
+                        }
+                        echo '</div>';
+                    }
+
                     if ($can_edit_events) {
                         echo '<button type="button" class="mj-member-events-calendar__day-add" data-calendar-create-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Ajouter un événement ce jour', 'mj-member') . '" title="' . esc_attr__('Ajouter un événement ce jour', 'mj-member') . '">';
                         echo '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
@@ -3023,6 +3168,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             echo '<button type="button" class="mj-member-events-calendar__day-add mj-member-events-calendar__day-add--leave" data-calendar-create-leave-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Créer une demande de congé ce jour', 'mj-member') . '" title="' . esc_attr__('Créer une demande de congé ce jour', 'mj-member') . '">';
                             echo '<span class="mj-member-events-calendar__day-add-emoji" aria-hidden="true">🏖️</span>';
                             echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer un congé', 'mj-member') . '</span>';
+                            echo '</button>';
+                        }
+                        if (class_exists(MjAgendaNotes::class)) {
+                            echo '<button type="button" class="mj-member-events-calendar__day-add mj-member-events-calendar__day-add--note" data-calendar-create-note-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Créer une note ce jour', 'mj-member') . '" title="' . esc_attr__('Créer une note ce jour', 'mj-member') . '">';
+                            echo '<span class="mj-member-events-calendar__day-add-emoji" aria-hidden="true">📝</span>';
+                            echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer une note', 'mj-member') . '</span>';
                             echo '</button>';
                         }
                     }
@@ -3515,6 +3666,38 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 $instance_config['todoProjects'] = $todo_projects;
 
                 $instance_config['todoAssignableMembers'] = function_exists('mj_member_todo_fetch_assignable_members')
+                    ? mj_member_todo_fetch_assignable_members()
+                    : array();
+            }
+
+            if (class_exists(MjAgendaNotes::class)) {
+                $instance_config['noteNonce'] = wp_create_nonce('mj-member-day-notes');
+                $instance_config['noteAjaxUrl'] = admin_url('admin-ajax.php');
+
+                $note_types = array();
+                if (class_exists(MjNoteTypes::class)) {
+                    foreach (MjNoteTypes::get_all() as $note_type) {
+                        $note_types[] = array(
+                            'id' => $note_type['id'],
+                            'label' => $note_type['label'],
+                            'color' => $note_type['color'],
+                            'emoji' => $note_type['emoji'],
+                        );
+                    }
+                }
+                $instance_config['noteTypes'] = $note_types;
+
+                $instance_config['noteGroupOptions'] = array(
+                    array('value' => 'private', 'label' => __('Uniquement moi', 'mj-member')),
+                    array('value' => 'role:' . MjRoles::ANIMATEUR, 'label' => __('🎭 Animateurs', 'mj-member')),
+                    array('value' => 'role:' . MjRoles::COORDINATEUR, 'label' => __('👔 Coordinateurs', 'mj-member')),
+                    array('value' => 'role:' . MjRoles::BENEVOLE, 'label' => __('🤝 Bénévoles', 'mj-member')),
+                    array('value' => 'role:' . MjRoles::JEUNE, 'label' => __('🧒 Jeunes', 'mj-member')),
+                    array('value' => 'staff', 'label' => __('🏢 Staff', 'mj-member')),
+                    array('value' => 'all', 'label' => __('👥 Tous', 'mj-member')),
+                );
+
+                $instance_config['noteAssignableMembers'] = function_exists('mj_member_todo_fetch_assignable_members')
                     ? mj_member_todo_fetch_assignable_members()
                     : array();
             }

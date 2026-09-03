@@ -1,0 +1,224 @@
+/* Day Notes - shared form (modal calendrier + widget de gestion) */
+
+.mj-day-note-form__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.mj-day-note-form__title {
+    flex: 1;
+}
+
+.mj-day-note-form__group {
+    margin-bottom: 14px;
+}
+
+.mj-day-note-form__color-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mj-day-note-form__color-input input[type="color"] {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+}
+
+.mj-day-note-form__color-input input[type="text"] {
+    flex: 1;
+}
+
+.mj-day-note-form__vis-mode {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.mj-day-note-form__date-mode {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.mj-day-note-form__multi-add {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.mj-day-note-form__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mj-day-note-form__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #eef2ff;
+    color: #3730a3;
+    border-radius: 999px;
+    padding: 4px 8px 4px 12px;
+    font-size: 13px;
+}
+
+.mj-day-note-form__chip button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: inherit;
+}
+
+.mj-day-note-form__weekdays {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.mj-day-note-form__weekday {
+    border: 1px solid #d0d5dd;
+    background: #fff;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.mj-day-note-form__weekday--active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+}
+
+.mj-day-note-form__range {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.mj-day-note-form__media-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.mj-day-note-form__media-item {
+    position: relative;
+    width: 64px;
+    height: 64px;
+}
+
+.mj-day-note-form__media-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid #d0d5dd;
+}
+
+.mj-day-note-form__media-remove {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: none;
+    background: #ef4444;
+    color: #fff;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.mj-day-note-form__media-upload {
+    display: inline-block;
+    border: 1px dashed #d0d5dd;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #475467;
+}
+
+.mj-day-note-form__media-upload input {
+    display: none;
+}
+
+.mj-day-note-form__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #667085;
+    border-top: 1px solid #eaecf0;
+    padding-top: 10px;
+    margin-top: 6px;
+}
+
+/* Day cell note preview on the calendar widget */
+.mj-member-events-calendar__day-note {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: #f2f4f7;
+    font-size: 11px;
+    line-height: 1.3;
+    position: relative;
+}
+
+.mj-member-events-calendar__day-note-emoji {
+    flex-shrink: 0;
+}
+
+.mj-member-events-calendar__day-note-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mj-member-events-calendar__day-note-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.mj-member-events-calendar__day-note-avatars {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.mj-member-events-calendar__day-note-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.mj-member-events-calendar__day-note-nav button {
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 10px;
+    line-height: 1;
+    padding: 2px;
+    color: #475467;
+}

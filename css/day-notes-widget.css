@@ -1,0 +1,108 @@
+.mj-day-notes-widget__title {
+    margin: 0 0 8px;
+}
+
+.mj-day-notes-widget__intro {
+    margin: 0 0 16px;
+    color: #667085;
+}
+
+.mj-day-notes-widget__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.mj-day-notes-widget__toolbar input[type="search"] {
+    flex: 1;
+    min-width: 180px;
+}
+
+.mj-day-notes-widget__types {
+    background: #f9fafb;
+    border: 1px solid #eaecf0;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.mj-day-notes-widget__types-list {
+    list-style: none;
+    margin: 8px 0;
+    padding: 0;
+}
+
+.mj-day-notes-widget__types-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.mj-day-notes-widget__types-list li button {
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.mj-day-notes-widget__types-add {
+    display: flex;
+    gap: 8px;
+}
+
+.mj-day-notes-widget__list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mj-day-notes-widget__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #eaecf0;
+    border-left: 4px solid #d0d5dd;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #fff;
+}
+
+.mj-day-notes-widget__row-emoji {
+    font-size: 20px;
+}
+
+.mj-day-notes-widget__row-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.mj-day-notes-widget__row-title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mj-day-notes-widget__row-meta {
+    font-size: 12px;
+    color: #667085;
+}
+
+.mj-day-notes-widget__row-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.mj-day-notes-widget__row-actions button {
+    border: 1px solid #d0d5dd;
+    background: #fff;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}

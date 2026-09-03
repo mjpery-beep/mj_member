@@ -22,9 +22,10 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
 
     public const VISIBILITY_PRIVATE = 'private';
     public const VISIBILITY_STAFF = 'staff';
+    public const VISIBILITY_ALL = 'all';
 
     /** @var string[] */
-    private const BASE_VISIBILITIES = array(self::VISIBILITY_PRIVATE, self::VISIBILITY_STAFF);
+    private const BASE_VISIBILITIES = array(self::VISIBILITY_PRIVATE, self::VISIBILITY_STAFF, self::VISIBILITY_ALL);
 
     private static function table_name(): string
     {
@@ -103,6 +104,28 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         return trim(sanitize_textarea_field($value));
     }
 
+    private static function sanitize_emoji($value): ?string
+    {
+        $value = is_string($value) ? trim($value) : '';
+        if ($value === '') {
+            return null;
+        }
+
+        $value = sanitize_text_field($value);
+        // Emoji are short; guard against pasted paragraphs ending up in the column.
+        return mb_substr($value, 0, 16) ?: null;
+    }
+
+    private static function sanitize_series_id($value): ?string
+    {
+        $value = is_string($value) ? trim($value) : '';
+        if ($value === '' || !preg_match('/^[A-Za-z0-9\-]{1,36}$/', $value)) {
+            return null;
+        }
+
+        return $value;
+    }
+
     /**
      * @param array<string,mixed> $args
      * @return array<int,array<string,mixed>>
@@ -160,6 +183,12 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         if (!empty($args['author_member_id'])) {
             $visClauses[] = 'n.author_member_id = %d';
             $params[] = (int) $args['author_member_id'];
+        }
+        // A note assigned to a specific member ("Personne assignée") is always
+        // visible to that member, regardless of the visibility token/their role.
+        if (!empty($args['assigned_member_id'])) {
+            $visClauses[] = 'n.member_id = %d';
+            $params[] = (int) $args['assigned_member_id'];
         }
         if (!empty($visClauses)) {
             $where[] = '(' . implode(' OR ', $visClauses) . ')';
@@ -260,13 +289,16 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             'start_time' => self::sanitize_time($data['start_time'] ?? null),
             'end_time' => self::sanitize_time($data['end_time'] ?? null),
             'title' => isset($data['title']) ? (sanitize_text_field((string) $data['title']) ?: null) : null,
+            'emoji' => self::sanitize_emoji($data['emoji'] ?? null),
             'content' => $content,
             'color' => self::sanitize_color($data['color'] ?? null),
+            'note_type_id' => !empty($data['note_type_id']) ? (int) $data['note_type_id'] : null,
             'visibility' => self::sanitize_visibility($data['visibility'] ?? self::VISIBILITY_STAFF),
             'event_id' => !empty($data['event_id']) ? (int) $data['event_id'] : null,
             'member_id' => !empty($data['member_id']) ? (int) $data['member_id'] : null,
+            'series_id' => self::sanitize_series_id($data['series_id'] ?? null),
         );
-        $formats = array('%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d');
+        $formats = array('%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s');
 
         $result = $wpdb->insert(self::table_name(), $insert, $formats);
         if ($result === false) {
@@ -274,6 +306,97 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         }
 
         return (int) $wpdb->insert_id;
+    }
+
+    /**
+     * Create several notes sharing a common series id, e.g. one row per date
+     * chosen in "dates multiples" / "jours de la semaine récurrents" mode.
+     *
+     * @param array<int,array<string,mixed>> $rows each row is a payload for create(), without series_id
+     * @return array{series_id:string,ids:int[]}|WP_Error
+     */
+    public static function create_many(array $rows)
+    {
+        if (empty($rows)) {
+            return new WP_Error('mj_agenda_note_empty_series', __('Aucune date fournie pour la note.', 'mj-member'));
+        }
+
+        $seriesId = wp_generate_uuid4();
+        $ids = array();
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $row['series_id'] = $seriesId;
+            $result = self::create($row);
+            if (is_wp_error($result)) {
+                foreach ($ids as $createdId) {
+                    self::delete($createdId);
+                }
+                return $result;
+            }
+            $ids[] = $result;
+        }
+
+        if (empty($ids)) {
+            return new WP_Error('mj_agenda_note_empty_series', __('Aucune date fournie pour la note.', 'mj-member'));
+        }
+
+        return array('series_id' => $seriesId, 'ids' => $ids);
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    public static function get_series(string $seriesId): array
+    {
+        $seriesId = self::sanitize_series_id($seriesId);
+        if ($seriesId === null) {
+            return array();
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+        $membersTable = self::getTableName(MjMembers::TABLE_NAME);
+
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT n.*, m.first_name AS author_first_name, m.last_name AS author_last_name
+                FROM {$table} AS n
+                LEFT JOIN {$membersTable} AS m ON m.id = n.author_member_id
+                WHERE n.series_id = %s
+                ORDER BY n.note_date ASC, n.id ASC",
+                $seriesId
+            ),
+            ARRAY_A
+        );
+
+        if (empty($rows)) {
+            return array();
+        }
+
+        return array_map(array(self::class, 'format_row'), $rows);
+    }
+
+    /**
+     * @return true|WP_Error
+     */
+    public static function delete_series(string $seriesId)
+    {
+        $seriesId = self::sanitize_series_id($seriesId);
+        if ($seriesId === null) {
+            return new WP_Error('mj_agenda_note_invalid_series', __('Identifiant de série invalide.', 'mj-member'));
+        }
+
+        global $wpdb;
+        $deleted = $wpdb->delete(self::table_name(), array('series_id' => $seriesId), array('%s'));
+
+        if ($deleted === false) {
+            return new WP_Error('mj_agenda_note_delete_failed', __('Suppression de la série impossible.', 'mj-member'));
+        }
+
+        return true;
     }
 
     /**
@@ -310,6 +433,14 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         if (array_key_exists('title', $data)) {
             $fields['title'] = sanitize_text_field((string) $data['title']) ?: null;
             $formats[] = '%s';
+        }
+        if (array_key_exists('emoji', $data)) {
+            $fields['emoji'] = self::sanitize_emoji($data['emoji']);
+            $formats[] = '%s';
+        }
+        if (array_key_exists('note_type_id', $data)) {
+            $fields['note_type_id'] = !empty($data['note_type_id']) ? (int) $data['note_type_id'] : null;
+            $formats[] = '%d';
         }
         if (array_key_exists('content', $data)) {
             $content = self::sanitize_content($data['content']);
@@ -389,11 +520,14 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             'start_time' => isset($row['start_time']) && $row['start_time'] !== null ? substr((string) $row['start_time'], 0, 5) : null,
             'end_time' => isset($row['end_time']) && $row['end_time'] !== null ? substr((string) $row['end_time'], 0, 5) : null,
             'title' => isset($row['title']) ? (string) $row['title'] : '',
+            'emoji' => isset($row['emoji']) && $row['emoji'] !== null ? (string) $row['emoji'] : '',
             'content' => self::sanitize_content($row['content'] ?? ''),
             'color' => isset($row['color']) && $row['color'] !== null ? (string) $row['color'] : '',
+            'note_type_id' => isset($row['note_type_id']) && $row['note_type_id'] !== null ? (int) $row['note_type_id'] : 0,
             'visibility' => (string) ($row['visibility'] ?? self::VISIBILITY_STAFF),
             'event_id' => isset($row['event_id']) && $row['event_id'] !== null ? (int) $row['event_id'] : 0,
             'member_id' => isset($row['member_id']) && $row['member_id'] !== null ? (int) $row['member_id'] : 0,
+            'series_id' => isset($row['series_id']) && $row['series_id'] !== null ? (string) $row['series_id'] : '',
             'created_at' => (string) ($row['created_at'] ?? ''),
             'updated_at' => (string) ($row['updated_at'] ?? ''),
             'author_name' => $authorName !== '' ? $authorName : __('Auteur inconnu', 'mj-member'),

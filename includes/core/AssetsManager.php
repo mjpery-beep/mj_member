@@ -334,11 +334,13 @@ final class AssetsManager
         self::registerScript('mj-member-member-account', 'js/member-account.js', array(), false);
         self::registerScript('mj-member-create-event-modal', 'js/create-event-modal.js', array('mj-member-utils', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-occurrence-editor'));
         self::registerStyle('mj-member-create-event-modal', 'css/create-event-modal.css');
-        self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils', 'mj-member-create-event-modal', 'mj-member-regmgr-services', 'mj-member-leave-requests'));
+        self::registerScript('mj-member-day-notes-form', 'js/day-notes/note-form.js', array('mj-member-utils', 'mj-member-preact', 'mj-member-preact-hooks', 'mj-member-regmgr-modals', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-registrations'));
+        self::registerStyle('mj-member-day-notes-form', 'css/day-notes.css', array('mj-member-components', 'mj-member-registration-manager'));
+        self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils', 'mj-member-create-event-modal', 'mj-member-day-notes-form', 'mj-member-regmgr-services', 'mj-member-leave-requests'));
         self::registerScript('mj-member-registrations-widget', 'js/elementor/registrations-widget.js', array('mj-member-utils'));
         self::registerScript('mj-member-event-attendance-kiosk', 'js/elementor/event-attendance-kiosk.js', array('mj-member-utils'));
         self::registerScript('mj-member-attendance-summary', 'js/elementor/attendance-summary.js', array());
-        self::registerStyle('mj-member-events-calendar', 'css/events-calendar.css', array('mj-member-components', 'mj-member-event-form', 'mj-member-create-event-modal'));
+        self::registerStyle('mj-member-events-calendar', 'css/events-calendar.css', array('mj-member-components', 'mj-member-event-form', 'mj-member-create-event-modal', 'mj-member-day-notes-form'));
         self::registerStyle('mj-member-event-attendance-kiosk', 'css/event-attendance-kiosk.css', array('mj-member-components'));
         self::registerStyle('mj-member-attendance-summary', 'css/attendance-summary.css', array('mj-member-components'));
         self::registerScript('mj-member-upcoming-events', 'js/elementor/upcoming-events.js', array('mj-member-utils'));
@@ -481,6 +483,10 @@ final class AssetsManager
         // Expenses Widget
         self::registerStyle('mj-member-expenses', 'css/expenses.css', array('mj-member-components'));
         self::registerScript('mj-member-expenses', 'js/elementor/expenses.js', array('mj-member-utils'));
+
+        // Day Notes management Widget
+        self::registerStyle('mj-member-day-notes-widget', 'css/day-notes-widget.css', array('mj-member-components', 'mj-member-day-notes-form'));
+        self::registerScript('mj-member-day-notes-widget', 'js/elementor/day-notes-widget.js', array('mj-member-utils', 'mj-member-preact', 'mj-member-preact-hooks', 'mj-member-day-notes-form'));
 
         // Work Schedule Widget
         self::registerStyle('mj-member-work-schedule', 'css/work-schedule.css', array('mj-member-components'));
@@ -862,6 +868,17 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-expenses');
                 if (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\ExpensesController')) {
                     \Mj\Member\Core\Ajax\Front\ExpensesController::localize();
+                }
+                break;
+
+            case 'day-notes':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-day-notes-widget');
+                wp_enqueue_script('mj-member-preact');
+                wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-day-notes-widget');
+                if (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\DayNotesAjaxController')) {
+                    \Mj\Member\Core\Ajax\Front\DayNotesAjaxController::localize();
                 }
                 break;
 
