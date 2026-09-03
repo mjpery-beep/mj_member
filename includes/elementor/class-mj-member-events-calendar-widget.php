@@ -4788,13 +4788,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         echo '</div>';
         echo '</div>';
 
-        if ($note['emoji'] !== '') {
-            echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($note['emoji']) . '</span>';
-        }
-        echo '<span class="mj-member-events-calendar__day-note-title"' . ($note['color'] !== '' ? ' style="border-left:3px solid ' . esc_attr($note['color']) . ';padding-left:4px;"' : '') . '>' . esc_html($note_label) . '</span>';
-        if (!empty($note['media'][0]['thumbUrl'])) {
-            echo '<img class="mj-member-events-calendar__day-note-thumb" src="' . esc_url($note['media'][0]['thumbUrl']) . '" alt="" />';
-        }
         echo '<span class="mj-member-events-calendar__day-note-avatars">';
         if (!empty($note['author_avatar'])) {
             echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($note['author_avatar']) . '" alt="" title="' . esc_attr($note['author_name']) . '" />';
@@ -4803,6 +4796,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($assigned_avatar_url) . '" alt="" />';
         }
         echo '</span>';
+        if ($note['emoji'] !== '') {
+            echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($note['emoji']) . '</span>';
+        }
+        echo '<span class="mj-member-events-calendar__day-note-title"' . ($note['color'] !== '' ? ' style="border-left:3px solid ' . esc_attr($note['color']) . ';padding-left:4px;"' : '') . '>' . esc_html($note_label) . '</span>';
+        if (!empty($note['media'][0]['thumbUrl'])) {
+            echo '<img class="mj-member-events-calendar__day-note-thumb" src="' . esc_url($note['media'][0]['thumbUrl']) . '" alt="" />';
+        }
         if (!empty($note['can_edit'])) {
             echo '<button type="button" class="mj-member-events-calendar__day-note-edit" data-note-edit aria-label="' . esc_attr__('Modifier la note', 'mj-member') . '" title="' . esc_attr__('Modifier la note', 'mj-member') . '">✎</button>';
         }

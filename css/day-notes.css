@@ -543,14 +543,14 @@
 }
 
 .mj-member-events-calendar__day-note-avatar {
-    width: 16px;
-    height: 16px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
     border: 1px solid #fff;
     background: #d0d5dd;
-    margin-left: -4px;
+    margin-left: -6px;
 }
 
 .mj-member-events-calendar__day-note-avatar:first-child {

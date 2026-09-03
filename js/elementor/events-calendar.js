@@ -616,6 +616,25 @@
             tooltipEl.appendChild(tooltipMeta);
             row.appendChild(tooltipEl);
 
+            var avatarsEl = document.createElement('span');
+            avatarsEl.className = 'mj-member-events-calendar__day-note-avatars';
+            if (note.author_avatar) {
+                var authorImg = document.createElement('img');
+                authorImg.className = 'mj-member-events-calendar__day-note-avatar';
+                authorImg.src = note.author_avatar;
+                authorImg.alt = '';
+                if (note.author_name) authorImg.title = note.author_name;
+                avatarsEl.appendChild(authorImg);
+            }
+            (note.assigned_avatars || []).slice(0, 3).forEach(function (url) {
+                var img = document.createElement('img');
+                img.className = 'mj-member-events-calendar__day-note-avatar';
+                img.src = url;
+                img.alt = '';
+                avatarsEl.appendChild(img);
+            });
+            row.appendChild(avatarsEl);
+
             if (note.emoji) {
                 var emojiEl = document.createElement('span');
                 emojiEl.className = 'mj-member-events-calendar__day-note-emoji';
@@ -641,25 +660,6 @@
                 thumbEl.alt = '';
                 row.appendChild(thumbEl);
             }
-
-            var avatarsEl = document.createElement('span');
-            avatarsEl.className = 'mj-member-events-calendar__day-note-avatars';
-            if (note.author_avatar) {
-                var authorImg = document.createElement('img');
-                authorImg.className = 'mj-member-events-calendar__day-note-avatar';
-                authorImg.src = note.author_avatar;
-                authorImg.alt = '';
-                if (note.author_name) authorImg.title = note.author_name;
-                avatarsEl.appendChild(authorImg);
-            }
-            (note.assigned_avatars || []).slice(0, 3).forEach(function (url) {
-                var img = document.createElement('img');
-                img.className = 'mj-member-events-calendar__day-note-avatar';
-                img.src = url;
-                img.alt = '';
-                avatarsEl.appendChild(img);
-            });
-            row.appendChild(avatarsEl);
 
             if (note.can_edit) {
                 var editBtn = document.createElement('button');
