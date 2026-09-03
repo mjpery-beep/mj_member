@@ -167,10 +167,35 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
     {
         foreach ($notes as &$note) {
             $note['media'] = self::formatMedia((int) ($note['id'] ?? 0));
+            $note['author_avatar'] = self::avatarUrl((int) ($note['author_member_id'] ?? 0));
+            $note['author_name'] = isset($note['author_name']) ? (string) $note['author_name'] : '';
+
+            $assignedIds = isset($note['assigned_member_ids']) && is_array($note['assigned_member_ids'])
+                ? $note['assigned_member_ids']
+                : array();
+            $assignedAvatars = array();
+            foreach ($assignedIds as $assignedId) {
+                $url = self::avatarUrl((int) $assignedId);
+                if ($url !== '') {
+                    $assignedAvatars[] = $url;
+                }
+            }
+            $note['assigned_avatars'] = $assignedAvatars;
         }
         unset($note);
 
         return $notes;
+    }
+
+    private static function avatarUrl(int $memberId): string
+    {
+        if ($memberId <= 0 || !function_exists('mj_regmgr_get_member_avatar_url')) {
+            return '';
+        }
+
+        $url = mj_regmgr_get_member_avatar_url($memberId);
+
+        return is_string($url) ? $url : '';
     }
 
     /**
@@ -258,6 +283,11 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
             'author_member_id' => $actor['member_id'],
             'assigned_member_id' => $actor['member_id'],
         ));
+
+        foreach ($notes as &$note) {
+            $note['can_edit'] = $note['author_member_id'] === $actor['member_id'];
+        }
+        unset($note);
 
         wp_send_json_success(array('notes' => self::withMedia($notes)));
     }

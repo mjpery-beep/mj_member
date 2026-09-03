@@ -2659,6 +2659,40 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     echo '<span class="mj-member-events-calendar__day-number">' . esc_html($cell_entry['day_number']) . '</span>';
                     echo '</div>';
 
+                    // Notes render first, ahead of events/tasks/leaves.
+                    if (!empty($notes_by_day_key[$day_key])) {
+                        $day_notes_data = $notes_by_day_key[$day_key];
+                        $latest_note = $day_notes_data[0];
+                        $latest_note_label = $latest_note['title'] !== ''
+                            ? $latest_note['title']
+                            : wp_html_excerpt(wp_strip_all_tags($latest_note['content']), 40, '…');
+
+                        echo '<div class="mj-member-events-calendar__day-note" data-day-notes="' . esc_attr(wp_json_encode($day_notes_data)) . '" data-note-index="0">';
+                        echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($latest_note['emoji'] !== '' ? $latest_note['emoji'] : '📝') . '</span>';
+                        echo '<span class="mj-member-events-calendar__day-note-title"' . ($latest_note['color'] !== '' ? ' style="border-left:3px solid ' . esc_attr($latest_note['color']) . ';padding-left:4px;"' : '') . '>' . esc_html($latest_note_label) . '</span>';
+                        if (!empty($latest_note['media'][0]['thumbUrl'])) {
+                            echo '<img class="mj-member-events-calendar__day-note-thumb" src="' . esc_url($latest_note['media'][0]['thumbUrl']) . '" alt="" />';
+                        }
+                        echo '<span class="mj-member-events-calendar__day-note-avatars">';
+                        if (!empty($latest_note['author_avatar'])) {
+                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($latest_note['author_avatar']) . '" alt="" title="' . esc_attr($latest_note['author_name']) . '" />';
+                        }
+                        foreach (array_slice((array) ($latest_note['assigned_avatars'] ?? array()), 0, 3) as $assigned_avatar_url) {
+                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($assigned_avatar_url) . '" alt="" />';
+                        }
+                        echo '</span>';
+                        if (count($day_notes_data) > 1) {
+                            echo '<span class="mj-member-events-calendar__day-note-nav">';
+                            echo '<button type="button" data-note-nav="prev" aria-label="' . esc_attr__('Note précédente', 'mj-member') . '">‹</button>';
+                            echo '<button type="button" data-note-nav="next" aria-label="' . esc_attr__('Note suivante', 'mj-member') . '">›</button>';
+                            echo '</span>';
+                        }
+                        if (!empty($latest_note['can_edit'])) {
+                            echo '<button type="button" class="mj-member-events-calendar__day-note-edit" data-note-edit aria-label="' . esc_attr__('Modifier la note', 'mj-member') . '">✎</button>';
+                        }
+                        echo '</div>';
+                    }
+
                     if (!empty($events_for_day)) {
                         echo '<ul class="mj-member-events-calendar__events">';
                         foreach ($events_for_day as $event_entry) {
@@ -3130,39 +3164,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             echo '</li>';
                         }
                         echo '</ul>';
-                    }
-
-                    if (!empty($notes_by_day_key[$day_key])) {
-                        $day_notes_data = $notes_by_day_key[$day_key];
-                        $latest_note = $day_notes_data[0];
-                        $latest_note_label = $latest_note['title'] !== ''
-                            ? $latest_note['title']
-                            : wp_html_excerpt(wp_strip_all_tags($latest_note['content']), 40, '…');
-
-                        echo '<div class="mj-member-events-calendar__day-note" data-day-notes="' . esc_attr(wp_json_encode($day_notes_data)) . '" data-note-index="0">';
-                        echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($latest_note['emoji'] !== '' ? $latest_note['emoji'] : '📝') . '</span>';
-                        echo '<span class="mj-member-events-calendar__day-note-title"' . ($latest_note['color'] !== '' ? ' style="border-left:3px solid ' . esc_attr($latest_note['color']) . ';padding-left:4px;"' : '') . '>' . esc_html($latest_note_label) . '</span>';
-                        if (!empty($latest_note['media'][0]['thumbUrl'])) {
-                            echo '<img class="mj-member-events-calendar__day-note-thumb" src="' . esc_url($latest_note['media'][0]['thumbUrl']) . '" alt="" />';
-                        }
-                        echo '<span class="mj-member-events-calendar__day-note-avatars">';
-                        if (!empty($latest_note['author_avatar'])) {
-                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($latest_note['author_avatar']) . '" alt="" title="' . esc_attr($latest_note['author_name']) . '" />';
-                        }
-                        foreach (array_slice((array) ($latest_note['assigned_avatars'] ?? array()), 0, 3) as $assigned_avatar_url) {
-                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($assigned_avatar_url) . '" alt="" />';
-                        }
-                        echo '</span>';
-                        if (count($day_notes_data) > 1) {
-                            echo '<span class="mj-member-events-calendar__day-note-nav">';
-                            echo '<button type="button" data-note-nav="prev" aria-label="' . esc_attr__('Note précédente', 'mj-member') . '">‹</button>';
-                            echo '<button type="button" data-note-nav="next" aria-label="' . esc_attr__('Note suivante', 'mj-member') . '">›</button>';
-                            echo '</span>';
-                        }
-                        if (!empty($latest_note['can_edit'])) {
-                            echo '<button type="button" class="mj-member-events-calendar__day-note-edit" data-note-edit aria-label="' . esc_attr__('Modifier la note', 'mj-member') . '">✎</button>';
-                        }
-                        echo '</div>';
                     }
 
                     if ($can_edit_events) {

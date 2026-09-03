@@ -517,9 +517,165 @@
                 note: noteForEdit,
                 config: noteConfig,
                 onClose: closeNoteModal,
-                onSaved: function () { window.location.reload(); },
-                onDeleted: function () { window.location.reload(); },
+                onSaved: function () { refreshDayNotes(); },
+                onDeleted: function () { refreshDayNotes(); },
             }), container);
+        }
+
+        // ---- Live refresh of the day-note previews after create/edit/delete
+        // (no full page reload: also sidesteps any page/element caching) ----
+        function noteEmojiOrDefault(note) {
+            return (note.emoji && note.emoji !== '') ? note.emoji : '📝';
+        }
+
+        function buildDayNoteElement(dayNotesData) {
+            var latest = dayNotesData[0];
+            var el = document.createElement('div');
+            el.className = 'mj-member-events-calendar__day-note';
+            el.setAttribute('data-day-notes', JSON.stringify(dayNotesData));
+            el.setAttribute('data-note-index', '0');
+
+            var emojiEl = document.createElement('span');
+            emojiEl.className = 'mj-member-events-calendar__day-note-emoji';
+            emojiEl.setAttribute('aria-hidden', 'true');
+            emojiEl.textContent = noteEmojiOrDefault(latest);
+            el.appendChild(emojiEl);
+
+            var titleEl = document.createElement('span');
+            titleEl.className = 'mj-member-events-calendar__day-note-title';
+            if (latest.color) {
+                titleEl.style.borderLeft = '3px solid ' + latest.color;
+                titleEl.style.paddingLeft = '4px';
+            }
+            titleEl.textContent = latest.title || (latest.content || '').slice(0, 40);
+            el.appendChild(titleEl);
+
+            var thumbUrl = latest.media && latest.media[0] ? latest.media[0].thumbUrl : '';
+            if (thumbUrl) {
+                var thumbEl = document.createElement('img');
+                thumbEl.className = 'mj-member-events-calendar__day-note-thumb';
+                thumbEl.src = thumbUrl;
+                thumbEl.alt = '';
+                el.appendChild(thumbEl);
+            }
+
+            var avatarsEl = document.createElement('span');
+            avatarsEl.className = 'mj-member-events-calendar__day-note-avatars';
+            if (latest.author_avatar) {
+                var authorImg = document.createElement('img');
+                authorImg.className = 'mj-member-events-calendar__day-note-avatar';
+                authorImg.src = latest.author_avatar;
+                authorImg.alt = '';
+                if (latest.author_name) authorImg.title = latest.author_name;
+                avatarsEl.appendChild(authorImg);
+            }
+            (latest.assigned_avatars || []).slice(0, 3).forEach(function (url) {
+                var img = document.createElement('img');
+                img.className = 'mj-member-events-calendar__day-note-avatar';
+                img.src = url;
+                img.alt = '';
+                avatarsEl.appendChild(img);
+            });
+            el.appendChild(avatarsEl);
+
+            if (dayNotesData.length > 1) {
+                var navEl = document.createElement('span');
+                navEl.className = 'mj-member-events-calendar__day-note-nav';
+                var prevBtn = document.createElement('button');
+                prevBtn.type = 'button';
+                prevBtn.setAttribute('data-note-nav', 'prev');
+                prevBtn.setAttribute('aria-label', 'Note précédente');
+                prevBtn.textContent = '‹';
+                var nextBtn = document.createElement('button');
+                nextBtn.type = 'button';
+                nextBtn.setAttribute('data-note-nav', 'next');
+                nextBtn.setAttribute('aria-label', 'Note suivante');
+                nextBtn.textContent = '›';
+                navEl.appendChild(prevBtn);
+                navEl.appendChild(nextBtn);
+                el.appendChild(navEl);
+            }
+
+            if (latest.can_edit) {
+                var editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'mj-member-events-calendar__day-note-edit';
+                editBtn.setAttribute('data-note-edit', '');
+                editBtn.setAttribute('aria-label', 'Modifier la note');
+                editBtn.textContent = '✎';
+                el.appendChild(editBtn);
+            }
+
+            return el;
+        }
+
+        function applyDayNotesToDayCell(dayCell, dayNotesData) {
+            var existing = dayCell.querySelector(':scope > .mj-member-events-calendar__day-note');
+            if (existing) {
+                existing.remove();
+            }
+            if (!dayNotesData || !dayNotesData.length) {
+                return;
+            }
+            var header = dayCell.querySelector(':scope > .mj-member-events-calendar__day-header');
+            var newEl = buildDayNoteElement(dayNotesData);
+            if (header && header.nextSibling) {
+                header.parentNode.insertBefore(newEl, header.nextSibling);
+            } else if (header) {
+                header.parentNode.appendChild(newEl);
+            } else {
+                dayCell.insertBefore(newEl, dayCell.firstChild);
+            }
+        }
+
+        function refreshDayNotes() {
+            if (!config || !config.noteNonce) return;
+            var ajaxUrl = config.noteAjaxUrl || config.ajaxUrl;
+            if (!ajaxUrl) return;
+
+            var dayKeys = toArray(root.querySelectorAll('.mj-member-events-calendar__day[data-calendar-day]'))
+                .map(function (el) { return el.getAttribute('data-calendar-day'); })
+                .filter(Boolean)
+                .sort();
+            if (!dayKeys.length) return;
+
+            var body = new URLSearchParams({
+                action: 'mj_member_day_notes_list',
+                nonce: config.noteNonce,
+                date_from: dayKeys[0],
+                date_to: dayKeys[dayKeys.length - 1],
+            }).toString();
+
+            fetch(ajaxUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: body,
+            })
+                .then(function (response) { return response.json(); })
+                .then(function (payload) {
+                    if (!payload || !payload.success) return;
+                    var notes = (payload.data && payload.data.notes) || [];
+                    var byDay = {};
+                    notes.forEach(function (note) {
+                        var day = note.note_date;
+                        if (!day) return;
+                        if (!byDay[day]) byDay[day] = [];
+                        byDay[day].push(note);
+                    });
+                    Object.keys(byDay).forEach(function (day) {
+                        byDay[day].sort(function (a, b) {
+                            if (a.created_at === b.created_at) return 0;
+                            return a.created_at < b.created_at ? 1 : -1;
+                        });
+                    });
+
+                    toArray(root.querySelectorAll('.mj-member-events-calendar__day[data-calendar-day]')).forEach(function (dayCell) {
+                        var day = dayCell.getAttribute('data-calendar-day');
+                        applyDayNotesToDayCell(dayCell, byDay[day] || null);
+                    });
+                })
+                .catch(function () { /* keep whatever is currently shown */ });
         }
 
         function openNoteModal(dayKey, existingNote) {
