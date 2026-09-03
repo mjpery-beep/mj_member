@@ -542,8 +542,8 @@
                     onChange: setEmoji,
                     fallbackPlaceholder: '📝',
                 }),
-                h('input', {
-                    type: 'text',
+                h('textarea', {
+                    rows: 1,
                     class: 'mj-regmgr-form__input mj-day-note-form__title',
                     placeholder: getString(strings, 'titlePlaceholder', 'Titre'),
                     value: title,
