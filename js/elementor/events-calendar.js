@@ -554,6 +554,27 @@
             }
         }
 
+        var NOTE_ROLE_LABELS = { animateur: 'Animateur', coordinateur: 'Coordinateur', benevole: 'Bénévole', jeune: 'Jeune', tuteur: 'Tuteur' };
+
+        function noteVisibilityLabel(v) {
+            if (v === 'private') return 'Personnel';
+            if (v === 'staff') return 'Staff';
+            if (v === 'all') return 'Tous';
+            if (v && v.indexOf('role:') === 0) {
+                var role = v.slice(5);
+                return NOTE_ROLE_LABELS[role] || (role.charAt(0).toUpperCase() + role.slice(1));
+            }
+            return v || '';
+        }
+
+        function noteVisibilityIcon(v) {
+            if (v === 'private') return '🔒';
+            if (v === 'staff') return '🏢';
+            if (v === 'all') return '👥';
+            if (v && v.indexOf('role:') === 0) return '🎭';
+            return '👁️';
+        }
+
         function buildDayNoteRow(note) {
             var row = document.createElement('div');
             row.className = 'mj-member-events-calendar__day-note';
@@ -562,6 +583,36 @@
             row.setAttribute('data-calendar-type', 'note');
             row.setAttribute('data-calendar-type-known', '1');
             row.setAttribute('data-calendar-count-exclude', '1');
+
+            var tooltipEl = document.createElement('div');
+            tooltipEl.className = 'mj-member-events-calendar__day-note-tooltip';
+            tooltipEl.setAttribute('role', 'tooltip');
+            var tooltipImgUrl = note.media && note.media[0] ? note.media[0].url : '';
+            if (tooltipImgUrl) {
+                var tooltipImg = document.createElement('img');
+                tooltipImg.className = 'mj-member-events-calendar__day-note-tooltip-image';
+                tooltipImg.src = tooltipImgUrl;
+                tooltipImg.alt = '';
+                tooltipEl.appendChild(tooltipImg);
+            }
+            var tooltipDesc = document.createElement('p');
+            tooltipDesc.className = 'mj-member-events-calendar__day-note-tooltip-desc';
+            tooltipDesc.textContent = note.content || '(Aucune description)';
+            tooltipEl.appendChild(tooltipDesc);
+            var tooltipMeta = document.createElement('div');
+            tooltipMeta.className = 'mj-member-events-calendar__day-note-tooltip-meta';
+            if (note.note_type_label) {
+                var typeTag = document.createElement('span');
+                typeTag.className = 'mj-member-events-calendar__day-note-tooltip-tag';
+                typeTag.textContent = note.note_type_label;
+                tooltipMeta.appendChild(typeTag);
+            }
+            var visTag = document.createElement('span');
+            visTag.className = 'mj-member-events-calendar__day-note-tooltip-tag';
+            visTag.textContent = noteVisibilityLabel(note.visibility);
+            tooltipMeta.appendChild(visTag);
+            tooltipEl.appendChild(tooltipMeta);
+            row.appendChild(tooltipEl);
 
             if (note.emoji) {
                 var emojiEl = document.createElement('span');
@@ -615,9 +666,16 @@
                 editBtn.setAttribute('data-note-edit', '');
                 editBtn.setAttribute('aria-label', 'Modifier la note');
                 editBtn.setAttribute('title', 'Modifier la note');
-                editBtn.textContent = '✎ Modifier';
+                editBtn.textContent = '✎';
                 row.appendChild(editBtn);
             }
+
+            var visibilityEl = document.createElement('span');
+            visibilityEl.className = 'mj-member-events-calendar__day-note-visibility';
+            visibilityEl.setAttribute('aria-hidden', 'true');
+            visibilityEl.setAttribute('title', noteVisibilityLabel(note.visibility));
+            visibilityEl.textContent = noteVisibilityIcon(note.visibility);
+            row.appendChild(visibilityEl);
 
             applyCurrentFilterToItem(row);
             return row;

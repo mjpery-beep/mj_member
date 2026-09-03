@@ -2207,6 +2207,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'assigned_member_id' => $viewer_member_id,
             ));
 
+            $note_types_map = array();
+            if (class_exists(MjNoteTypes::class)) {
+                foreach (MjNoteTypes::get_all() as $note_type_row) {
+                    if (!empty($note_type_row['id'])) {
+                        $note_types_map[(int) $note_type_row['id']] = $note_type_row;
+                    }
+                }
+            }
+
             if (!empty($notes_in_range)) {
                 $note_member_ids = array();
                 foreach ($notes_in_range as $note_row) {
@@ -2278,6 +2287,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'author_name' => (string) $note_row['author_name'],
                         'author_avatar' => isset($note_avatar_urls[$note_author_id]) ? $note_avatar_urls[$note_author_id] : '',
                         'assigned_avatars' => $assigned_avatars,
+                        'note_type_label' => isset($note_types_map[(int) $note_row['note_type_id']]) ? (string) $note_types_map[(int) $note_row['note_type_id']]['label'] : '',
                         'media' => $note_media,
                         'created_at' => (string) $note_row['created_at'],
                         'can_edit' => $note_author_id === $viewer_member_id,
@@ -4666,12 +4676,73 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
      *
      * @param array<string,mixed> $note
      */
+    /**
+     * @return string a short, human label for a note visibility token
+     *  ('private', 'staff', 'all', 'role:<slug>')
+     */
+    private static function note_visibility_label(string $visibility): string {
+        if ($visibility === MjAgendaNotes::VISIBILITY_PRIVATE) {
+            return __('Personnel', 'mj-member');
+        }
+        if ($visibility === MjAgendaNotes::VISIBILITY_STAFF) {
+            return __('Staff', 'mj-member');
+        }
+        if ($visibility === MjAgendaNotes::VISIBILITY_ALL) {
+            return __('Tous', 'mj-member');
+        }
+        if (strpos($visibility, 'role:') === 0) {
+            $role = substr($visibility, 5);
+            if (class_exists(MjRoles::class) && method_exists(MjRoles::class, 'getRoleLabels')) {
+                $labels = MjRoles::getRoleLabels();
+                if (isset($labels[$role])) {
+                    return (string) $labels[$role];
+                }
+            }
+            return ucfirst($role);
+        }
+
+        return $visibility;
+    }
+
+    private static function note_visibility_icon(string $visibility): string {
+        if ($visibility === MjAgendaNotes::VISIBILITY_PRIVATE) {
+            return '🔒';
+        }
+        if ($visibility === MjAgendaNotes::VISIBILITY_STAFF) {
+            return '🏢';
+        }
+        if ($visibility === MjAgendaNotes::VISIBILITY_ALL) {
+            return '👥';
+        }
+        if (strpos($visibility, 'role:') === 0) {
+            return '🎭';
+        }
+
+        return '👁️';
+    }
+
     private static function render_day_note_row(array $note): void {
         $note_label = $note['title'] !== ''
             ? $note['title']
             : wp_html_excerpt(wp_strip_all_tags($note['content']), 40, '…');
+        $visibility_label = self::note_visibility_label($note['visibility'] ?? '');
 
         echo '<div class="mj-member-events-calendar__day-note" data-note-id="' . esc_attr($note['id']) . '" data-calendar-type-item="1" data-calendar-type="note" data-calendar-type-known="1" data-calendar-count-exclude="1">';
+
+        // Hover tooltip: description, image, type, visibility.
+        echo '<div class="mj-member-events-calendar__day-note-tooltip" role="tooltip">';
+        if (!empty($note['media'][0]['url'])) {
+            echo '<img class="mj-member-events-calendar__day-note-tooltip-image" src="' . esc_url($note['media'][0]['url']) . '" alt="" />';
+        }
+        echo '<p class="mj-member-events-calendar__day-note-tooltip-desc">' . esc_html($note['content'] !== '' ? $note['content'] : __('(Aucune description)', 'mj-member')) . '</p>';
+        echo '<div class="mj-member-events-calendar__day-note-tooltip-meta">';
+        if (!empty($note['note_type_label'])) {
+            echo '<span class="mj-member-events-calendar__day-note-tooltip-tag">' . esc_html($note['note_type_label']) . '</span>';
+        }
+        echo '<span class="mj-member-events-calendar__day-note-tooltip-tag">' . esc_html($visibility_label) . '</span>';
+        echo '</div>';
+        echo '</div>';
+
         if ($note['emoji'] !== '') {
             echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($note['emoji']) . '</span>';
         }
@@ -4688,8 +4759,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
         echo '</span>';
         if (!empty($note['can_edit'])) {
-            echo '<button type="button" class="mj-member-events-calendar__day-note-edit" data-note-edit aria-label="' . esc_attr__('Modifier la note', 'mj-member') . '" title="' . esc_attr__('Modifier la note', 'mj-member') . '">✎ ' . esc_html__('Modifier', 'mj-member') . '</button>';
+            echo '<button type="button" class="mj-member-events-calendar__day-note-edit" data-note-edit aria-label="' . esc_attr__('Modifier la note', 'mj-member') . '" title="' . esc_attr__('Modifier la note', 'mj-member') . '">✎</button>';
         }
+        echo '<span class="mj-member-events-calendar__day-note-visibility" aria-hidden="true" title="' . esc_attr($visibility_label) . '">' . self::note_visibility_icon($note['visibility'] ?? '') . '</span>';
         echo '</div>';
     }
 

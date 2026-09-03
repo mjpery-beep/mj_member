@@ -181,6 +181,7 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
                 }
             }
             $note['assigned_avatars'] = $assignedAvatars;
+            $note['note_type_label'] = self::noteTypeLabel((int) ($note['note_type_id'] ?? 0));
         }
         unset($note);
 
@@ -196,6 +197,26 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
         $url = mj_regmgr_get_member_avatar_url($memberId);
 
         return is_string($url) ? $url : '';
+    }
+
+    private static function noteTypeLabel(int $noteTypeId): string
+    {
+        static $map = null;
+
+        if ($noteTypeId <= 0 || !class_exists(MjNoteTypes::class)) {
+            return '';
+        }
+
+        if ($map === null) {
+            $map = array();
+            foreach (MjNoteTypes::get_all() as $row) {
+                if (!empty($row['id'])) {
+                    $map[(int) $row['id']] = isset($row['label']) ? (string) $row['label'] : '';
+                }
+            }
+        }
+
+        return isset($map[$noteTypeId]) ? $map[$noteTypeId] : '';
     }
 
     /**
