@@ -524,10 +524,6 @@
 
         // ---- Live refresh of the day-note previews after create/edit/delete
         // (no full page reload: also sidesteps any page/element caching) ----
-        function noteEmojiOrDefault(note) {
-            return (note.emoji && note.emoji !== '') ? note.emoji : '📝';
-        }
-
         function buildDayNoteElement(dayNotesData) {
             var latest = dayNotesData[0];
             var el = document.createElement('div');
@@ -535,11 +531,13 @@
             el.setAttribute('data-day-notes', JSON.stringify(dayNotesData));
             el.setAttribute('data-note-index', '0');
 
-            var emojiEl = document.createElement('span');
-            emojiEl.className = 'mj-member-events-calendar__day-note-emoji';
-            emojiEl.setAttribute('aria-hidden', 'true');
-            emojiEl.textContent = noteEmojiOrDefault(latest);
-            el.appendChild(emojiEl);
+            if (latest.emoji) {
+                var emojiEl = document.createElement('span');
+                emojiEl.className = 'mj-member-events-calendar__day-note-emoji';
+                emojiEl.setAttribute('aria-hidden', 'true');
+                emojiEl.textContent = latest.emoji;
+                el.appendChild(emojiEl);
+            }
 
             var titleEl = document.createElement('span');
             titleEl.className = 'mj-member-events-calendar__day-note-title';
@@ -585,13 +583,19 @@
                 prevBtn.type = 'button';
                 prevBtn.setAttribute('data-note-nav', 'prev');
                 prevBtn.setAttribute('aria-label', 'Note précédente');
+                prevBtn.setAttribute('title', 'Note précédente');
                 prevBtn.textContent = '‹';
+                var countEl = document.createElement('span');
+                countEl.className = 'mj-member-events-calendar__day-note-nav-count';
+                countEl.textContent = '1/' + dayNotesData.length;
                 var nextBtn = document.createElement('button');
                 nextBtn.type = 'button';
                 nextBtn.setAttribute('data-note-nav', 'next');
                 nextBtn.setAttribute('aria-label', 'Note suivante');
+                nextBtn.setAttribute('title', 'Note suivante');
                 nextBtn.textContent = '›';
                 navEl.appendChild(prevBtn);
+                navEl.appendChild(countEl);
                 navEl.appendChild(nextBtn);
                 el.appendChild(navEl);
             }
@@ -602,7 +606,8 @@
                 editBtn.className = 'mj-member-events-calendar__day-note-edit';
                 editBtn.setAttribute('data-note-edit', '');
                 editBtn.setAttribute('aria-label', 'Modifier la note');
-                editBtn.textContent = '✎';
+                editBtn.setAttribute('title', 'Modifier la note');
+                editBtn.textContent = '✎ Modifier';
                 el.appendChild(editBtn);
             }
 
@@ -722,7 +727,17 @@
             var titleEl = container.querySelector('.mj-member-events-calendar__day-note-title');
             var thumbEl = container.querySelector('.mj-member-events-calendar__day-note-thumb');
 
-            if (emojiEl) emojiEl.textContent = note.emoji || '📝';
+            if (note.emoji) {
+                if (!emojiEl) {
+                    emojiEl = document.createElement('span');
+                    emojiEl.className = 'mj-member-events-calendar__day-note-emoji';
+                    emojiEl.setAttribute('aria-hidden', 'true');
+                    container.insertBefore(emojiEl, container.firstChild);
+                }
+                emojiEl.textContent = note.emoji;
+            } else if (emojiEl) {
+                emojiEl.remove();
+            }
             if (titleEl) {
                 titleEl.textContent = note.title || (note.content || '').slice(0, 40);
                 titleEl.style.borderLeft = note.color ? '3px solid ' + note.color : '';
@@ -736,6 +751,10 @@
                 } else {
                     thumbEl.hidden = true;
                 }
+            }
+            var countEl = container.querySelector('.mj-member-events-calendar__day-note-nav-count');
+            if (countEl) {
+                countEl.textContent = (index + 1) + '/' + notes.length;
             }
         }
 
