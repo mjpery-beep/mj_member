@@ -493,8 +493,8 @@
         }
 
         function renderNoteModal() {
-            var DayNoteForm = global.MjDayNoteForm;
-            var preactLib = global.preact;
+            var DayNoteForm = window.MjDayNoteForm;
+            var preactLib = window.preact;
             if (!DayNoteForm || !preactLib || !preactLib.h || !preactLib.render) {
                 return;
             }

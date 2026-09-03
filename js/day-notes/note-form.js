@@ -538,7 +538,7 @@
             onClose: onClose,
             title: getString(strings, 'title', isEdit ? 'Modifier la note' : 'Créer une note'),
             footer: footer,
-        }, [
+        }, h('div', { class: 'mj-day-note-form' }, [
             error && h('p', { class: 'mj-regmgr-form__error' }, error),
 
             h('div', { class: 'mj-day-note-form__row' }, [
@@ -645,7 +645,7 @@
                 h(MemberAvatar, { member: { firstName: note.author_name, avatarUrl: note.author_avatar_url }, size: 'small' }),
                 h('span', null, 'Créée par ' + note.author_name),
             ]),
-        ]);
+        ]));
     }
 
     global.MjDayNoteForm = {

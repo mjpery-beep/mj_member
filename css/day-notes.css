@@ -1,5 +1,182 @@
 /* Day Notes - shared form (modal calendrier + widget de gestion) */
 
+/* ------------------------------------------------------------------ */
+/* Defensive reset: the parent theme (hello-biz) and Elementor global
+   styles apply broad selectors (input, select, textarea, button, label,
+   h1-h6...) that leak into the modal despite registration-manager.css'
+   own reset. Re-assert everything the note form needs with !important,
+   scoped tightly to .mj-regmgr-modal .mj-day-note-form so nothing else
+   on the site is affected. */
+/* ------------------------------------------------------------------ */
+
+.mj-regmgr-modal:has(.mj-day-note-form) {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 100000 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 20px !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__overlay {
+    position: absolute !important;
+    inset: 0 !important;
+    background: rgba(17, 24, 39, 0.5) !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__container {
+    position: relative !important;
+    background: #fff !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+    width: 100% !important;
+    max-width: 600px !important;
+    max-height: calc(100vh - 40px) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    float: none !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__body {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    padding: 20px !important;
+    background: #fff !important;
+}
+
+.mj-day-note-form,
+.mj-day-note-form * {
+    box-sizing: border-box !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.mj-day-note-form {
+    color: #1f2937 !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+}
+
+.mj-day-note-form h1,
+.mj-day-note-form h2,
+.mj-day-note-form h3,
+.mj-day-note-form h4,
+.mj-day-note-form label {
+    all: revert;
+    box-sizing: border-box !important;
+    font-family: inherit !important;
+    color: inherit !important;
+    background: none !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+}
+
+.mj-day-note-form label {
+    display: block !important;
+    margin: 0 0 4px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: #374151 !important;
+}
+
+.mj-day-note-form input,
+.mj-day-note-form select,
+.mj-day-note-form textarea {
+    all: revert;
+    box-sizing: border-box !important;
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 8px 10px !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    background: #fff !important;
+    color: #1f2937 !important;
+    font-family: inherit !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    box-shadow: none !important;
+    appearance: auto !important;
+}
+
+.mj-day-note-form input[type="radio"],
+.mj-day-note-form input[type="checkbox"] {
+    width: auto !important;
+    display: inline-block !important;
+    margin: 0 4px 0 0 !important;
+    padding: 0 !important;
+}
+
+.mj-day-note-form input[type="color"] {
+    padding: 2px !important;
+}
+
+.mj-day-note-form input:focus,
+.mj-day-note-form select:focus,
+.mj-day-note-form textarea:focus {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+}
+
+.mj-day-note-form button {
+    all: revert;
+    box-sizing: border-box !important;
+    font-family: inherit !important;
+    cursor: pointer !important;
+}
+
+.mj-day-note-form .mj-regmgr-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 8px 16px !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border: 1px solid transparent !important;
+    background: #f3f4f6 !important;
+    color: #1f2937 !important;
+    line-height: 1.4 !important;
+    text-decoration: none !important;
+}
+
+.mj-day-note-form .mj-regmgr-btn--primary {
+    background: #3b82f6 !important;
+    color: #fff !important;
+}
+
+.mj-day-note-form .mj-regmgr-btn--secondary {
+    background: #fff !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+.mj-day-note-form .mj-regmgr-btn--danger {
+    background: #fff !important;
+    border-color: #fecaca !important;
+    color: #dc2626 !important;
+}
+
+.mj-day-note-form p {
+    margin: 0 0 8px !important;
+    padding: 0 !important;
+}
+
+.mj-day-note-form .mj-regmgr-form__error {
+    color: #dc2626 !important;
+    font-size: 13px !important;
+    background: #fef2f2 !important;
+    border: 1px solid #fecaca !important;
+    border-radius: 6px !important;
+    padding: 8px 10px !important;
+}
+
 .mj-day-note-form__row {
     display: flex;
     align-items: flex-start;
