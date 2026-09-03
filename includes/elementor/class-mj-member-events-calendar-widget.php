@@ -2233,9 +2233,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 }
                 $note_avatar_urls = array();
                 foreach (array_keys($note_member_ids) as $note_mid) {
-                    $note_avatar_urls[$note_mid] = function_exists('mj_regmgr_get_member_avatar_url')
-                        ? mj_regmgr_get_member_avatar_url($note_mid)
-                        : '';
+                    $note_avatar_urls[$note_mid] = self::resolve_member_avatar_url($note_mid);
                 }
 
                 foreach ($notes_in_range as $note_row) {
@@ -4680,6 +4678,51 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
      * @return string a short, human label for a note visibility token
      *  ('private', 'staff', 'all', 'role:<slug>')
      */
+    /**
+     * Resolves a member's mj-member avatar (never the WP/gravatar one).
+     * Mirrors mj_regmgr_get_member_avatar_url(), which lives in an
+     * admin-only file (includes/core/ajax/admin/registration-manager/
+     * helpers.php, loaded only when is_admin() is true) and is therefore
+     * unavailable while this widget renders on a normal front-end page
+     * load — a local copy keeps this working there too.
+     */
+    private static function resolve_member_avatar_url(int $memberId): string {
+        if ($memberId <= 0 || !class_exists(MjMembers::class)) {
+            return '';
+        }
+
+        $member = MjMembers::getById($memberId);
+        if (!$member) {
+            return '';
+        }
+
+        $photoId = isset($member->photo_id) ? (int) $member->photo_id : 0;
+        if ($photoId > 0) {
+            $url = wp_get_attachment_image_url($photoId, 'thumbnail');
+            if ($url) {
+                return (string) $url;
+            }
+        }
+
+        $avatarId = isset($member->avatar_id) ? (int) $member->avatar_id : 0;
+        if ($avatarId > 0) {
+            $url = wp_get_attachment_image_url($avatarId, 'thumbnail');
+            if ($url) {
+                return (string) $url;
+            }
+        }
+
+        $defaultAvatarId = (int) get_option('mj_login_default_avatar_id', 0);
+        if ($defaultAvatarId > 0) {
+            $url = wp_get_attachment_image_url($defaultAvatarId, 'thumbnail');
+            if ($url) {
+                return (string) $url;
+            }
+        }
+
+        return '';
+    }
+
     private static function note_visibility_label(string $visibility): string {
         if ($visibility === MjAgendaNotes::VISIBILITY_PRIVATE) {
             return __('Personnel', 'mj-member');
@@ -4734,7 +4777,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         if (!empty($note['media'][0]['url'])) {
             echo '<img class="mj-member-events-calendar__day-note-tooltip-image" src="' . esc_url($note['media'][0]['url']) . '" alt="" />';
         }
-        echo '<p class="mj-member-events-calendar__day-note-tooltip-desc">' . esc_html($note['content'] !== '' ? $note['content'] : __('(Aucune description)', 'mj-member')) . '</p>';
+        if ($note['content'] !== '') {
+            echo '<p class="mj-member-events-calendar__day-note-tooltip-desc">' . esc_html($note['content']) . '</p>';
+        }
         echo '<div class="mj-member-events-calendar__day-note-tooltip-meta">';
         if (!empty($note['note_type_label'])) {
             echo '<span class="mj-member-events-calendar__day-note-tooltip-tag">' . esc_html($note['note_type_label']) . '</span>';

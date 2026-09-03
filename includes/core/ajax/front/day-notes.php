@@ -188,15 +188,50 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
         return $notes;
     }
 
+    /**
+     * Resolves a member's mj-member avatar (never the WP/gravatar one).
+     * Mirrors mj_regmgr_get_member_avatar_url() directly rather than
+     * relying on it being loaded: that helper lives in an admin-only file
+     * (includes/core/ajax/admin/registration-manager/helpers.php),
+     * available here in practice since admin-ajax.php runs is_admin()=true,
+     * but kept self-contained to not depend on module load order.
+     */
     private static function avatarUrl(int $memberId): string
     {
-        if ($memberId <= 0 || !function_exists('mj_regmgr_get_member_avatar_url')) {
+        if ($memberId <= 0 || !class_exists(MjMembers::class)) {
             return '';
         }
 
-        $url = mj_regmgr_get_member_avatar_url($memberId);
+        $member = MjMembers::getById($memberId);
+        if (!$member) {
+            return '';
+        }
 
-        return is_string($url) ? $url : '';
+        $photoId = isset($member->photo_id) ? (int) $member->photo_id : 0;
+        if ($photoId > 0) {
+            $url = wp_get_attachment_image_url($photoId, 'thumbnail');
+            if ($url) {
+                return (string) $url;
+            }
+        }
+
+        $avatarId = isset($member->avatar_id) ? (int) $member->avatar_id : 0;
+        if ($avatarId > 0) {
+            $url = wp_get_attachment_image_url($avatarId, 'thumbnail');
+            if ($url) {
+                return (string) $url;
+            }
+        }
+
+        $defaultAvatarId = (int) get_option('mj_login_default_avatar_id', 0);
+        if ($defaultAvatarId > 0) {
+            $url = wp_get_attachment_image_url($defaultAvatarId, 'thumbnail');
+            if ($url) {
+                return (string) $url;
+            }
+        }
+
+        return '';
     }
 
     private static function noteTypeLabel(int $noteTypeId): string

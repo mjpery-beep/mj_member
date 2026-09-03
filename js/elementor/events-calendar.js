@@ -595,10 +595,12 @@
                 tooltipImg.alt = '';
                 tooltipEl.appendChild(tooltipImg);
             }
-            var tooltipDesc = document.createElement('p');
-            tooltipDesc.className = 'mj-member-events-calendar__day-note-tooltip-desc';
-            tooltipDesc.textContent = note.content || '(Aucune description)';
-            tooltipEl.appendChild(tooltipDesc);
+            if (note.content) {
+                var tooltipDesc = document.createElement('p');
+                tooltipDesc.className = 'mj-member-events-calendar__day-note-tooltip-desc';
+                tooltipDesc.textContent = note.content;
+                tooltipEl.appendChild(tooltipDesc);
+            }
             var tooltipMeta = document.createElement('div');
             tooltipMeta.className = 'mj-member-events-calendar__day-note-tooltip-meta';
             if (note.note_type_label) {
