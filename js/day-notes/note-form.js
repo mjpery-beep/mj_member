@@ -322,8 +322,8 @@
         var stateEmoji = useState(note ? (note.emoji || '') : '');
         var stateColor = useState(note ? (note.color || '') : '');
         var stateNoteTypeId = useState(note && note.note_type_id ? String(note.note_type_id) : '');
-        var stateVisMode = useState(note && note.member_id ? 'member' : 'group');
-        var stateMemberId = useState(note && note.member_id ? String(note.member_id) : '');
+        var stateVisMode = useState(note && note.assigned_member_ids && note.assigned_member_ids.length ? 'member' : 'group');
+        var stateMemberIds = useState(note && note.assigned_member_ids ? note.assigned_member_ids.map(String) : []);
         var stateGroup = useState(note && note.visibility ? note.visibility : 'staff');
 
         var stateDateMode = useState('single');
@@ -345,7 +345,7 @@
         var color = stateColor[0], setColor = stateColor[1];
         var noteTypeId = stateNoteTypeId[0], setNoteTypeId = stateNoteTypeId[1];
         var visMode = stateVisMode[0], setVisMode = stateVisMode[1];
-        var memberId = stateMemberId[0], setMemberId = stateMemberId[1];
+        var memberIds = stateMemberIds[0], setMemberIds = stateMemberIds[1];
         var group = stateGroup[0], setGroup = stateGroup[1];
 
         var dateMode = stateDateMode[0], setDateMode = stateDateMode[1];
@@ -368,8 +368,8 @@
             setEmoji(note ? (note.emoji || '') : '');
             setColor(note ? (note.color || '') : '');
             setNoteTypeId(note && note.note_type_id ? String(note.note_type_id) : '');
-            setVisMode(note && note.member_id ? 'member' : 'group');
-            setMemberId(note && note.member_id ? String(note.member_id) : '');
+            setVisMode(note && note.assigned_member_ids && note.assigned_member_ids.length ? 'member' : 'group');
+            setMemberIds(note && note.assigned_member_ids ? note.assigned_member_ids.map(String) : []);
             setGroup(note && note.visibility ? note.visibility : 'staff');
             setDateMode('single');
             setSingleDate(note ? note.note_date || '' : '');
@@ -443,11 +443,6 @@
             if (e && e.preventDefault) e.preventDefault();
             if (!ajaxUrl) return;
 
-            if (!content.trim()) {
-                setError(getString(strings, 'contentRequired', 'La description est requise.'));
-                return;
-            }
-
             var dates = resolveDates();
             if (!dates.length) {
                 setError(getString(strings, 'dateRequired', 'Au moins une date est requise.'));
@@ -466,7 +461,7 @@
                 color: color,
                 note_type_id: noteTypeId || '',
                 visibility: visMode === 'member' ? 'private' : group,
-                member_id: visMode === 'member' ? memberId : '',
+                member_ids: JSON.stringify(visMode === 'member' ? memberIds : []),
                 attachment_ids: JSON.stringify(media.map(function (m) { return m.id; })),
             };
 
@@ -489,7 +484,7 @@
                     setSaving(false);
                     setError(err.message);
                 });
-        }, [ajaxUrl, nonce, title, content, emoji, color, noteTypeId, visMode, group, memberId, media, isEdit, note, resolveDates, onSaved, onClose]);
+        }, [ajaxUrl, nonce, title, content, emoji, color, noteTypeId, visMode, group, memberIds, media, isEdit, note, resolveDates, onSaved, onClose]);
 
         var handleDelete = useCallback(function () {
             if (!isEdit || !ajaxUrl) return;
@@ -559,7 +554,7 @@
             h('textarea', {
                 class: 'mj-regmgr-form__input',
                 rows: 4,
-                placeholder: getString(strings, 'contentPlaceholder', 'Description'),
+                placeholder: getString(strings, 'contentPlaceholder', 'Description (facultatif)'),
                 value: content,
                 onChange: function (e) { setContent(e.target.value); },
             }),
@@ -583,13 +578,22 @@
                 }, groupOptions.map(function (opt) {
                     return h('option', { value: opt.value }, opt.label);
                 })),
-                visMode === 'member' && h('select', {
-                    class: 'mj-regmgr-form__input',
-                    value: memberId,
-                    onChange: function (e) { setMemberId(e.target.value); },
-                }, [h('option', { value: '' }, '—')].concat(members.map(function (m) {
-                    return h('option', { value: String(m.id) }, m.name);
-                }))),
+                visMode === 'member' && h('div', { class: 'mj-day-note-form__member-checkboxes' }, members.length ? members.map(function (m) {
+                    var idStr = String(m.id);
+                    var checked = memberIds.indexOf(idStr) >= 0;
+                    return h('label', { key: idStr, class: 'mj-day-note-form__member-checkbox' }, [
+                        h('input', {
+                            type: 'checkbox',
+                            checked: checked,
+                            onChange: function () {
+                                setMemberIds(checked
+                                    ? memberIds.filter(function (id) { return id !== idStr; })
+                                    : memberIds.concat([idStr]));
+                            },
+                        }),
+                        ' ' + m.name,
+                    ]);
+                }) : h('p', { class: 'mj-regmgr-form__hint' }, 'Aucun membre disponible.')),
             ]),
 
             h('div', { class: 'mj-day-note-form__group' }, [

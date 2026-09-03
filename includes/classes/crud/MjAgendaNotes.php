@@ -127,6 +127,59 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
     }
 
     /**
+     * "Personne assignée" as checkboxes: several members can be assigned to
+     * one note. Stored as a delimited list (",5,12,19,") so it can be
+     * queried with a plain LIKE, no JSON functions required.
+     *
+     * @param mixed $value array of member ids, or already-delimited string
+     * @return string|null
+     */
+    private static function sanitize_assigned_member_ids($value): ?string
+    {
+        if (is_string($value)) {
+            $value = array_filter(explode(',', $value));
+        }
+        if (!is_array($value)) {
+            return null;
+        }
+
+        $ids = array();
+        foreach ($value as $candidate) {
+            $id = (int) $candidate;
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        if (empty($ids)) {
+            return null;
+        }
+
+        return ',' . implode(',', $ids) . ',';
+    }
+
+    /**
+     * @return int[]
+     */
+    private static function unpack_assigned_member_ids($value): array
+    {
+        $value = is_string($value) ? trim($value, ',') : '';
+        if ($value === '') {
+            return array();
+        }
+
+        $ids = array();
+        foreach (explode(',', $value) as $candidate) {
+            $id = (int) $candidate;
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
      * @param array<string,mixed> $args
      * @return array<int,array<string,mixed>>
      */
@@ -187,8 +240,10 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         // A note assigned to a specific member ("Personne assignée") is always
         // visible to that member, regardless of the visibility token/their role.
         if (!empty($args['assigned_member_id'])) {
-            $visClauses[] = 'n.member_id = %d';
-            $params[] = (int) $args['assigned_member_id'];
+            $assignedId = (int) $args['assigned_member_id'];
+            $visClauses[] = '(n.member_id = %d OR n.assigned_member_ids LIKE %s)';
+            $params[] = $assignedId;
+            $params[] = '%,' . $assignedId . ',%';
         }
         if (!empty($visClauses)) {
             $where[] = '(' . implode(' OR ', $visClauses) . ')';
@@ -276,9 +331,6 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         if ($noteDate === '') {
             return new WP_Error('mj_agenda_note_invalid_date', __('Date de la note invalide.', 'mj-member'));
         }
-        if ($content === '') {
-            return new WP_Error('mj_agenda_note_missing_content', __('Le contenu de la note est requis.', 'mj-member'));
-        }
 
         global $wpdb;
 
@@ -296,9 +348,10 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             'visibility' => self::sanitize_visibility($data['visibility'] ?? self::VISIBILITY_STAFF),
             'event_id' => !empty($data['event_id']) ? (int) $data['event_id'] : null,
             'member_id' => !empty($data['member_id']) ? (int) $data['member_id'] : null,
+            'assigned_member_ids' => self::sanitize_assigned_member_ids($data['assigned_member_ids'] ?? null),
             'series_id' => self::sanitize_series_id($data['series_id'] ?? null),
         );
-        $formats = array('%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s');
+        $formats = array('%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s', '%s');
 
         $result = $wpdb->insert(self::table_name(), $insert, $formats);
         if ($result === false) {
@@ -443,11 +496,7 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             $formats[] = '%d';
         }
         if (array_key_exists('content', $data)) {
-            $content = self::sanitize_content($data['content']);
-            if ($content === '') {
-                return new WP_Error('mj_agenda_note_missing_content', __('Le contenu de la note est requis.', 'mj-member'));
-            }
-            $fields['content'] = $content;
+            $fields['content'] = self::sanitize_content($data['content']);
             $formats[] = '%s';
         }
         if (array_key_exists('color', $data)) {
@@ -465,6 +514,10 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         if (array_key_exists('member_id', $data)) {
             $fields['member_id'] = !empty($data['member_id']) ? (int) $data['member_id'] : null;
             $formats[] = '%d';
+        }
+        if (array_key_exists('assigned_member_ids', $data)) {
+            $fields['assigned_member_ids'] = self::sanitize_assigned_member_ids($data['assigned_member_ids']);
+            $formats[] = '%s';
         }
 
         if (empty($fields)) {
@@ -527,6 +580,7 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             'visibility' => (string) ($row['visibility'] ?? self::VISIBILITY_STAFF),
             'event_id' => isset($row['event_id']) && $row['event_id'] !== null ? (int) $row['event_id'] : 0,
             'member_id' => isset($row['member_id']) && $row['member_id'] !== null ? (int) $row['member_id'] : 0,
+            'assigned_member_ids' => self::unpack_assigned_member_ids($row['assigned_member_ids'] ?? ''),
             'series_id' => isset($row['series_id']) && $row['series_id'] !== null ? (string) $row['series_id'] : '',
             'created_at' => (string) ($row['created_at'] ?? ''),
             'updated_at' => (string) ($row['updated_at'] ?? ''),

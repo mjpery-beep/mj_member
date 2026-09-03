@@ -2216,6 +2216,11 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     if (!empty($note_row['member_id'])) {
                         $note_member_ids[(int) $note_row['member_id']] = true;
                     }
+                    if (!empty($note_row['assigned_member_ids']) && is_array($note_row['assigned_member_ids'])) {
+                        foreach ($note_row['assigned_member_ids'] as $assigned_id) {
+                            $note_member_ids[(int) $assigned_id] = true;
+                        }
+                    }
                 }
                 $note_avatar_urls = array();
                 foreach (array_keys($note_member_ids) as $note_mid) {
@@ -2248,6 +2253,16 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                     $note_author_id = (int) $note_row['author_member_id'];
                     $note_assigned_id = (int) $note_row['member_id'];
+                    $note_assigned_ids = !empty($note_row['assigned_member_ids']) && is_array($note_row['assigned_member_ids'])
+                        ? array_map('intval', $note_row['assigned_member_ids'])
+                        : ($note_assigned_id > 0 ? array($note_assigned_id) : array());
+
+                    $assigned_avatars = array();
+                    foreach ($note_assigned_ids as $assigned_id) {
+                        if (isset($note_avatar_urls[$assigned_id]) && $note_avatar_urls[$assigned_id]) {
+                            $assigned_avatars[] = $note_avatar_urls[$assigned_id];
+                        }
+                    }
 
                     $notes_by_day_key[$note_day][] = array(
                         'id' => (int) $note_row['id'],
@@ -2258,10 +2273,11 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'note_type_id' => (int) $note_row['note_type_id'],
                         'visibility' => (string) $note_row['visibility'],
                         'member_id' => $note_assigned_id,
+                        'assigned_member_ids' => $note_assigned_ids,
                         'note_date' => $note_day,
                         'author_name' => (string) $note_row['author_name'],
                         'author_avatar' => isset($note_avatar_urls[$note_author_id]) ? $note_avatar_urls[$note_author_id] : '',
-                        'assigned_avatar' => $note_assigned_id > 0 && isset($note_avatar_urls[$note_assigned_id]) ? $note_avatar_urls[$note_assigned_id] : '',
+                        'assigned_avatars' => $assigned_avatars,
                         'media' => $note_media,
                         'created_at' => (string) $note_row['created_at'],
                         'can_edit' => $note_author_id === $viewer_member_id,
@@ -3133,8 +3149,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         if (!empty($latest_note['author_avatar'])) {
                             echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($latest_note['author_avatar']) . '" alt="" title="' . esc_attr($latest_note['author_name']) . '" />';
                         }
-                        if (!empty($latest_note['assigned_avatar'])) {
-                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($latest_note['assigned_avatar']) . '" alt="" />';
+                        foreach (array_slice((array) ($latest_note['assigned_avatars'] ?? array()), 0, 3) as $assigned_avatar_url) {
+                            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($assigned_avatar_url) . '" alt="" />';
                         }
                         echo '</span>';
                         if (count($day_notes_data) > 1) {

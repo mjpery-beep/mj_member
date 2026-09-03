@@ -2494,6 +2494,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_94($wpdb);
     mj_member_upgrade_to_2_95($wpdb);
     mj_member_upgrade_to_2_96($wpdb);
+    mj_member_upgrade_to_2_97($wpdb);
 
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -7392,6 +7393,24 @@ function mj_member_upgrade_to_2_96($wpdb) {
         if (!mj_member_index_exists($agenda_notes_table, 'series_idx')) {
             $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD KEY series_idx (series_id)");
         }
+    }
+}
+
+/**
+ * Migration 2.97: day notes — support assigning a note to several members
+ * ("Personne assignée" as checkboxes) via a delimited-list column, alongside
+ * the legacy single `member_id`.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_97($wpdb) {
+    $agenda_notes_table = mj_member_get_agenda_notes_table_name();
+    if (!$agenda_notes_table || !mj_member_table_exists($agenda_notes_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($agenda_notes_table, 'assigned_member_ids')) {
+        $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD COLUMN assigned_member_ids varchar(500) DEFAULT NULL AFTER member_id");
     }
 }
 

@@ -424,6 +424,13 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
     private function sanitizePayloadFromRequest(array $actor): array
     {
         $memberId = isset($_POST['member_id']) ? (int) $_POST['member_id'] : 0;
+        $memberIds = array();
+        if (isset($_POST['member_ids'])) {
+            $decoded = json_decode(wp_unslash((string) $_POST['member_ids']), true);
+            if (is_array($decoded)) {
+                $memberIds = $decoded;
+            }
+        }
 
         return array(
             'author_member_id' => $actor['member_id'],
@@ -437,6 +444,7 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
             'note_type_id' => isset($_POST['note_type_id']) ? (int) $_POST['note_type_id'] : null,
             'visibility' => isset($_POST['visibility']) ? sanitize_text_field(wp_unslash((string) $_POST['visibility'])) : MjAgendaNotes::VISIBILITY_STAFF,
             'member_id' => $memberId > 0 ? $memberId : null,
+            'assigned_member_ids' => $memberIds,
         );
     }
 

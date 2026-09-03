@@ -49,6 +49,113 @@
     background: #fff !important;
 }
 
+/* Header (title + close ×) and footer (Annuler / Enregistrer / Supprimer)
+   live as siblings of .mj-day-note-form, not inside it - :has() lets us
+   scope them to "this modal" without touching the shared component. */
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__header {
+    all: revert;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    padding: 16px 20px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    background: #fff !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__title {
+    all: revert;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    color: #111827 !important;
+    line-height: 1.3 !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__close {
+    all: revert;
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    padding: 4px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    background: none !important;
+    color: #9ca3af !important;
+    cursor: pointer !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__close:hover {
+    background: #f3f4f6 !important;
+    color: #4b5563 !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__footer {
+    all: revert;
+    box-sizing: border-box !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+    width: 100% !important;
+    padding: 16px 20px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-top: 1px solid #e5e7eb !important;
+    background: #f9fafb !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__footer button {
+    all: revert;
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 8px 16px !important;
+    margin: 0 !important;
+    border-radius: 6px !important;
+    border: 1px solid transparent !important;
+    font-family: inherit !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+    cursor: pointer !important;
+    background: #f3f4f6 !important;
+    color: #1f2937 !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__footer .mj-regmgr-btn--primary {
+    background: #3b82f6 !important;
+    color: #fff !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__footer .mj-regmgr-btn--secondary {
+    background: #fff !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__footer .mj-regmgr-btn--danger {
+    background: #fff !important;
+    border-color: #fecaca !important;
+    color: #dc2626 !important;
+}
+
+.mj-regmgr-modal:has(.mj-day-note-form) .mj-regmgr-modal__footer button:disabled {
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+}
+
 .mj-day-note-form,
 .mj-day-note-form * {
     box-sizing: border-box !important;
@@ -216,6 +323,27 @@
     display: flex;
     gap: 16px;
     margin-bottom: 8px;
+}
+
+.mj-day-note-form__member-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+.mj-day-note-form__member-checkbox {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-weight: 400 !important;
+    font-size: 13px !important;
+    margin: 0 !important;
+    cursor: pointer;
 }
 
 .mj-day-note-form__date-mode {
