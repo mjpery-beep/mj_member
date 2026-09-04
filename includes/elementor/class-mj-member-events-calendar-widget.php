@@ -708,7 +708,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $lock_page_scroll = isset($settings['lock_page_scroll']) && $settings['lock_page_scroll'] === 'yes';
         $show_print_button = !isset($settings['show_print_button']) || $settings['show_print_button'] === 'yes';
 
-        $print_default_mode = isset($settings['print_default_mode']) && in_array($settings['print_default_mode'], array('week', 'month'), true)
+        $print_default_mode = isset($settings['print_default_mode']) && in_array($settings['print_default_mode'], array('week', 'month', 'day'), true)
             ? (string) $settings['print_default_mode']
             : 'month';
         $print_default_theme = isset($settings['print_default_theme']) && in_array($settings['print_default_theme'], array('light', 'dark', 'dark-light-days', 'light-dark-days'), true)
@@ -3236,9 +3236,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                     $mobile_day_key = $cell_entry['day_key'];
                     $mobile_day_events = isset($cell_entry['events']) && is_array($cell_entry['events']) ? $cell_entry['events'] : array();
+                    $mobile_day_notes = isset($notes_by_day_key[$mobile_day_key]) && is_array($notes_by_day_key[$mobile_day_key]) ? $notes_by_day_key[$mobile_day_key] : array();
                     $mob_day_classes = array('mj-cal-mobile__day');
-                    if (!empty($mobile_day_events)) {
+                    if (!empty($mobile_day_events) || !empty($mobile_day_notes)) {
                         $mob_day_classes[] = 'has-events';
+                    }
+                    if (!empty($mobile_day_notes)) {
+                        $mob_day_classes[] = 'has-notes';
                     }
                     if ($mobile_day_key === $today_key) {
                         $mob_day_classes[] = 'is-today';
@@ -3253,7 +3257,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     echo '<div class="' . esc_attr(implode(' ', $mob_day_classes)) . '" data-calendar-day="' . esc_attr($mobile_day_key) . '">';
                     echo '<span class="mj-cal-mobile__day-num">' . esc_html($cell_entry['day_number']) . '</span>';
 
-                    if (!empty($mobile_day_events)) {
+                    if (!empty($mobile_day_events) || !empty($mobile_day_notes)) {
                         echo '<div class="mj-cal-mobile__day-events">';
                         foreach ($mobile_day_events as $chip_event) {
                             if (!is_array($chip_event) || !isset($chip_event['id'])) {
@@ -3274,6 +3278,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $chip_style = self::build_event_style_attribute($chip_event);
                             echo '<div class="' . esc_attr(implode(' ', $chip_classes)) . '"' . $chip_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($chip_type_key) . '" data-calendar-type-known="' . ($chip_is_known ? '1' : '0') . '"></div>';
                         }
+                        if (!empty($mobile_day_notes)) {
+                            echo '<div class="mj-cal-mobile__chip mj-cal-mobile__chip--note" data-calendar-type-item="1" data-calendar-type="note" data-calendar-type-known="1">📝</div>';
+                        }
                         echo '</div>';
                     }
 
@@ -3290,7 +3297,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             foreach ($day_list_entries as $day_entry) {
                 $tpl_day_key = isset($day_entry['day_key']) ? (string) $day_entry['day_key'] : '';
                 $tpl_events = isset($day_entry['events']) && is_array($day_entry['events']) ? $day_entry['events'] : array();
-                if (empty($tpl_events)) {
+                $tpl_notes = isset($notes_by_day_key[$tpl_day_key]) && is_array($notes_by_day_key[$tpl_day_key]) ? $notes_by_day_key[$tpl_day_key] : array();
+                if (empty($tpl_events) && empty($tpl_notes)) {
                     continue;
                 }
 
@@ -3299,6 +3307,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 });
 
                 echo '<template data-mobile-day-events="' . esc_attr($tpl_day_key) . '">';
+                if (!empty($tpl_notes)) {
+                    echo '<div class="mj-member-events-calendar__day-notes mj-member-events-calendar__day-notes--mobile" data-day-notes="' . esc_attr(wp_json_encode($tpl_notes)) . '" data-note-page="0" data-page-size="4">';
+                    foreach (array_slice($tpl_notes, 0, 4) as $tpl_note) {
+                        self::render_day_note_row($tpl_note);
+                    }
+                    echo '</div>';
+                }
                 echo '<ul class="mj-member-events-calendar__mobile-events">';
                 foreach ($tpl_events as $mobile_event) {
                     if (!is_array($mobile_event) || !isset($mobile_event['id'])) {
@@ -3541,6 +3556,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<select data-print-option="mode">';
             echo '<option value="week"' . selected($print_default_mode, 'week', false) . '>' . esc_html__('Semaine', 'mj-member') . '</option>';
             echo '<option value="month"' . selected($print_default_mode, 'month', false) . '>' . esc_html__('Mois', 'mj-member') . '</option>';
+            echo '<option value="day"' . selected($print_default_mode, 'day', false) . '>' . esc_html__('Jour', 'mj-member') . '</option>';
             echo '</select>';
             echo '</label>';
             echo '<label class="mj-cal-print__option">';
@@ -3568,14 +3584,23 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<span>' . esc_html__('Année (semaine)', 'mj-member') . '</span>';
             echo '<select data-print-option="week-year"></select>';
             echo '</label>';
+            echo '<label class="mj-cal-print__option" data-print-day-picker hidden>';
+            echo '<span>' . esc_html__('Jour de départ', 'mj-member') . '</span>';
+            echo '<select data-print-option="day"></select>';
+            echo '</label>';
             echo '<label class="mj-cal-print__option">';
             echo '<span>' . esc_html__('Nombre à afficher', 'mj-member') . '</span>';
-            echo '<input type="number" min="1" max="12" step="1" value="' . esc_attr((string) $print_default_span) . '" data-print-option="span" />';
+            echo '<input type="number" min="1" max="31" step="1" value="' . esc_attr((string) $print_default_span) . '" data-print-option="span" />';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option" data-print-day-columns-picker hidden>';
+            echo '<span>' . esc_html__('Jours par ligne', 'mj-member') . '</span>';
+            echo '<input type="number" min="1" max="5" step="1" value="5" data-print-option="day-columns" />';
             echo '</label>';
             echo '<label class="mj-cal-print__option">';
             echo '<input type="checkbox" data-print-option="page-break"' . ($print_default_page_break ? ' checked' : '') . ' />';
             echo '<span data-print-option-page-break-label>' . esc_html__('Une page par semaine', 'mj-member') . '</span>';
             echo '</label>';
+            echo '<div class="mj-cal-print__period-titles" data-print-period-titles></div>';
             echo '<label class="mj-cal-print__option">';
             echo '<input type="checkbox" data-print-option="hide-empty-days"' . ($print_default_hide_empty_days ? ' checked' : '') . ' />';
             echo '<span>' . esc_html__('Retirer les jours vides', 'mj-member') . '</span>';

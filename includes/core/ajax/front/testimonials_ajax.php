@@ -42,7 +42,9 @@ final class TestimonialsController implements AjaxHandlerInterface {
         add_action('wp_ajax_mj_front_testimonial_reject', [$this, 'reject']);
         add_action('wp_ajax_mj_front_testimonial_pending_list', [$this, 'pendingList']);
         add_action('wp_ajax_mj_front_testimonial_search_events', [$this, 'searchEvents']);
+        add_action('wp_ajax_nopriv_mj_front_testimonial_search_events', [$this, 'searchEvents']);
         add_action('wp_ajax_mj_front_testimonial_search_members', [$this, 'searchMembers']);
+        add_action('wp_ajax_nopriv_mj_front_testimonial_search_members', [$this, 'searchMembers']);
         add_action('wp_ajax_mj_front_testimonial_delete', [$this, 'delete']);
         add_action('wp_ajax_mj_front_testimonial_edit', [$this, 'edit']);
         add_action('wp_ajax_mj_front_testimonial_toggle_featured', [$this, 'toggleFeatured']);
@@ -568,10 +570,14 @@ final class TestimonialsController implements AjaxHandlerInterface {
                 'target' => $post_url,
             ), home_url('/'));
 
+            $raw_content = isset($t->content) ? (string) $t->content : '';
+            $content_html = wp_kses_post(wpautop(self::linkifyMemberMentions(self::linkifyEventMentions($raw_content))));
+
             $items[] = array(
                 'id' => $testimonial_id,
-                'content' => isset($t->content) ? self::linkifyMemberMentions(self::linkifyEventMentions($t->content)) : '',
-                'rawContent' => isset($t->content) ? $t->content : '',
+                'content' => $content_html,
+                'contentHtml' => $content_html,
+                'rawContent' => $raw_content,
                 'photos' => $photos,
                 'videos' => $videos,
                 'linkPreview' => $link_preview,
@@ -1250,16 +1256,54 @@ final class TestimonialsController implements AjaxHandlerInterface {
         check_ajax_referer('mj-testimonial-submit', '_wpnonce');
 
         $search = isset($_POST['search']) ? sanitize_text_field(wp_unslash($_POST['search'])) : '';
-        if (mb_strlen($search) < 1) {
-            wp_send_json_success(array('members' => array()));
+
+        $member_ids = array();
+        if (isset($_POST['ids'])) {
+            $raw_ids = wp_unslash($_POST['ids']);
+            if (is_string($raw_ids)) {
+                $raw_ids = json_decode($raw_ids, true);
+            }
+            if (is_array($raw_ids)) {
+                $member_ids = array_slice(array_values(array_unique(array_filter(array_map('intval', $raw_ids)))), 0, 20);
+            }
         }
 
-        $members = MjMembers::get_all(array(
-            'search' => $search,
-            'orderby' => 'last_name',
-            'order' => 'ASC',
-            'limit' => 10,
-        ));
+        $member_slugs = array();
+        if (isset($_POST['slugs'])) {
+            $raw_slugs = wp_unslash($_POST['slugs']);
+            if (is_string($raw_slugs)) {
+                $raw_slugs = json_decode($raw_slugs, true);
+            }
+            if (is_array($raw_slugs)) {
+                $member_slugs = array_slice(array_values(array_unique(array_filter(array_map('sanitize_title', $raw_slugs)))), 0, 20);
+            }
+        }
+
+        $members = array();
+        if (!empty($member_ids)) {
+            foreach ($member_ids as $member_id) {
+                $member = MjMembers::getById($member_id);
+                if ($member) {
+                    $members[] = $member;
+                }
+            }
+        }
+        if (!empty($member_slugs)) {
+            foreach ($member_slugs as $member_slug) {
+                $member = MjMembers::getBySlug($member_slug);
+                if ($member) {
+                    $members[] = $member;
+                }
+            }
+        }
+        if (empty($member_ids) && empty($member_slugs)) {
+            $members = MjMembers::get_all(array(
+                'search' => $search,
+                'orderby' => 'last_name',
+                'order' => 'ASC',
+                'limit' => 10,
+            ));
+        }
 
         $items = array();
         foreach ($members as $m) {
@@ -1279,6 +1323,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
             }
             $items[] = array(
                 'id'        => (int) $m->id,
+                'slug'      => isset($m->slug) ? (string) $m->slug : '',
                 'name'      => $name,
                 'initial'   => mb_strtoupper(mb_substr($m->first_name, 0, 1)),
                 'avatarUrl' => $avatar_url,
@@ -1298,9 +1343,6 @@ final class TestimonialsController implements AjaxHandlerInterface {
         check_ajax_referer('mj-testimonial-submit', '_wpnonce');
 
         $search = isset($_POST['search']) ? sanitize_text_field(wp_unslash($_POST['search'])) : '';
-        if (mb_strlen($search) < 1) {
-            wp_send_json_success(array('events' => array()));
-        }
 
         // Search events by title/slug, only active or past events
         $events = MjEvents::get_all(array(
@@ -1403,7 +1445,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
             wp_send_json_error(__('Vous ne pouvez modifier que vos propres témoignages.', 'mj-member'), 403);
         }
 
-        $content = isset($_POST['content']) ? sanitize_textarea_field(wp_unslash($_POST['content'])) : '';
+        $content = isset($_POST['content']) ? wp_kses_post(wp_unslash($_POST['content'])) : '';
 
         // Build update data
         $update_data = array();
@@ -1755,15 +1797,16 @@ final class TestimonialsController implements AjaxHandlerInterface {
     }
 
     /**
-     * Convert @event-slug mentions in testimonial content to clickable links.
+    * Convert @event-slug and #event-slug mentions in testimonial content to clickable links.
      *
      * @param string $content The raw testimonial content.
      * @return string Content with @mentions converted to links.
      */
     public static function linkifyEventMentions(string $content): string {
-        // Match #followed-by-slug-chars (letters, digits, hyphens)
+        // Support the historic @slug syntax as well as the current #slug syntax.
+        // @{member_id} is deliberately excluded because it starts with a brace.
         return preg_replace_callback(
-            '/#([a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)\b/i',
+            '/(?:@|#)([a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)\b/i',
             function ($matches) {
                 $slug = sanitize_title($matches[1]);
                 if ($slug === '') {
@@ -1793,30 +1836,32 @@ final class TestimonialsController implements AjaxHandlerInterface {
     }
 
     /**
-     * Convert @{member_id} tokens to inline member mention spans.
+    * Convert @{member-slug} tokens to inline member mention spans.
      *
      * @param string $content Raw testimonial content.
      * @return string Content with @{id} tokens replaced by HTML spans.
      */
     public static function linkifyMemberMentions(string $content): string {
         // Strip @{id} tokens from displayed text — members appear only in the chips below.
-        return preg_replace('/@\{(\d+)\}/', '', $content);
+        return preg_replace('/@\{([a-z0-9][a-z0-9\-]*)\}/i', '', $content);
     }
 
     /**
-     * Extract data for all members mentioned via @{id} in the content.
+    * Extract data for all members mentioned via @{slug} in the content.
      *
      * @param string $content Raw testimonial content.
      * @return array Array of ['id', 'name', 'initial', 'avatarUrl'].
      */
     public static function extractMentionedMembers(string $content): array {
-        if (!preg_match_all('/@\{(\d+)\}/', $content, $matches)) {
+        if (!preg_match_all('/@\{([a-z0-9][a-z0-9\-]*)\}/i', $content, $matches)) {
             return array();
         }
-        $ids = array_unique(array_map('intval', $matches[1]));
+        $tokens = array_unique($matches[1]);
         $result = array();
-        foreach ($ids as $id) {
-            $member = MjMembers::getById($id);
+        foreach ($tokens as $token) {
+            $member = ctype_digit($token)
+                ? MjMembers::getById((int) $token)
+                : MjMembers::getBySlug($token);
             if (!$member || !isset($member->first_name)) {
                 continue;
             }

@@ -529,9 +529,9 @@
 }
 
 .mj-member-events-calendar__day-note-thumb {
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
     object-fit: cover;
     flex-shrink: 0;
 }
@@ -543,14 +543,14 @@
 }
 
 .mj-member-events-calendar__day-note-avatar {
-    width: 22px;
-    height: 22px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
     border: 1px solid #fff;
     background: #d0d5dd;
-    margin-left: -6px;
+    margin-left: -4px;
 }
 
 .mj-member-events-calendar__day-note-avatar:first-child {
@@ -673,8 +673,8 @@
     z-index: 20;
     top: calc(100% + 6px) !important;
     left: 0 !important;
-    width: 300px;
-    max-width: 85vw;
+    width: 220px;
+    max-width: 80vw;
     padding: 10px !important;
     margin: 0 !important;
     background: #fff !important;
@@ -697,8 +697,7 @@
     all: revert;
     display: block !important;
     width: 100% !important;
-    height: 200px !important;
-    max-height: none !important;
+    max-height: 120px !important;
     object-fit: cover !important;
     border-radius: 6px !important;
     margin: 0 !important;

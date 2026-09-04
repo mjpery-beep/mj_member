@@ -188,6 +188,7 @@ final class EventsController implements AjaxHandlerInterface {
             'footerImage',
             'pageBreak',
             'hideEmptyDays',
+            'reduceEmptyDays',
         );
         foreach ($bool_fields as $field) {
             if (array_key_exists($field, $prefs)) {

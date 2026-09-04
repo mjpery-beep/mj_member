@@ -67,6 +67,8 @@ if (!function_exists('mj_member_todo_widget_localize')) {
         $config = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('mj_member_todo_widget'),
+            'nextcloudNonce' => wp_create_nonce('mj-registration-manager'),
+            'nextcloudNonce' => wp_create_nonce('mj-registration-manager'),
             'roles' => \Mj\Member\Classes\MjRoles::getJsConfig(),
             'hasAccess' => $hasAccess,
             'memberId' => $memberId,
@@ -86,11 +88,6 @@ if (!function_exists('mj_member_todo_widget_localize')) {
                 'delete' => 'mj_member_todo_delete_front',
             ),
             'i18n' => array(
-                'loadError' => __('Impossible de charger les tâches.', 'mj-member'),
-                'archivesLoadError' => __('Impossible de charger les archives.', 'mj-member'),
-                'createError' => __('Impossible de créer la tâche.', 'mj-member'),
-                'updateError' => __('Impossible de mettre à jour la tâche.', 'mj-member'),
-                'toggleError' => __('Impossible de mettre à jour le statut de la tâche.', 'mj-member'),
                 'archiveError' => __('Impossible d’archiver la tâche.', 'mj-member'),
                 'unarchiveError' => __('Impossible de restaurer la tâche.', 'mj-member'),
                 'deleteError' => __('Impossible de supprimer la tâche.', 'mj-member'),

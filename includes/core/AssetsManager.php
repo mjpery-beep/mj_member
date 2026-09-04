@@ -375,7 +375,7 @@ final class AssetsManager
             '10.19.3',
             true
         );
-        self::registerScript('mj-member-todo-widget', 'js/elementor/todo-widget.js', array('mj-member-utils', 'mj-member-preact-hooks', 'media-editor', 'mj-member-regmgr-emoji-picker'));
+        self::registerScript('mj-member-todo-widget', 'js/elementor/todo-widget.js', array('mj-member-utils', 'mj-member-preact-hooks', 'media-editor', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-services', 'mj-member-regmgr-nextcloud-files'));
 
         self::registerStyle('mj-member-login-component', 'css/login-component.css');
         self::registerScript('mj-member-login-component', 'js/login-component.js');
@@ -486,7 +486,7 @@ final class AssetsManager
 
         // Day Notes management Widget
         self::registerStyle('mj-member-day-notes-widget', 'css/day-notes-widget.css', array('mj-member-components', 'mj-member-day-notes-form'));
-        self::registerScript('mj-member-day-notes-widget', 'js/elementor/day-notes-widget.js', array('mj-member-utils', 'mj-member-preact', 'mj-member-preact-hooks', 'mj-member-day-notes-form'));
+        self::registerScript('mj-member-day-notes-widget', 'js/elementor/day-notes-widget.js', array('mj-member-utils', 'mj-member-preact', 'mj-member-preact-hooks', 'mj-member-day-notes-form', 'mj-member-regmgr-services', 'mj-member-regmgr-nextcloud-files'));
 
         // Work Schedule Widget
         self::registerStyle('mj-member-work-schedule', 'css/work-schedule.css', array('mj-member-components'));
@@ -648,11 +648,14 @@ final class AssetsManager
             case 'todo-widget':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-todo-widget');
+                wp_enqueue_style('mj-member-regmgr-nextcloud-files');
                 if (function_exists('wp_enqueue_media')) {
                     wp_enqueue_media();
                 }
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-regmgr-services');
+                wp_enqueue_script('mj-member-regmgr-nextcloud-files');
                 wp_enqueue_script('mj-member-regmgr-emoji-picker');
                 wp_enqueue_script('mj-member-todo-widget');
                 if (function_exists('mj_member_todo_widget_localize')) {
@@ -874,8 +877,11 @@ final class AssetsManager
             case 'day-notes':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-day-notes-widget');
+                wp_enqueue_style('mj-member-regmgr-nextcloud-files');
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-regmgr-services');
+                wp_enqueue_script('mj-member-regmgr-nextcloud-files');
                 wp_enqueue_script('mj-member-day-notes-widget');
                 if (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\DayNotesAjaxController')) {
                     \Mj\Member\Core\Ajax\Front\DayNotesAjaxController::localize();

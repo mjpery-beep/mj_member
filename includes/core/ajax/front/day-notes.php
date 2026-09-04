@@ -75,6 +75,7 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
         wp_localize_script('mj-member-day-notes-widget', 'mjMemberDayNotes', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce(self::NONCE),
+            'nextcloudNonce' => wp_create_nonce('mj-registration-manager'),
             'currentMemberId' => $memberId,
             'canManageTypes' => current_user_can(Config::capability()),
             'noteTypes' => class_exists(MjNoteTypes::class) ? MjNoteTypes::get_all() : array(),

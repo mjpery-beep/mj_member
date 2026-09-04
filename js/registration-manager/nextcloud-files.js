@@ -59,6 +59,16 @@
         return mediaType === 'photos' ? 'Photos' : 'Documents';
     }
 
+    function getContextLabel(context) {
+        var labels = {
+            event: 'Événement',
+            member: 'Membre',
+            note: 'Note',
+            todo: 'To-do',
+        };
+        return labels[context] || 'Élément';
+    }
+
     function basename(path) {
         var parts = String(path || '').split('/');
         return parts.length ? parts[parts.length - 1] : '';
@@ -520,6 +530,7 @@
 
         var isPhotos = mediaType === 'photos';
         var mediaLabel = getLabelForMediaType(mediaType);
+        var contextLabel = getContextLabel(context);
         var breadcrumbSegments = buildBreadcrumbSegments(selectedSubPath);
         var folderItems = sortFoldersFirst(items.filter(function (item) { return item.type === 'folder'; }));
         var fileItems = sortFoldersFirst(items.filter(function (item) { return item.type === 'file'; }));
@@ -808,7 +819,7 @@
                         h('button', {
                             class: 'mj-nc-breadcrumb__item' + (selectedSubPath === '' ? ' mj-nc-breadcrumb__item--active' : ''),
                             onClick: function () { handleSelectFolder(''); },
-                        }, mediaLabel),
+                        }, contextLabel + ' · ' + mediaLabel),
                         breadcrumbSegments.map(function (segment, index) {
                             var isLast = index === breadcrumbSegments.length - 1;
                             return [

@@ -12,6 +12,8 @@
 use Mj\Member\Classes\MjNextcloud;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjTodos;
+use Mj\Member\Classes\Crud\MjAgendaNotes;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
 
@@ -161,6 +163,33 @@ function mj_nc_member_folder(int $memberId, string $type)
     $root = Config::nextcloudRootFolder();
     $membersFolder = Config::nextcloudMembersFolder();
     return mj_nc_join_paths($root, $membersFolder, $login, $type);
+}
+
+/**
+ * Build the Nextcloud folder path for a todo or internal note.
+ *
+ * @param int $contextId
+ * @param string $type 'photos' | 'documents'
+ * @return string|WP_Error
+ */
+function mj_nc_record_folder(string $context, int $contextId, string $type)
+{
+    $record = $context === 'todo'
+        ? MjTodos::get($contextId)
+        : MjAgendaNotes::get($contextId);
+    if (!$record) {
+        return new WP_Error('mj_nc_not_found', __('Élément introuvable.', 'mj-member'));
+    }
+
+    $label = $context === 'todo'
+        ? ($record['title'] ?? '')
+        : ($record['content'] ?? $record['title'] ?? '');
+    $slug = sanitize_title((string) $label);
+    if ($slug === '') {
+        $slug = $context . '-' . $contextId;
+    }
+
+    return mj_nc_join_paths(Config::nextcloudRootFolder(), $context === 'todo' ? 'todos' : 'notes', $slug . '-' . $contextId, $type);
 }
 
 /**
@@ -724,13 +753,18 @@ function mj_nc_uploaded_file_is_image(array $file): bool
  */
 function mj_nc_resolve_base_folder(string $context, int $contextId, string $mediaType)
 {
-    if (!in_array($context, ['event', 'member'], true) || $contextId <= 0 || !in_array($mediaType, ['photos', 'documents'], true)) {
+    if (!in_array($context, ['event', 'member', 'todo', 'note'], true) || $contextId <= 0 || !in_array($mediaType, ['photos', 'documents'], true)) {
         return new WP_Error('mj_nc_invalid_params', __('Paramètres invalides.', 'mj-member'));
     }
 
-    return $context === 'event'
-        ? mj_nc_event_folder($contextId, $mediaType)
-        : mj_nc_member_folder($contextId, $mediaType);
+    if ($context === 'event') {
+        return mj_nc_event_folder($contextId, $mediaType);
+    }
+    if ($context === 'member') {
+        return mj_nc_member_folder($contextId, $mediaType);
+    }
+
+    return mj_nc_record_folder($context, $contextId, $mediaType);
 }
 
 // -----------------------------------------------------------------------

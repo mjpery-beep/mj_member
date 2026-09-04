@@ -16,6 +16,7 @@ if (!defined('ABSPATH')) {
  * @property-read int|null $id
  * @property-read string|null $first_name
  * @property-read string|null $last_name
+ * @property-read string|null $slug
  * @property-read string|null $email
  * @property-read string|null $phone
  * @property-read string|null $birth_date
@@ -63,6 +64,7 @@ final class MemberData implements JsonSerializable {
         'id',
         'first_name',
         'last_name',
+        'slug',
         'email',
         'phone',
         'birth_date',

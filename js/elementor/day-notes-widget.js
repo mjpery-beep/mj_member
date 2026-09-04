@@ -114,6 +114,7 @@
         var note = props.note;
         var onEdit = props.onEdit;
         var onDelete = props.onDelete;
+        var onOpenNextcloud = props.onOpenNextcloud;
 
         return h('div', { class: 'mj-day-notes-widget__row', style: note.color ? 'border-left-color:' + note.color : '' }, [
             h('span', { class: 'mj-day-notes-widget__row-emoji' }, note.emoji || '📝'),
@@ -125,6 +126,7 @@
                 ]),
             ]),
             h('div', { class: 'mj-day-notes-widget__row-actions' }, [
+                onOpenNextcloud && h('button', { type: 'button', onClick: function () { onOpenNextcloud(note); } }, '☁️ Fichiers'),
                 h('button', { type: 'button', onClick: function () { onEdit(note); } }, 'Modifier'),
                 h('button', { type: 'button', onClick: function () { onDelete(note); } }, 'Supprimer'),
             ]),
@@ -148,6 +150,12 @@
         var noteTypes = stateNoteTypes[0], setNoteTypes = stateNoteTypes[1];
         var stateSearch = useState('');
         var search = stateSearch[0], setSearch = stateSearch[1];
+        var stateNextcloudNote = useState(null);
+        var nextcloudNote = stateNextcloudNote[0], setNextcloudNote = stateNextcloudNote[1];
+        var nextcloudPanel = window.MjRegMgrNextcloudFiles && window.MjRegMgrNextcloudFiles.NextcloudFilesPanel;
+        var nextcloudApi = window.MjRegMgrServices && typeof window.MjRegMgrServices.createApiService === 'function'
+            ? window.MjRegMgrServices.createApiService({ ajaxUrl: config.ajaxUrl, nonce: config.nextcloudNonce || '' })
+            : null;
 
         var refresh = useCallback(function () {
             setLoading(true);
@@ -237,6 +245,7 @@
                     note: note,
                     onEdit: function (n) { setEditingNote(n); setModalOpen(true); },
                     onDelete: handleDelete,
+                    onOpenNextcloud: nextcloudPanel && nextcloudApi ? function (n) { setNextcloudNote(n); } : null,
                 });
             })),
 
@@ -248,6 +257,10 @@
                 onSaved: function () { setModalOpen(false); refresh(); },
                 onDeleted: function () { setModalOpen(false); refresh(); },
             }),
+            nextcloudPanel && nextcloudApi && nextcloudNote && h('div', { class: 'mj-day-notes-widget__nextcloud' }, [
+                h('button', { type: 'button', onClick: function () { setNextcloudNote(null); } }, 'Fermer'),
+                h(nextcloudPanel, { context: 'note', contextId: nextcloudNote.id, apiService: nextcloudApi }),
+            ]),
         ]);
     }
 

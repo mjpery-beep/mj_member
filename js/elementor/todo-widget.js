@@ -914,6 +914,17 @@
 
         var effectiveAccess = preview || hasAccess;
 
+        var _nextcloudTodoId = useState(0);
+        var nextcloudTodoId = _nextcloudTodoId[0];
+        var setNextcloudTodoId = _nextcloudTodoId[1];
+        var nextcloudPanel = window.MjRegMgrNextcloudFiles && window.MjRegMgrNextcloudFiles.NextcloudFilesPanel;
+        var nextcloudApi = window.MjRegMgrServices && typeof window.MjRegMgrServices.createApiService === 'function'
+            ? window.MjRegMgrServices.createApiService({
+                ajaxUrl: ajaxUrl,
+                nonce: typeof runtime.nextcloudNonce === 'string' ? runtime.nextcloudNonce : '',
+            })
+            : null;
+
         var isMountedRef = useRef(true);
         useEffect(function () {
             return function () {
@@ -4531,6 +4542,11 @@
                     mediaSection = h('div', { className: 'mj-todo-widget__media' }, [
                         h('div', { className: 'mj-todo-widget__media-header' }, [
                             h('span', { className: 'mj-todo-widget__media-title' }, getString(i18n, 'mediaTitle', 'Médias')),
+                            nextcloudPanel && nextcloudApi ? h('button', {
+                                type: 'button',
+                                className: 'mj-todo-widget__media-add',
+                                onClick: function () { setNextcloudTodoId(Number(todoId) || 0); },
+                            }, '☁️ Nextcloud') : null,
                             mediaAddButton,
                         ].filter(Boolean)),
                         mediaErrorNode,
@@ -4887,6 +4903,24 @@
 
         var isArchivedView = statusFilter === 'archived';
 
+        var nextcloudPanelNode = nextcloudPanel && nextcloudApi && nextcloudTodoId > 0
+            ? h('div', { className: 'mj-todo-widget__nextcloud' }, [
+                h('div', { className: 'mj-todo-widget__nextcloud-header' }, [
+                    h('strong', null, 'Fichiers de la to-do'),
+                    h('button', {
+                        type: 'button',
+                        className: 'mj-todo-widget__media-remove',
+                        onClick: function () { setNextcloudTodoId(0); },
+                    }, 'Fermer'),
+                ]),
+                h(nextcloudPanel, {
+                    context: 'todo',
+                    contextId: nextcloudTodoId,
+                    apiService: nextcloudApi,
+                }),
+            ])
+            : null;
+
         var bodyNode = loading
             ? null
             : h('div', { className: 'mj-todo-widget__body' }, (function () {
@@ -4918,6 +4952,7 @@
             !isArchivedView && error ? h('div', { className: 'mj-todo-widget__error' }, error) : null,
             !isArchivedView ? loader : null,
             bodyNode,
+            nextcloudPanelNode,
             isArchivedView ? archivesNode : null,
         ]);
     }

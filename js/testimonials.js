@@ -47,6 +47,13 @@
         initTestimonialsCarousel();
     }
 
+    function initTestimonialEditor($textarea) {
+        const richTextEditor = new TestimonialRichTextEditor($textarea);
+        const mentionAutocomplete = new MentionAutocomplete(richTextEditor.$editor);
+
+        return { richTextEditor, mentionAutocomplete };
+    }
+
     /**
      * Initialize carousel navigation for carousel-3 template
      */
@@ -89,8 +96,138 @@
     }
 
     /**
+     * Lightweight rich-text surface shared by the create and edit forms.
+     * The original textarea stays the source of truth for AJAX submissions.
+     */
+    class TestimonialRichTextEditor {
+        constructor($textarea) {
+            this.$textarea = $textarea;
+            this.$editor = null;
+            this.$toolbar = null;
+            this.$mentionPreview = null;
+            this.previewRequest = null;
+            this.resolvedPreviewTokens = new Set();
+            this._init();
+        }
+
+        _init() {
+            if (!this.$textarea.length || this.$textarea.data('mj-rich-text-init')) return;
+
+            this.$textarea.data('mj-rich-text-init', true).addClass('mj-testimonials__textarea--source');
+            const placeholder = this.$textarea.attr('placeholder') || '';
+            this.$toolbar = $(
+                '<div class="mj-testimonials__format-toolbar" role="toolbar" aria-label="Mise en forme du témoignage">' +
+                    '<button type="button" data-command="bold" title="Gras"><strong>G</strong></button>' +
+                    '<button type="button" data-command="italic" title="Italique"><em>I</em></button>' +
+                    '<button type="button" data-command="insertUnorderedList" title="Liste à puces">•</button>' +
+                    '<button type="button" data-mention="member" title="Mentionner un membre">@</button>' +
+                    '<button type="button" data-mention="event" title="Mentionner un événement">#</button>' +
+                '</div>'
+            );
+            this.$editor = $('<div class="mj-testimonials__rich-editor" contenteditable="true" role="textbox" aria-multiline="true"></div>')
+                .attr('data-placeholder', placeholder)
+                .html(this.$textarea.val() || '');
+            this.$mentionPreview = $('<div class="mj-testimonials__mention-preview" aria-live="polite"></div>');
+            const $container = $('<div class="mj-testimonials__rich-editor-wrap"></div>');
+
+            this.$textarea.after($container);
+            $container.append(this.$toolbar, this.$editor, this.$mentionPreview, this.$textarea);
+            this.$textarea.attr('aria-hidden', 'true').attr('tabindex', '-1');
+
+            this.$toolbar.on('mousedown', 'button', (event) => event.preventDefault());
+            this.$toolbar.on('click', 'button', (event) => {
+                const $button = $(event.currentTarget);
+                const mentionType = $button.data('mention');
+                if (mentionType) {
+                    this.$editor.trigger('mj:start-mention', [mentionType]);
+                    return;
+                }
+                const command = $button.data('command');
+                this.$editor.trigger('focus');
+                document.execCommand(command, false, null);
+                this.sync();
+            });
+            this.$editor.on('input blur', () => this.sync());
+            this.$editor.on('mj:mention-selected', (event, mention) => this.addMentionPreview(mention));
+            this.syncMentionPreview();
+        }
+
+        sync() {
+            if (!this.$editor) return;
+            this.$textarea.val(this.$editor.html()).trigger('input');
+            const content = this.$editor.text();
+            this.$mentionPreview.children('[data-member-token]').each(function() {
+                const memberToken = $(this).data('member-token');
+                if (content.indexOf('@{' + memberToken + '}') === -1) {
+                    $(this).remove();
+                }
+            });
+            this.syncMentionPreview();
+        }
+
+        syncMentionPreview() {
+            if (!this.$editor || this.previewRequest) return;
+            const tokens = [...new Set((this.$editor.text().match(/@\{([a-z0-9][a-z0-9\-]*)\}/gi) || [])
+                .map(token => token.slice(2, -1)))];
+            const knownTokens = this.$mentionPreview.children('[data-member-token]').map(function() {
+                return String($(this).data('member-token'));
+            }).get();
+            const missingTokens = tokens.filter(token => !knownTokens.includes(token) && !this.resolvedPreviewTokens.has(token));
+            if (!missingTokens.length) return;
+
+            this.previewRequest = $.ajax({
+                url: config.ajaxUrl,
+                method: 'POST',
+                data: {
+                    action: 'mj_front_testimonial_search_members',
+                    _wpnonce: config.nonce,
+                    ids: JSON.stringify(missingTokens.filter(token => /^\d+$/.test(token))),
+                    slugs: JSON.stringify(missingTokens.filter(token => !/^\d+$/.test(token)))
+                },
+                dataType: 'json'
+            }).done((response) => {
+                if (response.success && response.data && Array.isArray(response.data.members)) {
+                    response.data.members.forEach(member => this.addMentionPreview({ type: 'member', item: member }));
+                }
+            }).always(() => {
+                missingTokens.forEach(token => this.resolvedPreviewTokens.add(token));
+                this.previewRequest = null;
+                this.syncMentionPreview();
+            });
+        }
+
+        addMentionPreview(mention) {
+            if (!mention || mention.type !== 'member' || !mention.item || !mention.item.id) return;
+            const token = mention.item.slug || String(mention.item.id);
+            if (this.$mentionPreview.children('[data-member-token="' + token + '"]').length) return;
+
+            const $chip = $('<span class="mj-testimonials__mention-chip"></span>').attr('data-member-token', token);
+            if (mention.item.avatarUrl) {
+                $('<img alt="" class="mj-testimonials__mention-avatar">').attr('src', mention.item.avatarUrl).appendTo($chip);
+            } else {
+                $('<span class="mj-testimonials__mention-initial"></span>').text(mention.item.initial || '?').appendTo($chip);
+            }
+            $('<span class="mj-testimonials__mention-name"></span>').text(mention.item.name || '').appendTo($chip);
+            this.$mentionPreview.append($chip);
+        }
+
+        clear() {
+            if (this.$editor) this.$editor.empty();
+            this.$textarea.val('');
+        }
+
+        destroy() {
+            if (!this.$editor) return;
+            this.$textarea.removeData('mj-rich-text-init').removeClass('mj-testimonials__textarea--source')
+                .removeAttr('aria-hidden tabindex');
+            this.$editor.closest('.mj-testimonials__rich-editor-wrap').before(this.$textarea).remove();
+            this.$editor = null;
+        }
+    }
+
+    /**
      * Standalone mention autocomplete (# events, @ members).
-     * Can be attached to any textarea and destroyed on demand.
+     * Can be attached to a textarea or a contenteditable rich-text surface.
      */
     class MentionAutocomplete {
         constructor($textarea) {
@@ -98,7 +235,7 @@
             this.active = false;
             this.type = null;
             this.query = '';
-            this.start = -1;
+            this.triggerStart = -1;
             this.results = [];
             this.selectedIndex = 0;
             this.debounce = null;
@@ -118,6 +255,32 @@
             this.$textarea.on('input.mjMention', () => this._handleInput());
             this.$textarea.on('keydown.mjMention', (e) => this._handleKeydown(e));
             this.$textarea.on('blur.mjMention', () => { setTimeout(() => this._close(), 200); });
+            this.$textarea.on('mj:start-mention.mjMention', (event, type) => this.start(type));
+        }
+
+        start(type) {
+            const textarea = this.$textarea[0];
+            const marker = type === 'event' ? '#' : '@';
+            const content = textarea.isContentEditable ? textarea.textContent : textarea.value;
+            const cursorPos = textarea.isContentEditable ? this._getCaretOffset(textarea) : textarea.selectionStart;
+            const prefix = cursorPos > 0 && !/\s/.test(content.charAt(cursorPos - 1)) ? ' ' : '';
+
+            if (textarea.isContentEditable) {
+                this._replaceRichTextRange(textarea, cursorPos, cursorPos, prefix + marker);
+                this.$textarea.trigger('input');
+            } else {
+                textarea.value = content.slice(0, cursorPos) + prefix + marker + content.slice(cursorPos);
+                const nextPosition = cursorPos + prefix.length + marker.length;
+                textarea.setSelectionRange(nextPosition, nextPosition);
+            }
+
+            this.active = true;
+            this.type = type;
+            this.triggerStart = cursorPos + prefix.length;
+            this.query = '';
+            this.results = [];
+            if (type === 'event') this._searchEvents('');
+            else this._searchMembers('');
         }
 
         destroy() {
@@ -133,8 +296,9 @@
 
         _handleInput() {
             const textarea = this.$textarea[0];
-            const cursorPos = textarea.selectionStart;
-            const content = textarea.value;
+            const isRichText = textarea.isContentEditable;
+            const cursorPos = isRichText ? this._getCaretOffset(textarea) : textarea.selectionStart;
+            const content = isRichText ? textarea.textContent : textarea.value;
             const textBeforeCursor = content.substring(0, cursorPos);
 
             const hashIndex = textBeforeCursor.lastIndexOf('#');
@@ -158,7 +322,7 @@
 
             this.active = true;
             this.type = triggerChar === '#' ? 'event' : 'member';
-            this.start = triggerIndex;
+            this.triggerStart = triggerIndex;
             this.query = query;
 
             clearTimeout(this.debounce);
@@ -291,23 +455,74 @@
 
         _select(item) {
             const textarea = this.$textarea[0];
-            const content = textarea.value;
-            const cursorPos = textarea.selectionStart;
-            const before = content.substring(0, this.start);
-            const after = content.substring(cursorPos);
-            const replacement = this.type === 'event' ? '#' + item.slug + ' ' : '@{' + item.id + '} ';
-            textarea.value = before + replacement + after;
-            const newPos = this.start + replacement.length;
-            textarea.setSelectionRange(newPos, newPos);
+            const mentionType = this.type;
+            const replacement = mentionType === 'event' ? '#' + item.slug + ' ' : '@{' + item.slug + '} ';
+
+            if (textarea.isContentEditable) {
+                const cursorPos = this._getCaretOffset(textarea);
+                this._replaceRichTextRange(textarea, this.triggerStart, cursorPos, replacement);
+                this.$textarea.trigger('input');
+            } else {
+                const content = textarea.value;
+                const cursorPos = textarea.selectionStart;
+                const before = content.substring(0, this.triggerStart);
+                const after = content.substring(cursorPos);
+                textarea.value = before + replacement + after;
+                const newPos = this.triggerStart + replacement.length;
+                textarea.setSelectionRange(newPos, newPos);
+            }
             textarea.focus();
+            this.$textarea.trigger('mj:mention-selected', [{ type: mentionType, item }]);
             this._close();
+        }
+
+        _getCaretOffset(element) {
+            const selection = window.getSelection();
+            if (!selection || !selection.rangeCount || !element.contains(selection.anchorNode)) {
+                return element.textContent.length;
+            }
+            const range = selection.getRangeAt(0);
+            if (!element.contains(range.endContainer)) return element.textContent.length;
+            const before = range.cloneRange();
+            before.selectNodeContents(element);
+            before.setEnd(range.endContainer, range.endOffset);
+            return before.toString().length;
+        }
+
+        _replaceRichTextRange(element, start, end, replacement) {
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            let node;
+            while ((node = walker.nextNode())) nodes.push(node);
+
+            const pointAt = (offset) => {
+                let remaining = offset;
+                for (const textNode of nodes) {
+                    if (remaining <= textNode.nodeValue.length) return { node: textNode, offset: remaining };
+                    remaining -= textNode.nodeValue.length;
+                }
+                return { node: element, offset: element.childNodes.length };
+            };
+            const from = pointAt(start);
+            const to = pointAt(end);
+            const range = document.createRange();
+            range.setStart(from.node, from.offset);
+            range.setEnd(to.node, to.offset);
+            range.deleteContents();
+            const inserted = document.createTextNode(replacement);
+            range.insertNode(inserted);
+            range.setStartAfter(inserted);
+            range.collapse(true);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
         }
 
         _close() {
             this.active = false;
             this.type = null;
             this.query = '';
-            this.start = -1;
+            this.triggerStart = -1;
             this.results = [];
             this.selectedIndex = 0;
             if (this.$dropdown) { this.$dropdown.hide().empty(); }
@@ -333,6 +548,8 @@
         constructor($form) {
             this.$form = $form;
             this.$textarea = $form.find('.mj-testimonials__textarea');
+            this.editorInstance = initTestimonialEditor(this.$textarea);
+            this.richTextEditor = this.editorInstance.richTextEditor;
             this.$photosGrid = $form.find('.mj-testimonials__photos-grid');
             this.$photoInput = $form.find('.mj-testimonials__photo-input');
             this.$addPhotoBtn = $form.find('.mj-testimonials__add-photo');
@@ -385,7 +602,7 @@
 
             this.bindEvents();
             this.initLinkPreviewContainer();
-            this.initMentionDropdown();
+            this.mentionAutocomplete = this.editorInstance.mentionAutocomplete;
             this.initPhotoBoothMode();
         }
 
@@ -393,11 +610,6 @@
             // Create link preview container after photos grid
             this.$linkPreviewContainer = $('<div class="mj-testimonials__link-preview" style="display:none;"></div>');
             this.$photosGrid.after(this.$linkPreviewContainer);
-        }
-
-        initMentionDropdown() {
-            this.$mentionDropdown = $('<div class="mj-mention-dropdown" style="display:none;"></div>');
-            this.$textarea.parent().css('position', 'relative').append(this.$mentionDropdown);
         }
 
         bindEvents() {
@@ -411,11 +623,6 @@
             // Link preview detection on textarea input
             this.$textarea.on('input', () => this.detectUrl());
 
-            // Mention autocomplete: # for events, @ for members
-            this.$textarea.on('input', () => this.handleMentionInput());
-            this.$textarea.on('keydown', (e) => this.handleMentionKeydown(e));
-            this.$textarea.on('blur', () => { setTimeout(() => this.closeMentionDropdown(), 200); });
-            
             // Photo capture events
             this.$capturePhotoBtn.on('click', () => this.startPhotoCapture());
             this.$form.find('.mj-testimonials__camera-capture').on('click', () => this.capturePhoto());
@@ -660,292 +867,6 @@
             const ids = this.photos.map(p => p.id);
             this.$photoIdsInput.val(JSON.stringify(ids));
         }
-
-        // ===== LINK PREVIEW METHODS =====
-
-        // ===== EVENT @MENTION AUTOCOMPLETE =====
-
-        handleMentionInput() {
-            const textarea = this.$textarea[0];
-            const cursorPos = textarea.selectionStart;
-            const content = textarea.value;
-            const textBeforeCursor = content.substring(0, cursorPos);
-
-            // Find last # (events) and @ (members) before cursor
-            const hashIndex = textBeforeCursor.lastIndexOf('#');
-            const atIndex = textBeforeCursor.lastIndexOf('@');
-
-            // Pick the trigger closest to the cursor
-            let triggerChar = null;
-            let triggerIndex = -1;
-            if (hashIndex !== -1 && (atIndex === -1 || hashIndex > atIndex)) {
-                triggerChar = '#';
-                triggerIndex = hashIndex;
-            } else if (atIndex !== -1) {
-                triggerChar = '@';
-                triggerIndex = atIndex;
-            }
-
-            if (triggerIndex === -1) {
-                this.closeMentionDropdown();
-                return;
-            }
-
-            // Trigger must be at start of text or preceded by whitespace
-            if (triggerIndex > 0 && !/[\s]/.test(content.charAt(triggerIndex - 1))) {
-                this.closeMentionDropdown();
-                return;
-            }
-
-            const query = textBeforeCursor.substring(triggerIndex + 1);
-
-            if (query.length > 50) {
-                this.closeMentionDropdown();
-                return;
-            }
-
-            // For events (#), only slug-valid chars; for members (@), letters/digits/hyphens/spaces
-            if (triggerChar === '#' && !/^[a-z0-9\-]*$/i.test(query)) {
-                this.closeMentionDropdown();
-                return;
-            }
-            if (triggerChar === '@' && !/^[a-zA-ZÀ-ÿ0-9\- ]*$/.test(query)) {
-                this.closeMentionDropdown();
-                return;
-            }
-
-            this.mentionActive = true;
-            this.mentionType = triggerChar === '#' ? 'event' : 'member';
-            this.mentionStart = triggerIndex;
-            this.mentionQuery = query;
-
-            clearTimeout(this.mentionDebounce);
-            if (query.length >= 1) {
-                this.mentionDebounce = setTimeout(() => {
-                    if (this.mentionType === 'event') {
-                        this.searchEvents(query);
-                    } else {
-                        this.searchMembers(query);
-                    }
-                }, 250);
-            } else {
-                this.mentionResults = [];
-                this.renderMentionDropdown();
-            }
-        }
-
-        handleMentionKeydown(e) {
-            if (!this.mentionActive || !this.$mentionDropdown || !this.$mentionDropdown.is(':visible')) return;
-
-            switch (e.key) {
-                case 'ArrowDown':
-                    e.preventDefault();
-                    this.mentionSelectedIndex = Math.min(this.mentionSelectedIndex + 1, this.mentionResults.length - 1);
-                    this.highlightMentionItem();
-                    break;
-                case 'ArrowUp':
-                    e.preventDefault();
-                    this.mentionSelectedIndex = Math.max(this.mentionSelectedIndex - 1, 0);
-                    this.highlightMentionItem();
-                    break;
-                case 'Enter':
-                case 'Tab':
-                    if (this.mentionResults.length > 0) {
-                        e.preventDefault();
-                        this.selectMentionItem(this.mentionResults[this.mentionSelectedIndex]);
-                    }
-                    break;
-                case 'Escape':
-                    e.preventDefault();
-                    this.closeMentionDropdown();
-                    break;
-            }
-        }
-
-        async searchEvents(query) {
-            try {
-                const response = await $.ajax({
-                    url: config.ajaxUrl,
-                    method: 'POST',
-                    data: {
-                        action: 'mj_front_testimonial_search_events',
-                        _wpnonce: config.nonce,
-                        search: query
-                    },
-                    dataType: 'json'
-                });
-
-                if (response.success && response.data && response.data.events) {
-                    this.mentionResults = response.data.events;
-                    this.mentionSelectedIndex = 0;
-                    this.renderMentionDropdown();
-                }
-            } catch (err) {
-                console.error('Event search error:', err);
-            }
-        }
-
-        async searchMembers(query) {
-            try {
-                const response = await $.ajax({
-                    url: config.ajaxUrl,
-                    method: 'POST',
-                    data: {
-                        action: 'mj_front_testimonial_search_members',
-                        _wpnonce: config.nonce,
-                        search: query
-                    },
-                    dataType: 'json'
-                });
-
-                if (response.success && response.data && response.data.members) {
-                    this.mentionResults = response.data.members;
-                    this.mentionSelectedIndex = 0;
-                    this.renderMentionDropdown();
-                }
-            } catch (err) {
-                console.error('Member search error:', err);
-            }
-        }
-
-        renderMentionDropdown() {
-            if (!this.mentionActive || !this.$mentionDropdown) return;
-
-            const isEvent = this.mentionType === 'event';
-            const emptyMsg = isEvent ? 'Aucun \u00e9v\u00e9nement trouv\u00e9' : 'Aucun membre trouv\u00e9';
-            const hintMsg = isEvent ? 'Tapez le nom d\'un \u00e9v\u00e9nement...' : 'Tapez le nom d\'un membre...';
-
-            if (this.mentionResults.length === 0 && this.mentionQuery.length >= 1) {
-                this.$mentionDropdown.html('<div class="mj-mention-dropdown__empty">' + emptyMsg + '</div>').show();
-                return;
-            }
-
-            if (this.mentionResults.length === 0) {
-                this.$mentionDropdown.html('<div class="mj-mention-dropdown__hint">' + hintMsg + '</div>').show();
-                return;
-            }
-
-            let html = '';
-            this.mentionResults.forEach((item, index) => {
-                const isSelected = index === this.mentionSelectedIndex ? ' is-selected' : '';
-
-                if (isEvent) {
-                    const emoji = item.emoji ? this.escapeHtml(item.emoji) + ' ' : '';
-                    const title = this.escapeHtml(item.title);
-                    const slug = this.escapeHtml(item.slug);
-                    const type = item.type ? '<span class="mj-mention-dropdown__type">' + this.escapeHtml(item.type) + '</span>' : '';
-                    const date = item.date_debut ? '<span class="mj-mention-dropdown__date">' + this.formatShortDate(item.date_debut) + '</span>' : '';
-
-                    html += '<div class="mj-mention-dropdown__item' + isSelected + '" data-index="' + index + '">' +
-                        '<div class="mj-mention-dropdown__item-main">' +
-                            '<span class="mj-mention-dropdown__item-title">' + emoji + title + '</span>' +
-                            type +
-                        '</div>' +
-                        '<div class="mj-mention-dropdown__item-meta">' +
-                            '<span class="mj-mention-dropdown__item-slug">#' + slug + '</span>' +
-                            date +
-                        '</div>' +
-                    '</div>';
-                } else {
-                    const name = this.escapeHtml(item.name);
-                    const avatarHtml = item.avatarUrl
-                        ? '<img src="' + this.escapeHtml(item.avatarUrl) + '" alt="" class="mj-mention-dropdown__member-avatar">'
-                        : '<span class="mj-mention-dropdown__member-initial">' + this.escapeHtml(item.initial || '?') + '</span>';
-
-                    html += '<div class="mj-mention-dropdown__item mj-mention-dropdown__item--member' + isSelected + '" data-index="' + index + '">' +
-                        '<div class="mj-mention-dropdown__member-avatar-wrap">' + avatarHtml + '</div>' +
-                        '<span class="mj-mention-dropdown__item-title">' + name + '</span>' +
-                    '</div>';
-                }
-            });
-
-            // Keyboard hint footer
-            html += '<div class="mj-mention-dropdown__footer">' +
-                '<span class="mj-mention-dropdown__footer-key"><kbd>\u2191</kbd><kbd>\u2193</kbd> naviguer</span>' +
-                '<span class="mj-mention-dropdown__footer-key"><kbd>\u23CE</kbd> s\u00e9lectionner</span>' +
-                '<span class="mj-mention-dropdown__footer-key"><kbd>Esc</kbd> fermer</span>' +
-            '</div>';
-
-            this.$mentionDropdown.html(html).show();
-
-            // Bind click events
-            this.$mentionDropdown.find('.mj-mention-dropdown__item').on('mousedown', (e) => {
-                e.preventDefault();
-                const index = parseInt($(e.currentTarget).data('index'), 10);
-                if (this.mentionResults[index]) {
-                    this.selectMentionItem(this.mentionResults[index]);
-                }
-            });
-
-            // Sync hover with keyboard selection
-            this.$mentionDropdown.find('.mj-mention-dropdown__item').on('mouseenter', (e) => {
-                const index = parseInt($(e.currentTarget).data('index'), 10);
-                this.mentionSelectedIndex = index;
-                this.highlightMentionItem();
-            });
-        }
-
-        highlightMentionItem() {
-            const $items = this.$mentionDropdown.find('.mj-mention-dropdown__item');
-            $items.removeClass('is-selected');
-            const $selected = $items.eq(this.mentionSelectedIndex).addClass('is-selected');
-
-            // Scroll selected item into view within the dropdown
-            if ($selected.length) {
-                const container = this.$mentionDropdown[0];
-                const el = $selected[0];
-                const elTop = el.offsetTop;
-                const elBottom = elTop + el.offsetHeight;
-                if (elTop < container.scrollTop) {
-                    container.scrollTop = elTop;
-                } else if (elBottom > container.scrollTop + container.clientHeight) {
-                    container.scrollTop = elBottom - container.clientHeight;
-                }
-            }
-        }
-
-        selectMentionItem(item) {
-            const textarea = this.$textarea[0];
-            const content = textarea.value;
-            const cursorPos = textarea.selectionStart;
-
-            const before = content.substring(0, this.mentionStart);
-            const after = content.substring(cursorPos);
-            const replacement = this.mentionType === 'event'
-                ? '#' + item.slug + ' '
-                : '@{' + item.id + '} ';
-
-            textarea.value = before + replacement + after;
-            const newCursorPos = this.mentionStart + replacement.length;
-            textarea.setSelectionRange(newCursorPos, newCursorPos);
-            textarea.focus();
-
-            this.closeMentionDropdown();
-        }
-
-        closeMentionDropdown() {
-            this.mentionActive = false;
-            this.mentionType = null;
-            this.mentionQuery = '';
-            this.mentionStart = -1;
-            this.mentionResults = [];
-            this.mentionSelectedIndex = 0;
-            if (this.$mentionDropdown) {
-                this.$mentionDropdown.hide().empty();
-            }
-        }
-
-        formatShortDate(dateStr) {
-            if (!dateStr) return '';
-            try {
-                const d = new Date(dateStr);
-                return d.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short', year: 'numeric' });
-            } catch (e) {
-                return dateStr;
-            }
-        }
-
-        // ===== END EVENT @MENTION AUTOCOMPLETE =====
 
         detectUrl() {
             // Debounce URL detection
@@ -1535,7 +1456,7 @@
         }
 
         resetForm() {
-            this.$textarea.val('');
+            this.richTextEditor.clear();
             this.photos = [];
             this.videos = [];
             this.$photosGrid.empty();
@@ -1652,6 +1573,7 @@
                 const card = this.createCard(t);
                 this.$feed.append(card);
             });
+            initTestimonials();
             initSliderAutoplay();
         }
 
@@ -1675,9 +1597,10 @@
                 : '';
 
             // Content
-            const rawContent = t.rawContent !== undefined ? t.rawContent : this.stripHtml(t.content || '');
-            const contentHtml = t.content
-                ? `<div class="mj-feed-post__content" data-raw-content="${this.escapeHtml(rawContent)}">${this.formatContent(t.content)}</div>`
+            const rawContent = t.rawContent !== undefined ? t.rawContent : this.stripHtml(t.contentHtml || t.content || '');
+            const renderedContent = t.contentHtml || t.content || '';
+            const contentHtml = renderedContent
+                ? `<div class="mj-feed-post__content" data-raw-content="${this.escapeHtml(rawContent)}">${renderedContent}</div>`
                 : '';
 
             // Mentioned members chips
@@ -1749,7 +1672,7 @@
             // Pery Social publish button (animators only)
             const publishFbHtml = config.isAnimator
                 ? `<button type="button" class="mj-feed-post__action mj-feed-post__action--publish-social" data-action="publish-social" title="${this.escapeHtml(i18n.publishSocial || 'Pery Social')}">
-                    <span class="mj-feed-post__action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></span>
+                    <span class="mj-feed-post__action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg></span>
                     <span class="mj-feed-post__action-label">${this.escapeHtml(i18n.publishSocial || 'Pery Social')}</span>
                    </button>`
                 : '';
@@ -1841,9 +1764,7 @@
         }
 
         formatContent(content) {
-            // Content already contains HTML from server-side linkify, wrap in <p> tags similar to wpautop
-            const escaped = content.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
-            return '<p>' + escaped + '</p>';
+            return content;
         }
 
         stripHtml(content) {
@@ -2661,10 +2582,10 @@
 
             $content.html($editForm);
             const $editTextarea = $content.find('.mj-feed-post__edit-textarea');
-            $editTextarea.focus();
-
-            // Attach mention autocomplete to edit textarea
-            const editMention = new MentionAutocomplete($editTextarea);
+            const editEditorInstance = initTestimonialEditor($editTextarea);
+            const editRichTextEditor = editEditorInstance.richTextEditor;
+            editRichTextEditor.$editor.focus();
+            const editMention = editEditorInstance.mentionAutocomplete;
 
             // Animator: member search autocomplete
             if (config.isAnimator) {
@@ -2864,6 +2785,7 @@
             // Cancel
             $content.find('[data-action="cancel-edit"]').on('click', function() {
                 editMention.destroy();
+                editRichTextEditor.destroy();
                 $content.html(originalContentHtml);
                 $origSlider.show();
             });
@@ -2908,6 +2830,7 @@
                     if (response.success) {
                         // Update displayed content with linkified HTML
                         editMention.destroy();
+                        editRichTextEditor.destroy();
                         $content.html(response.data.contentHtml || '');
                         $content.attr('data-raw-content', response.data.content || '');
 

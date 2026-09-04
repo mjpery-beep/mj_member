@@ -9,9 +9,59 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 function mj_check_and_add_columns() {
     mj_member_run_schema_upgrade();
+    mj_member_ensure_member_slugs();
     mj_member_ensure_nextcloud_credentials_columns();
     mj_member_ensure_nextcloud_tracking_columns();
     mj_member_ensure_auxiliary_tables();
+}
+
+function mj_member_ensure_member_slugs() {
+    global $wpdb;
+
+    if (!isset($wpdb) || !is_object($wpdb)) {
+        return;
+    }
+
+    $members_table = $wpdb->prefix . 'mj_members';
+    if (!mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'slug')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN slug VARCHAR(191) DEFAULT NULL AFTER last_name");
+    }
+
+    $members = $wpdb->get_results("SELECT id, first_name, last_name FROM {$members_table} WHERE slug = '' OR slug IS NULL");
+    foreach ($members as $member) {
+        $base_slug = sanitize_title(($member->first_name ?? '') . '-' . ($member->last_name ?? ''));
+        $slug = ($base_slug !== '' ? $base_slug : 'membre') . '-' . (int) $member->id;
+        $wpdb->update($members_table, array('slug' => $slug), array('id' => (int) $member->id), array('%s'), array('%d'));
+    }
+
+    $slug_index = $wpdb->get_var("SHOW INDEX FROM {$members_table} WHERE Key_name = 'slug'");
+    if (!$slug_index) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD UNIQUE KEY slug (slug)");
+    }
+
+    if (get_option('mj_member_testimonial_member_slug_migration') === 'done') {
+        return;
+    }
+
+    $testimonials_table = $wpdb->prefix . 'mj_testimonials';
+    if (!mj_member_table_exists($testimonials_table)) {
+        return;
+    }
+
+    $testimonials = $wpdb->get_results("SELECT id, content FROM {$testimonials_table} WHERE content REGEXP '@\\\\{[0-9]+\\\\}'");
+    foreach ($testimonials as $testimonial) {
+        $content = preg_replace_callback('/@\{(\d+)\}/', function ($matches) use ($wpdb, $members_table) {
+            $slug = $wpdb->get_var($wpdb->prepare("SELECT slug FROM {$members_table} WHERE id = %d", (int) $matches[1]));
+            return is_string($slug) && $slug !== '' ? '@{' . $slug . '}' : $matches[0];
+        }, (string) $testimonial->content);
+        $wpdb->update($testimonials_table, array('content' => $content), array('id' => (int) $testimonial->id), array('%s'), array('%d'));
+    }
+
+    update_option('mj_member_testimonial_member_slug_migration', 'done', false);
 }
 
 /**

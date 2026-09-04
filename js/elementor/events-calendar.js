@@ -1598,16 +1598,20 @@
         var printMonthYearInput = root.querySelector('[data-print-option="month-year"]');
         var printWeekInput = root.querySelector('[data-print-option="week"]');
         var printWeekYearInput = root.querySelector('[data-print-option="week-year"]');
+        var printDayInput = root.querySelector('[data-print-option="day"]');
         var printMonthPickerWrap = root.querySelector('[data-print-month-picker]');
         var printMonthYearPickerWrap = root.querySelector('[data-print-month-year-picker]');
         var printWeekPickerWrap = root.querySelector('[data-print-week-picker]');
         var printWeekYearPickerWrap = root.querySelector('[data-print-week-year-picker]');
+        var printDayPickerWrap = root.querySelector('[data-print-day-picker]');
         var printPadPageInput = root.querySelector('[data-print-option="pad-page"]');
         var printPadDayInput = root.querySelector('[data-print-option="pad-day"]');
         var printPadEventInput = root.querySelector('[data-print-option="pad-event"]');
         var printTextSizeInput = root.querySelector('[data-print-option="text-size"]');
         var printThemeInput = root.querySelector('[data-print-option="theme"]');
         var printSpanInput = root.querySelector('[data-print-option="span"]');
+        var printDayColumnsInput = root.querySelector('[data-print-option="day-columns"]');
+        var printDayColumnsPickerWrap = root.querySelector('[data-print-day-columns-picker]');
         var printDetailsInput = root.querySelector('[data-print-option="details"]');
         var printCoverInput = root.querySelector('[data-print-option="cover"]');
         var printTimeRangeInput = root.querySelector('[data-print-option="time-range"]');
@@ -1617,6 +1621,15 @@
         var printFooterImageInput = root.querySelector('[data-print-option="footer-image"]');
         var printPageBreakInput = root.querySelector('[data-print-option="page-break"]');
         var printHideEmptyDaysInput = root.querySelector('[data-print-option="hide-empty-days"]');
+        var printReduceEmptyDaysInput = root.querySelector('[data-print-option="reduce-empty-days"]');
+        var printPeriodTitlesWrap = root.querySelector('[data-print-period-titles]');
+        if (!printReduceEmptyDaysInput && printHideEmptyDaysInput && printHideEmptyDaysInput.parentElement) {
+            var reduceEmptyDaysLabel = document.createElement('label');
+            reduceEmptyDaysLabel.className = 'mj-cal-print__option';
+            reduceEmptyDaysLabel.innerHTML = '<input type="checkbox" data-print-option="reduce-empty-days" /><span>Réduire la taille des jours vides</span>';
+            printHideEmptyDaysInput.parentElement.insertAdjacentElement('afterend', reduceEmptyDaysLabel);
+            printReduceEmptyDaysInput = reduceEmptyDaysLabel.querySelector('[data-print-option="reduce-empty-days"]');
+        }
         var printPageBreakLabel = root.querySelector('[data-print-option-page-break-label]');
         var printTypeFiltersWrap = root.querySelector('[data-print-type-filters]');
         var printPresetSelect = root.querySelector('[data-print-preset-select]');
@@ -1626,8 +1639,10 @@
         var printTypeFilterInputs = [];
         var printSelectedMonthKey = '';
         var printSelectedWeekStartKey = '';
+        var printSelectedDayKeys = [];
         var printMonthEntries = [];
         var printWeekEntries = [];
+        var printDayEntries = [];
         var printConfig = (config && config.print) ? config.print : {};
         var printPrefsEnabled = !!(printConfig && printConfig.userPrefsEnabled && printConfig.ajaxUrl && printConfig.prefsNonce);
         var printPrefsFromServer = (printConfig && printConfig.userPrefs && typeof printConfig.userPrefs === 'object') ? printConfig.userPrefs : null;
@@ -1636,6 +1651,8 @@
         var isApplyingPrintPrefs = false;
         var hasAppliedPrintPrefs = false;
         var lastPrintSnapshot = null;
+        var printTitleOverrides = {};
+        var printTitleSignature = '';
         var todayMonthKey = root.getAttribute('data-calendar-today') || '';
         if (config && config.todayMonth) {
             todayMonthKey = config.todayMonth;
@@ -1836,7 +1853,7 @@
             if (!printModeInput) {
                 return 'week';
             }
-            return printModeInput.value === 'month' ? 'month' : 'week';
+            return printModeInput.value === 'month' || printModeInput.value === 'day' ? printModeInput.value : 'week';
         }
 
         function normalizePrintTheme(theme) {
@@ -1992,6 +2009,17 @@
                 return a.sortDate - b.sortDate;
             });
             printWeekEntries = weekList;
+
+            var daySeen = {};
+            printDayEntries = dayNodes.map(function(dayNode) {
+                var key = (dayNode.getAttribute('data-calendar-day') || '').trim();
+                var date = parseDayKey(key);
+                if (!key || !date || daySeen[key]) {
+                    return null;
+                }
+                daySeen[key] = true;
+                return { key: key, date: date, label: formatDateLabel(date, true) };
+            }).filter(function(entry) { return !!entry; }).sort(function(a, b) { return a.key.localeCompare(b.key); });
         }
 
         function setDefaultPrintPeriodSelection() {
@@ -2014,6 +2042,9 @@
             if (!printSelectedWeekStartKey && printWeekEntries.length) {
                 printSelectedWeekStartKey = printWeekEntries[0].key;
             }
+            if (!printSelectedDayKeys.length && printDayEntries.length) {
+                printSelectedDayKeys = [printDayEntries[0].key];
+            }
         }
 
         function renderPrintPeriodSelectors() {
@@ -2030,6 +2061,19 @@
             }
             if (printWeekYearPickerWrap) {
                 printWeekYearPickerWrap.hidden = mode !== 'week';
+            }
+            if (printDayPickerWrap) {
+                printDayPickerWrap.hidden = mode !== 'day';
+            }
+            if (printDayColumnsPickerWrap) {
+                printDayColumnsPickerWrap.hidden = mode !== 'day';
+            }
+            if (printSpanInput && printSpanInput.parentElement) {
+                printSpanInput.parentElement.hidden = false;
+                var spanLabel = printSpanInput.parentElement.querySelector('span');
+                if (spanLabel) {
+                    spanLabel.textContent = mode === 'day' ? 'Nombre de jours' : 'Nombre d\'unités';
+                }
             }
 
             if (printMonthYearInput && printMonthInput) {
@@ -2115,6 +2159,58 @@
                     }
                 }
             }
+
+            if (printDayInput) {
+                printDayInput.innerHTML = '';
+                printDayEntries.forEach(function(entry) {
+                    var option = document.createElement('option');
+                    option.value = entry.key;
+                    option.textContent = entry.label;
+                    option.selected = printSelectedDayKeys.indexOf(entry.key) !== -1;
+                    printDayInput.appendChild(option);
+                });
+            }
+        }
+
+        function getSelectedDayKeys() {
+            if (!printDayInput) {
+                return printSelectedDayKeys;
+            }
+            var value = printDayInput.value;
+            return value ? [value] : printSelectedDayKeys;
+        }
+        function getPrintDayColumns() {
+            var value = printDayColumnsInput ? parseInt(printDayColumnsInput.value, 10) : 5;
+            return Math.max(1, Math.min(5, Number.isFinite(value) ? value : 5));
+        }
+
+        function collectDayPeriods(withDetails, withCover, selectedTypesMap, selectedDayKeys, removeEmptyDays) {
+            var cells = [];
+            var firstDay = selectedDayKeys.length ? parseDayKey(selectedDayKeys[0]) : null;
+            var dayCount = getPrintSpan();
+            for (var dayIndex = 0; firstDay && dayIndex < dayCount; dayIndex += 1) {
+                var dayDate = addDays(firstDay, dayIndex);
+                var dayKey = formatDayKey(dayDate);
+                var dayNode = getDayNodeByKey(dayKey);
+                if (!dayDate || !dayNode) {
+                    continue;
+                }
+                var events = collectEventsFromDay(dayNode, withDetails, withCover, selectedTypesMap);
+                if (removeEmptyDays && !events.length) {
+                    continue;
+                }
+                cells.push({
+                    isPadding: false,
+                    dayNumber: String(dayDate.getDate()),
+                    dayHeading: formatDayHeading(dayDate),
+                    label: formatDateLabel(dayDate, true),
+                    events: events
+                });
+            }
+            return cells.length ? [{
+                title: uppercaseFirstLetter(createMonthLabel(firstDay)),
+                weeks: [{ cells: cells }]
+            }] : [];
         }
 
         function getSelectedMonthStartIndex() {
@@ -2150,8 +2246,9 @@
             if (span < 1) {
                 span = 1;
             }
-            if (span > 12) {
-                span = 12;
+            var maxSpan = getPrintMode() === 'day' ? 31 : 12;
+            if (span > maxSpan) {
+                span = maxSpan;
             }
             if (printSpanInput) {
                 printSpanInput.value = String(span);
@@ -2200,6 +2297,16 @@
                 return !!printHideEmptyDaysInput.checked;
             }
             return !!(printConfig && printConfig.defaultHideEmptyDays);
+        }
+
+        function isReduceEmptyDaysEnabled() {
+            return !!(printReduceEmptyDaysInput && printReduceEmptyDaysInput.checked && !isHideEmptyDaysEnabled());
+        }
+
+        function syncReduceEmptyDaysOption() {
+            if (printReduceEmptyDaysInput) {
+                printReduceEmptyDaysInput.disabled = isHideEmptyDaysEnabled();
+            }
         }
 
         function isEventEmojiEnabled() {
@@ -2361,7 +2468,7 @@
 
             isApplyingPrintPrefs = true;
 
-            if (printModeInput && (prefs.mode === 'week' || prefs.mode === 'month')) {
+            if (printModeInput && (prefs.mode === 'week' || prefs.mode === 'month' || prefs.mode === 'day')) {
                 printModeInput.value = prefs.mode;
             }
             if (printThemeInput && typeof prefs.theme !== 'undefined') {
@@ -2369,6 +2476,9 @@
             }
             if (printSpanInput && typeof prefs.span !== 'undefined') {
                 printSpanInput.value = String(prefs.span);
+            }
+            if (printDayColumnsInput && typeof prefs.dayColumns !== 'undefined') {
+                printDayColumnsInput.value = String(prefs.dayColumns);
             }
             if (printDetailsInput && typeof prefs.details !== 'undefined') {
                 printDetailsInput.checked = !!prefs.details;
@@ -2396,6 +2506,9 @@
             }
             if (printHideEmptyDaysInput && typeof prefs.hideEmptyDays !== 'undefined') {
                 printHideEmptyDaysInput.checked = !!prefs.hideEmptyDays;
+            }
+            if (printReduceEmptyDaysInput && typeof prefs.reduceEmptyDays !== 'undefined') {
+                printReduceEmptyDaysInput.checked = !!prefs.reduceEmptyDays;
             }
             if (printPadPageInput && typeof prefs.padPage !== 'undefined') {
                 printPadPageInput.value = String(prefs.padPage);
@@ -2434,6 +2547,7 @@
             }
 
             isApplyingPrintPrefs = false;
+            syncReduceEmptyDaysOption();
         }
 
         function collectPrintPrefsFromInputs() {
@@ -2463,6 +2577,8 @@
                 footerImage: isFooterImageEnabled(),
                 pageBreak: isPageBreakEnabled(),
                 hideEmptyDays: isHideEmptyDaysEnabled(),
+                reduceEmptyDays: isReduceEmptyDaysEnabled(),
+                dayColumns: getPrintDayColumns(),
                 padPage: getPrintPaddingValue(printPadPageInput, 0, 24, 10),
                 padDay: getPrintPaddingValue(printPadDayInput, 0, 16, 6),
                 padEvent: getPrintPaddingValue(printPadEventInput, 0, 16, 6),
@@ -2616,6 +2732,31 @@
             }
 
             var list = [];
+            var notesWrapper = dayNode.querySelector('.mj-member-events-calendar__day-notes[data-day-notes]');
+            if (notesWrapper) {
+                var notes = [];
+                try {
+                    notes = JSON.parse(notesWrapper.getAttribute('data-day-notes') || '[]');
+                } catch (error) {
+                    notes = [];
+                }
+                notes.forEach(function(note) {
+                    if (!note || (selectedTypesMap && !Object.prototype.hasOwnProperty.call(selectedTypesMap, 'note'))) {
+                        return;
+                    }
+                    list.push({
+                        title: note.title || (note.content || '').slice(0, 60) || 'Note',
+                        meta: note.note_type_label || '',
+                        type: 'Note',
+                        details: withDetails ? (note.content || '') : '',
+                        cover: withCover && note.media && note.media[0] ? (note.media[0].url || '') : '',
+                        emoji: note.emoji || '📝',
+                        accentColor: normalizeHexColor(note.color || ''),
+                        isNote: true
+                    });
+                });
+            }
+
             var items = toArray(dayNode.querySelectorAll('.mj-member-events-calendar__event[data-calendar-type-item]'));
             items.forEach(function(item) {
                 if (item.classList.contains('is-filtered-out')) {
@@ -2691,6 +2832,25 @@
             return value.charAt(0).toUpperCase() + value.slice(1);
         }
 
+        function formatWeekPeriodTitle(weekStart, weekEnd) {
+            var startDay = weekStart.getDate() === 1 ? '1er' : String(weekStart.getDate());
+            var endDay = String(weekEnd.getDate()).padStart(2, '0');
+            var endLabel = formatDateLabel(weekEnd, false);
+            var startMonth = '';
+
+            try {
+                startMonth = weekStart.toLocaleDateString('fr-BE', { month: 'long' });
+            } catch (error) {
+                startMonth = weekStart.toLocaleDateString(undefined, { month: 'long' });
+            }
+
+            if (weekStart.getMonth() === weekEnd.getMonth() && weekStart.getFullYear() === weekEnd.getFullYear()) {
+                return startDay + ' au ' + endLabel;
+            }
+
+            return startDay + ' ' + startMonth + ' au ' + endLabel;
+        }
+
         function collectWeekPeriods(span, withDetails, withCover, selectedTypesMap, weekAnchorDate, removeEmptyDays) {
             var periods = [];
             if (!months[activeIndex] && !weekAnchorDate) {
@@ -2739,7 +2899,7 @@
                 }
 
                 periods.push({
-                    title: 'Semaine du ' + formatDateLabel(weekStart, false) + ' au ' + formatDateLabel(weekEnd, false),
+                    title: formatWeekPeriodTitle(weekStart, weekEnd),
                     weeks: [{ cells: cells }]
                 });
             }
@@ -2846,6 +3006,26 @@
             return compactDays;
         }
 
+        function getPeriodEmptyWeekdayIndexes(period) {
+            var emptyIndexes = {};
+            for (var index = 0; index < 7; index += 1) {
+                var hasDay = false;
+                var hasEvent = false;
+                (period.weeks || []).forEach(function(week) {
+                    var cell = week && week.cells ? week.cells[index] : null;
+                    if (!cell || cell.isPadding) {
+                        return;
+                    }
+                    hasDay = true;
+                    hasEvent = hasEvent || !!(cell.events && cell.events.length);
+                });
+                if (hasDay && !hasEvent) {
+                    emptyIndexes[index] = true;
+                }
+            }
+            return emptyIndexes;
+        }
+
         function buildPrintDocumentHtml(periods, options) {
             var blocks = [];
             var labels = (printConfig && printConfig.labels) ? printConfig.labels : {};
@@ -2853,6 +3033,7 @@
             var headerImageUrl = options.headerImage && options.headerImageUrl ? String(options.headerImageUrl) : '';
             var footerImageUrl = options.footerImage && options.footerImageUrl ? String(options.footerImageUrl) : '';
             var removeEmptyDays = !!options.removeEmptyDays;
+            var reduceEmptyDays = !!options.reduceEmptyDays && !removeEmptyDays;
             var theme = normalizePrintTheme(options.theme);
             var hasDarkBackground = theme === 'dark' || theme === 'dark-light-days';
             var hasDarkDayCards = theme === 'dark' || theme === 'light-dark-days';
@@ -2875,21 +3056,23 @@
             var emptyText = hasDarkBackground ? '#aeb6c2' : '#666666';
 
             if (periods.length) {
+                var isDayMode = options.mode === 'day';
                 periods.forEach(function(period, idx) {
                     var periodHtml = [];
-                    periodHtml.push('<section class="mj-print-period' + (options.pageBreak && idx < periods.length - 1 ? ' has-break' : '') + '">');
+                    var emptyWeekdayIndexes = reduceEmptyDays ? getPeriodEmptyWeekdayIndexes(period) : {};
+                    periodHtml.push('<section class="mj-print-period' + (options.pageBreak && !isDayMode && idx < periods.length - 1 ? ' has-break' : '') + '">');
                     periodHtml.push('<h2>' + escapeHtml(period.title) + '</h2>');
 
-                    periodHtml.push('<div class="mj-print-cal' + (removeEmptyDays ? ' mj-print-cal--compact' : '') + '">');
-                    if (!removeEmptyDays) {
+                    periodHtml.push('<div class="mj-print-cal' + (removeEmptyDays ? ' mj-print-cal--compact' : '') + (reduceEmptyDays ? ' mj-print-cal--reduce-empty-days' : '') + (isDayMode ? ' mj-print-cal--day-mode' : '') + '">');
+                    if (!removeEmptyDays && !isDayMode) {
                         periodHtml.push('<div class="mj-print-cal__weekdays">');
-                        weekdayLabels.forEach(function(wd) {
-                            periodHtml.push('<span>' + escapeHtml(wd) + '</span>');
+                        weekdayLabels.forEach(function(wd, weekdayIndex) {
+                            periodHtml.push('<span' + (emptyWeekdayIndexes[weekdayIndex] ? ' class="is-empty-column"' : '') + '>' + escapeHtml(wd) + '</span>');
                         });
                         periodHtml.push('</div>');
                     }
 
-                    if (removeEmptyDays) {
+                    if (removeEmptyDays || isDayMode) {
                         var compactDays = collectPeriodCompactDays(period);
                         periodHtml.push('<div class="mj-print-cal__days">');
                         compactDays.forEach(function(cell) {
@@ -2905,7 +3088,7 @@
                                         eventStyleAttr = ' style="background:' + escapeHtml(bgColor) + ';border-color:' + escapeHtml(borderColor) + ';"';
                                     }
                                 }
-                                periodHtml.push('<article class="mj-print-event"' + eventStyleAttr + '>');
+                                periodHtml.push('<article class="mj-print-event' + (eventItem.isNote ? ' mj-print-event--note' : '') + '"' + eventStyleAttr + '>');
                                 if (options.cover && eventItem.cover) {
                                     periodHtml.push('<img class="mj-print-event-cover" src="' + escapeHtml(eventItem.cover) + '" alt="' + escapeHtml(eventItem.title || '') + '" />');
                                 }
@@ -2941,13 +3124,13 @@
                     } else {
                         period.weeks.forEach(function(week) {
                             periodHtml.push('<div class="mj-print-cal__week">');
-                            (week.cells || []).forEach(function(cell) {
+                            (week.cells || []).forEach(function(cell, cellIndex) {
                                 if (!cell || cell.isPadding) {
                                     periodHtml.push('<div class="mj-print-cal__day is-padding"></div>');
                                     return;
                                 }
 
-                                periodHtml.push('<div class="mj-print-cal__day">');
+                                periodHtml.push('<div class="mj-print-cal__day' + (emptyWeekdayIndexes[cellIndex] ? ' is-empty-column' : '') + '">');
                                 periodHtml.push('<div class="mj-print-cal__day-head" title="' + escapeHtml(cell.label || '') + '">' + escapeHtml(cell.dayNumber || '') + '</div>');
                                 periodHtml.push('<div class="mj-print-cal__events">');
                                 (cell.events || []).forEach(function(eventItem) {
@@ -2959,7 +3142,7 @@
                                             eventStyleAttr = ' style="background:' + escapeHtml(bgColor) + ';border-color:' + escapeHtml(borderColor) + ';"';
                                         }
                                     }
-                                    periodHtml.push('<article class="mj-print-event"' + eventStyleAttr + '>');
+                                    periodHtml.push('<article class="mj-print-event' + (eventItem.isNote ? ' mj-print-event--note' : '') + '"' + eventStyleAttr + '>');
                                     if (options.cover && eventItem.cover) {
                                         periodHtml.push('<img class="mj-print-event-cover" src="' + escapeHtml(eventItem.cover) + '" alt="' + escapeHtml(eventItem.title || '') + '" />');
                                     }
@@ -3025,12 +3208,18 @@
                 '.mj-print-cal__weekdays,.mj-print-cal__week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}',
                 '.mj-print-cal--compact .mj-print-cal__weekdays{display:none;}',
                 '.mj-print-cal__days{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;}',
+                '.mj-print-cal--day-mode .mj-print-cal__days{grid-template-columns:repeat(' + (options.dayColumns || 5) + ',minmax(0,1fr));}',
                 '.mj-print-cal__weekdays span{font-size:' + scaledTextSize(11) + 'px;font-weight:700;text-transform:uppercase;color:' + weekdayText + ';padding:2px 4px;}',
                 '.mj-print-cal__day{border:1px solid ' + dayBorder + ';border-radius:8px;min-height:80px;padding:' + dayPaddingCss + 'px;display:flex;flex-direction:column;gap:6px;background:' + dayBg + ';}',
+                '.mj-print-cal--reduce-empty-days .mj-print-cal__weekdays,.mj-print-cal--reduce-empty-days .mj-print-cal__week{display:flex;gap:6px;}',
+                '.mj-print-cal--reduce-empty-days .mj-print-cal__weekdays span{flex:1 1 0;min-width:0;}',
+                '.mj-print-cal--reduce-empty-days .mj-print-cal__day{flex:1 1 0;min-width:0;}',
+                '.mj-print-cal--reduce-empty-days .mj-print-cal__weekdays span.is-empty-column,.mj-print-cal--reduce-empty-days .mj-print-cal__day.is-empty-column{flex:0 0 48px;}',
                 '.mj-print-cal__day.is-padding{background:' + dayPaddingBg + ';border-style:dashed;}',
                 '.mj-print-cal__day-head{font-size:' + scaledTextSize(13) + 'px;font-weight:700;color:' + dayHead + ';}',
                 '.mj-print-cal__events{display:grid;gap:6px;}',
                 '.mj-print-event{border:1px solid ' + eventBorder + ';border-radius:6px;padding:' + eventPaddingCss + 'px;background:' + eventBg + ';display:grid;gap:4px;}',
+                '.mj-print-event--note{border-left:4px solid #d89b00;background:' + (hasDarkDayCards ? '#2a2518' : '#fffaf0') + ';}',
                 '.mj-print-event-cover{width:100%;aspect-ratio:1 / 1;object-fit:cover;border-radius:4px;display:block;}',
                 '.mj-print-event-title{font-size:' + scaledTextSize(12) + 'px;font-weight:700;line-height:1.2;display:flex;align-items:center;gap:6px;color:' + eventTitle + ';}',
                 '.mj-print-event-emoji{font-size:' + scaledTextSize(13) + 'px;line-height:1;}',
@@ -3062,7 +3251,9 @@
             var mode = getPrintMode();
             printPageBreakLabel.textContent = mode === 'month'
                 ? (labels.pagePerMonth || 'Une page par mois')
-                : (labels.pagePerWeek || 'Une page par semaine');
+                : mode === 'day'
+                    ? 'Une page par jour'
+                    : (labels.pagePerWeek || 'Une page par semaine');
         }
 
         function waitForPreviewImages(doc) {
@@ -3099,7 +3290,7 @@
 
         function buildImageFileName() {
             var mode = getPrintMode();
-            var suffix = mode === 'month' ? 'mois' : 'semaine';
+            var suffix = mode === 'month' ? 'mois' : mode === 'day' ? 'jour' : 'semaine';
             var periodKey = mode === 'month'
                 ? (printSelectedMonthKey || 'calendrier')
                 : (printSelectedWeekStartKey || 'horaire');
@@ -3111,6 +3302,43 @@
                 periods: JSON.parse(JSON.stringify(periods || [])),
                 options: JSON.parse(JSON.stringify(options || {}))
             };
+        }
+
+        function getPrintParameterSignature() {
+            var preferences = collectPrintPrefsFromInputs();
+            preferences.dayKeys = getSelectedDayKeys();
+            return JSON.stringify(preferences);
+        }
+
+        function renderPrintPeriodTitleInputs(periods) {
+            if (!printPeriodTitlesWrap) {
+                return;
+            }
+            printPeriodTitlesWrap.innerHTML = '';
+            periods.forEach(function(period, index) {
+                var label = document.createElement('label');
+                label.className = 'mj-cal-print__option';
+                var labelText = document.createElement('span');
+                labelText.textContent = 'Titre ' + (index + 1);
+                var input = document.createElement('input');
+                input.type = 'text';
+                input.maxLength = 120;
+                input.value = Object.prototype.hasOwnProperty.call(printTitleOverrides, index)
+                    ? printTitleOverrides[index]
+                    : period.title;
+                input.setAttribute('data-print-period-title-index', String(index));
+                label.appendChild(labelText);
+                label.appendChild(input);
+                printPeriodTitlesWrap.appendChild(label);
+            });
+        }
+
+        function applyPrintPeriodTitleOverrides(periods) {
+            periods.forEach(function(period, index) {
+                if (Object.prototype.hasOwnProperty.call(printTitleOverrides, index)) {
+                    period.title = printTitleOverrides[index];
+                }
+            });
         }
 
         function drawRoundedRect(ctx, x, y, width, height, radius) {
@@ -3228,6 +3456,97 @@
             });
         }
 
+        async function savePrintPreviewFrameAsJpeg() {
+            if (!printPreviewFrame || !printPreviewFrame.contentDocument) {
+                throw new Error('preview-unavailable');
+            }
+
+            var previewDocument = printPreviewFrame.contentDocument;
+            await waitForPreviewImages(previewDocument);
+
+            var width = Math.max(1, previewDocument.documentElement.scrollWidth, previewDocument.body ? previewDocument.body.scrollWidth : 0);
+            var height = Math.max(1, previewDocument.documentElement.scrollHeight, previewDocument.body ? previewDocument.body.scrollHeight : 0);
+            var documentClone = previewDocument.documentElement.cloneNode(true);
+            documentClone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+            var imageNodes = toArray(documentClone.querySelectorAll('img'));
+            await Promise.all(imageNodes.map(function(imageNode) {
+                var source = imageNode.getAttribute('src') || '';
+                if (!source || source.indexOf('data:') === 0) {
+                    return Promise.resolve();
+                }
+                return fetch(source, { credentials: 'same-origin' })
+                    .then(function(response) { return response.ok ? response.blob() : null; })
+                    .then(function(blob) {
+                        if (!blob) {
+                            imageNode.remove();
+                            return;
+                        }
+                        return new Promise(function(resolve) {
+                            var reader = new FileReader();
+                            reader.onload = function() {
+                                imageNode.setAttribute('src', String(reader.result || ''));
+                                resolve();
+                            };
+                            reader.onerror = function() {
+                                imageNode.remove();
+                                resolve();
+                            };
+                            reader.readAsDataURL(blob);
+                        });
+                    }).catch(function() {
+                        imageNode.remove();
+                    });
+            }));
+            var serializedDocument = new XMLSerializer().serializeToString(documentClone);
+            var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '"><foreignObject width="100%" height="100%">' + serializedDocument + '</foreignObject></svg>';
+            var svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+
+            try {
+                var image = await new Promise(function(resolve) {
+                    var svgImage = new Image();
+                    svgImage.onload = function() { resolve(svgImage); };
+                    svgImage.onerror = function() { resolve(null); };
+                    svgImage.src = svgUrl;
+                });
+                if (!image) {
+                    throw new Error('preview-rasterization-failed');
+                }
+
+                var canvas = document.createElement('canvas');
+                canvas.width = width * 2;
+                canvas.height = height * 2;
+                var context = canvas.getContext('2d');
+                if (!context) {
+                    throw new Error('canvas-unavailable');
+                }
+                context.fillStyle = '#ffffff';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+                await new Promise(function(resolve, reject) {
+                    canvas.toBlob(function(jpegBlob) {
+                        if (!jpegBlob) {
+                            reject(new Error('blob-unavailable'));
+                            return;
+                        }
+                        var downloadUrl = URL.createObjectURL(jpegBlob);
+                        var anchor = document.createElement('a');
+                        anchor.href = downloadUrl;
+                        anchor.download = buildImageFileName();
+                        document.body.appendChild(anchor);
+                        anchor.click();
+                        anchor.remove();
+                        setTimeout(function() {
+                            URL.revokeObjectURL(downloadUrl);
+                        }, 1000);
+                        resolve();
+                    }, 'image/jpeg', 0.92);
+                });
+            } finally {
+                URL.revokeObjectURL(svgUrl);
+            }
+        }
+
         async function savePreviewAsJpeg() {
             if (!lastPrintSnapshot || !lastPrintSnapshot.periods) {
                 throw new Error('snapshot-unavailable');
@@ -3266,7 +3585,7 @@
             };
             var headerImageUrl = options.headerImage && options.headerImageUrl ? String(options.headerImageUrl) : '';
             var footerImageUrl = options.footerImage && options.footerImageUrl ? String(options.footerImageUrl) : '';
-            var canvasWidth = 1600;
+            var canvasWidth = 900;
             var weekdayGap = 6;
             var blockGap = 8;
             var periodGap = 18;
@@ -3338,6 +3657,7 @@
                 totalHeight += headerDrawHeight + 12;
             }
             var removeEmptyDays = !!options.removeEmptyDays;
+            var reduceEmptyDays = !!options.reduceEmptyDays && !removeEmptyDays;
 
             periods.forEach(function(period) {
                 totalHeight += 44;
@@ -3415,6 +3735,7 @@
 
             for (var pi = 0; pi < periods.length; pi += 1) {
                 var period = periods[pi];
+                var emptyWeekdayIndexes = reduceEmptyDays ? getPeriodEmptyWeekdayIndexes(period) : {};
                 ctx.font = '700 ' + scaledCanvasSize(26) + 'px Arial, sans-serif';
                 ctx.fillStyle = palette.heading;
                 ctx.textAlign = 'center';
@@ -3425,9 +3746,16 @@
                 ctx.font = '700 ' + scaledCanvasSize(11) + 'px Arial, sans-serif';
                 ctx.fillStyle = palette.weekday;
                 if (!removeEmptyDays) {
+                    var sparseWeekdayCount = Object.keys(emptyWeekdayIndexes).length;
+                    var fullWeekdayCount = weekdayLabels.length - sparseWeekdayCount;
+                    var reducedEmptyDayWidth = 48;
+                    var expandedWeekdayWidth = fullWeekdayCount > 0
+                        ? Math.floor((canvasWidth - (pagePadding * 2) - (weekdayGap * 6) - (sparseWeekdayCount * reducedEmptyDayWidth)) / fullWeekdayCount)
+                        : dayWidth;
+                    var weekdayX = pagePadding;
                     for (var wdi = 0; wdi < weekdayLabels.length; wdi += 1) {
-                        var weekdayX = pagePadding + (wdi * (dayWidth + weekdayGap));
                         ctx.fillText(weekdayLabels[wdi], weekdayX + 4, cursorY + scaledCanvasSize(11));
+                        weekdayX += (reduceEmptyDays && emptyWeekdayIndexes[wdi] ? reducedEmptyDayWidth : expandedWeekdayWidth) + weekdayGap;
                     }
                     cursorY += weekdayHeight + blockGap;
                 }
@@ -3569,15 +3897,23 @@
                 } else {
                     for (var wi = 0; wi < (period.weeks || []).length; wi += 1) {
                         var week = period.weeks[wi];
+                        var weekCells = week.cells || [];
+                        var sparseCellCount = Object.keys(emptyWeekdayIndexes).length;
+                        var fullCellCount = weekCells.length - sparseCellCount;
+                        var reducedEmptyDayWidth = 48;
+                        var expandedDayWidth = reduceEmptyDays && fullCellCount > 0
+                            ? Math.floor((canvasWidth - (pagePadding * 2) - (weekdayGap * (weekCells.length - 1)) - (sparseCellCount * reducedEmptyDayWidth)) / fullCellCount)
+                            : dayWidth;
 
                         var computedWeekHeight = 80;
-                        (week.cells || []).forEach(function(cell) {
+                        weekCells.forEach(function(cell, cellIndex) {
                             if (!cell || cell.isPadding) {
                                 return;
                             }
+                            var cellWidth = reduceEmptyDays && !emptyWeekdayIndexes[cellIndex] ? expandedDayWidth : dayWidth;
                             var cellHeight = Math.max(80, dayPadding * 2 + 18);
                             (cell.events || []).forEach(function(eventItem, eventIndex) {
-                                cellHeight += measureEventHeight(eventItem, dayWidth);
+                                cellHeight += measureEventHeight(eventItem, cellWidth);
                                 if (eventIndex < cell.events.length - 1) {
                                     cellHeight += 6;
                                 }
@@ -3585,13 +3921,14 @@
                             computedWeekHeight = Math.max(computedWeekHeight, cellHeight);
                         });
 
-                        for (var ci = 0; ci < (week.cells || []).length; ci += 1) {
-                            var cell = week.cells[ci];
-                            var cellX = pagePadding + (ci * (dayWidth + weekdayGap));
+                        var cellX = pagePadding;
+                        for (var ci = 0; ci < weekCells.length; ci += 1) {
+                            var cell = weekCells[ci];
+                            var cellWidth = reduceEmptyDays && emptyWeekdayIndexes[ci] ? reducedEmptyDayWidth : expandedDayWidth;
                             var cellY = cursorY;
 
                             ctx.save();
-                            drawRoundedRect(ctx, cellX, cellY, dayWidth, computedWeekHeight, 8);
+                            drawRoundedRect(ctx, cellX, cellY, cellWidth, computedWeekHeight, 8);
                             ctx.fillStyle = cell && cell.isPadding ? palette.dayPaddingBg : palette.dayBg;
                             ctx.fill();
                             ctx.lineWidth = 1;
@@ -3600,12 +3937,13 @@
                             ctx.restore();
 
                             if (!cell || cell.isPadding) {
+                                cellX += cellWidth + weekdayGap;
                                 continue;
                             }
 
                             var innerX = cellX + dayPadding;
                             var innerY = cellY + dayPadding;
-                            var innerWidth = dayWidth - (dayPadding * 2);
+                            var innerWidth = cellWidth - (dayPadding * 2);
 
                             ctx.font = '700 ' + scaledCanvasSize(13) + 'px Arial, sans-serif';
                             ctx.fillStyle = palette.dayHead;
@@ -3614,7 +3952,7 @@
 
                             for (var ei = 0; ei < (cell.events || []).length; ei += 1) {
                                 var eventItem = cell.events[ei];
-                                var eventHeight = measureEventHeight(eventItem, dayWidth);
+                                var eventHeight = measureEventHeight(eventItem, cellWidth);
                                 var eventX = innerX;
                                 var eventY = innerY;
                                 var eventWidth = innerWidth;
@@ -3696,6 +4034,8 @@
 
                                 innerY += eventHeight + 6;
                             }
+
+                            cellX += cellWidth + weekdayGap;
                         }
 
                         cursorY += computedWeekHeight + blockGap;
@@ -3751,6 +4091,7 @@
             var headerImage = isHeaderImageEnabled();
             var footerImage = isFooterImageEnabled();
             var hideEmptyDays = isHideEmptyDaysEnabled();
+            var reduceEmptyDays = isReduceEmptyDaysEnabled();
             var pagePadding = getPrintPaddingValue(printPadPageInput, 0, 24, 10);
             var dayPadding = getPrintPaddingValue(printPadDayInput, 0, 16, 6);
             var eventPadding = getPrintPaddingValue(printPadEventInput, 0, 16, 6);
@@ -3761,7 +4102,16 @@
             var selectedWeekAnchorDate = getSelectedWeekAnchorDate();
             var periods = mode === 'month'
                 ? collectMonthPeriods(span, details, cover, selectedTypesMap, selectedMonthStartIndex, hideEmptyDays)
-                : collectWeekPeriods(span, details, cover, selectedTypesMap, selectedWeekAnchorDate, hideEmptyDays);
+                : mode === 'day'
+                    ? collectDayPeriods(details, cover, selectedTypesMap, getSelectedDayKeys(), hideEmptyDays)
+                    : collectWeekPeriods(span, details, cover, selectedTypesMap, selectedWeekAnchorDate, hideEmptyDays);
+            var currentPrintTitleSignature = getPrintParameterSignature();
+            if (currentPrintTitleSignature !== printTitleSignature) {
+                printTitleOverrides = {};
+                printTitleSignature = currentPrintTitleSignature;
+                renderPrintPeriodTitleInputs(periods);
+            }
+            applyPrintPeriodTitleOverrides(periods);
 
             var printRenderOptions = {
                 mode: mode,
@@ -3777,11 +4127,13 @@
                 headerImageUrl: (printConfig && printConfig.headerImageUrl) ? String(printConfig.headerImageUrl) : '',
                 footerImageUrl: (printConfig && printConfig.footerImageUrl) ? String(printConfig.footerImageUrl) : '',
                 removeEmptyDays: hideEmptyDays,
+                reduceEmptyDays: reduceEmptyDays,
                 pagePadding: pagePadding,
                 dayPadding: dayPadding,
                 eventPadding: eventPadding,
                 textSize: textSize,
-                pageBreak: pageBreak
+                pageBreak: pageBreak,
+                dayColumns: getPrintDayColumns()
             };
 
             printPreviewFrame.srcdoc = buildPrintDocumentHtml(periods, printRenderOptions);
@@ -4008,6 +4360,14 @@
             });
         }
 
+        if (printDayInput) {
+            printDayInput.addEventListener('change', function() {
+                printSelectedDayKeys = getSelectedDayKeys();
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+
         if (printThemeInput) {
             printThemeInput.addEventListener('change', function() {
                 refreshPrintPreview();
@@ -4053,6 +4413,17 @@
                 queueSavePrintPrefs();
             });
             printSpanInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+
+        if (printDayColumnsInput) {
+            printDayColumnsInput.addEventListener('input', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+            printDayColumnsInput.addEventListener('change', function() {
                 refreshPrintPreview();
                 queueSavePrintPrefs();
             });
@@ -4160,12 +4531,32 @@
 
         if (printHideEmptyDaysInput) {
             printHideEmptyDaysInput.addEventListener('change', function() {
+                syncReduceEmptyDaysOption();
                 refreshPrintPreview();
                 queueSavePrintPrefs();
             });
         }
 
+        if (printReduceEmptyDaysInput) {
+            printReduceEmptyDaysInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+
+        if (printPeriodTitlesWrap) {
+            printPeriodTitlesWrap.addEventListener('input', function(event) {
+                var input = event.target.closest('[data-print-period-title-index]');
+                if (!input) {
+                    return;
+                }
+                printTitleOverrides[input.getAttribute('data-print-period-title-index')] = input.value;
+                refreshPrintPreview();
+            });
+        }
+
         renderPrintTypeFilters();
+        syncReduceEmptyDaysOption();
         renderPrintPresets();
         buildPrintPeriodEntries();
         setDefaultPrintPeriodSelection();

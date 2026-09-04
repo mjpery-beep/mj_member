@@ -367,6 +367,24 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
     }
 
     /**
+     * @param string $slug
+     * @return MemberData|null
+     */
+    public static function getBySlug(string $slug) {
+        $slug = sanitize_title($slug);
+        if ($slug === '') {
+            return null;
+        }
+
+        $table_name = self::getTableName(self::TABLE_NAME);
+        $row = self::getWpdb()->get_row(
+            self::getWpdb()->prepare("SELECT * FROM $table_name WHERE slug = %s LIMIT 1", $slug)
+        );
+
+        return $row ? MemberData::fromRow($row) : null;
+    }
+
+    /**
      * @param int $user_id
      * @return MemberData|null
      */
