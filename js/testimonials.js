@@ -785,9 +785,11 @@
                         let resp;
                         try {
                             resp = JSON.parse(xhr.responseText);
-                        } catch (_) {
-                            const sizeMb = (maxVideoSize / (1024 * 1024)).toFixed(0);
-                            reject(new Error((i18n.videoTooLarge || 'La vidéo est trop volumineuse. Taille maximale : %s.').replace('%s', sizeMb + '\u00a0Mo')));
+                            } catch (_) {
+                                const statusMessage = xhr.status === 413
+                                    ? (i18n.videoTooLarge || 'La vidéo est trop volumineuse.')
+                                    : (xhr.responseText || 'Réponse invalide du serveur.');
+                                reject(new Error(statusMessage));
                             return;
                         }
                         if (resp && resp.success && resp.data && resp.data.id) {
@@ -2926,6 +2928,49 @@
             });
         });
 
+        function plainTextWithLineBreaks(value) {
+            const container = document.createElement('div');
+            container.innerHTML = String(value || '');
+
+            container.querySelectorAll('br').forEach(function(br) {
+                br.replaceWith('\n');
+            });
+
+            container.querySelectorAll('p,div,li,blockquote,pre,h1,h2,h3,h4,h5,h6').forEach(function(block) {
+                block.prepend('\n');
+                block.append('\n');
+            });
+
+            return (container.textContent || '')
+                .replace(/\r\n?/g, '\n')
+                .replace(/[ \t]+\n/g, '\n')
+                .replace(/\n[ \t]+/g, '\n')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+        }
+
+        function renderSocialPublicationResults($form, results) {
+            const $results = $form.find('.mj-publish-fb-form__results');
+            if (!results || typeof results !== 'object' || !$results.length) return;
+
+            const platformLabels = {
+                facebook: 'Facebook',
+                instagram: 'Instagram'
+            };
+            const rows = Object.keys(results).map(function(platform) {
+                const result = results[platform] || {};
+                const isSuccess = result.success === true;
+                const icon = isSuccess ? '\u2714' : '\u2716';
+                const message = result.message || (isSuccess ? 'Publication réussie.' : 'Erreur inconnue.');
+                return '<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid #ddd;">' +
+                    '<span style="color:' + (isSuccess ? '#155724' : '#721c24') + ';font-weight:700;">' + icon + '</span>' +
+                    '<div><strong>' + escapeHtml(platformLabels[platform] || platform) + '</strong><div>' + escapeHtml(message) + '</div></div>' +
+                '</div>';
+            }).join('');
+
+            $results.html('<div style="font-weight:600;margin-bottom:4px;">Résultats de publication</div>' + rows).show();
+        }
+
         // --- Publish on Pery Social (animators only) ---
         $(document).on('click.mjFeed', '[data-action="publish-social"]', function(e) {
             e.preventDefault();
@@ -2957,10 +3002,10 @@
             $(this).closest('.mj-feed-post__owner-dropdown').hide();
 
             const rawContent = $post.find('.mj-feed-post__content').data('raw-content') || '';
-            const cleanContent = rawContent
+            const cleanContent = plainTextWithLineBreaks(rawContent)
                 .replace(/@\{\d+\}/g, '')
                 .replace(/#[a-z0-9][a-z0-9\-]*\b/gi, '')
-                .replace(/\s{2,}/g, ' ')
+                .replace(/[ \t]{2,}/g, ' ')
                 .trim();
             const author = $post.find('.mj-feed-post__author').text().trim();
             const defaultMessage = author
@@ -3015,6 +3060,7 @@
                         '<label class="mj-pery-social-form__check-label"><input type="checkbox" class="mj-pery-social-form__include-event-urls" checked> <span>Ajouter les liens des evenements mentionnes</span></label>' +
                     '</div>' +
                     '<div class="mj-publish-fb-form__status" style="display:none;margin-top:8px;font-size:13px;"></div>' +
+                    '<div class="mj-publish-fb-form__results" style="display:none;margin-top:8px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:4px;font-size:13px;"></div>' +
                     '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' +
                         '<button type="button" class="mj-btn mj-btn--small mj-publish-fb-form__submit" style="background:#1877F2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;">Publier</button>' +
                         '<button type="button" class="mj-btn mj-btn--small mj-btn--ghost mj-publish-fb-form__cancel" style="padding:8px 16px;border-radius:6px;cursor:pointer;">Annuler</button>' +
@@ -3069,26 +3115,42 @@
                     post_url: absolutePostUrl,
                 }).done(function(response) {
                     if (response.success) {
-                        $status.css({ color: '#155724', background: '#d4edda', border: '1px solid #c3e6cb', padding: '6px 10px', borderRadius: '4px' })
-                               .text('âœ“ ' + response.data.message)
+                        const isPartial = response.data && response.data.hasError;
+                        $status.css({
+                            color: isPartial ? '#856404' : '#155724',
+                            background: isPartial ? '#fff3cd' : '#d4edda',
+                            border: isPartial ? '1px solid #ffeeba' : '1px solid #c3e6cb',
+                            padding: '6px 10px',
+                            borderRadius: '4px'
+                        })
+                               .text('\u2714 ' + response.data.message)
                                .show();
-                        setTimeout(function() { $form.remove(); }, 3000);
+                           renderSocialPublicationResults($form, response.data && response.data.results);
+                        if (!isPartial) {
+                            setTimeout(function() { $form.remove(); }, 3000);
+                        }
                     } else {
                         const responseError = response.data && response.data.message ? response.data.message : response.data;
                         $status.css({ color: '#721c24', background: '#f8d7da', border: '1px solid #f5c6cb', padding: '6px 10px', borderRadius: '4px' })
-                               .text('âœ— ' + (responseError || 'Erreur de publication.'))
+                               .text('\u2716 ' + (typeof responseError === 'string' ? responseError : 'Erreur de publication.'))
                                .show();
+                           renderSocialPublicationResults($form, response.data && response.data.results);
                         $submitBtn.prop('disabled', false).text('Publier');
                     }
                 }).fail(function(jqXHR) {
                     let errMsg = 'Erreur reseau.';
+                    let errorData = null;
                     try {
                         const parsed = jqXHR.responseJSON || JSON.parse(jqXHR.responseText || '{}');
-                        if (parsed && parsed.data) errMsg = parsed.data.message || parsed.data;
+                        if (parsed && parsed.data) {
+                            errorData = parsed.data;
+                            errMsg = parsed.data.message || 'Erreur de publication.';
+                        }
                     } catch(e) {}
                     $status.css({ color: '#721c24', background: '#f8d7da', border: '1px solid #f5c6cb', padding: '6px 10px', borderRadius: '4px' })
-                           .text('âœ— ' + errMsg)
+                           .text('\u2716 ' + errMsg)
                            .show();
+                    renderSocialPublicationResults($form, errorData && errorData.results);
                     $submitBtn.prop('disabled', false).text('Publier');
                 });
             });

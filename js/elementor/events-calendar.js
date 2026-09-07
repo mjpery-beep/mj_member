@@ -1619,6 +1619,10 @@
         var printEventColorInput = root.querySelector('[data-print-option="event-color"]');
         var printHeaderImageInput = root.querySelector('[data-print-option="header-image"]');
         var printFooterImageInput = root.querySelector('[data-print-option="footer-image"]');
+        var printHeaderImageSource = root.querySelector('[data-print-image-source="header"]');
+        var printFooterImageSource = root.querySelector('[data-print-image-source="footer"]');
+        var printHeaderImageUrlInput = root.querySelector('[data-print-image-url="header"]');
+        var printFooterImageUrlInput = root.querySelector('[data-print-image-url="footer"]');
         var printPageBreakInput = root.querySelector('[data-print-option="page-break"]');
         var printHideEmptyDaysInput = root.querySelector('[data-print-option="hide-empty-days"]');
         var printReduceEmptyDaysInput = root.querySelector('[data-print-option="reduce-empty-days"]');
@@ -1644,6 +1648,7 @@
         var printWeekEntries = [];
         var printDayEntries = [];
         var printConfig = (config && config.print) ? config.print : {};
+        var printImageHistory = Array.isArray(printConfig.imageHistory) ? printConfig.imageHistory : [];
         var printPrefsEnabled = !!(printConfig && printConfig.userPrefsEnabled && printConfig.ajaxUrl && printConfig.prefsNonce);
         var printPrefsFromServer = (printConfig && printConfig.userPrefs && typeof printConfig.userPrefs === 'object') ? printConfig.userPrefs : null;
         var printPrefsSaveTimer = null;
@@ -2349,6 +2354,109 @@
             return !!(printConfig && printConfig.defaultFooterImage && printConfig.footerImageUrl);
         }
 
+        function getPrintImageUrl(slot) {
+            var source = slot === 'header' ? printHeaderImageSource : printFooterImageSource;
+            var fallback = slot === 'header' ? printConfig.headerImageUrl : printConfig.footerImageUrl;
+            var selectedUrl = source ? (source.getAttribute('data-selected-url') || '') : '';
+            return selectedUrl || (fallback || '');
+        }
+
+        function renderPrintImageHistory() {
+            [
+                { picker: printHeaderImageSource, url: printConfig.headerImageUrl, label: 'Image d’en-tête' },
+                { picker: printFooterImageSource, url: printConfig.footerImageUrl, label: 'Image de pied de page' }
+            ].forEach(function(item) {
+                if (!item.picker) {
+                    return;
+                }
+                var selected = item.picker.getAttribute('data-selected-url') || '';
+                var selectedKey = selected || item.url || '';
+                item.picker.innerHTML = '';
+                var images = [];
+                if (item.url) {
+                    images.push({ url: item.url, label: item.label + ' par défaut' });
+                }
+                printImageHistory.forEach(function(image) {
+                    if (!image || !image.url || image.url === item.url) {
+                        return;
+                    }
+                    images.push({ url: String(image.url), label: String(image.label || image.url) });
+                });
+                images.forEach(function(image) {
+                    var button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'mj-cal-print__image-choice' + (selectedKey === image.url ? ' is-selected' : '');
+                    button.setAttribute('role', 'option');
+                    button.setAttribute('aria-selected', selectedKey === image.url ? 'true' : 'false');
+                    button.setAttribute('data-image-url', image.url);
+                    button.title = image.label;
+                    button.innerHTML = '<img src="' + escapeHtml(image.url) + '" alt="' + escapeHtml(image.label) + '" loading="lazy" />';
+                    button.addEventListener('click', function() {
+                        item.picker.setAttribute('data-selected-url', image.url);
+                        renderPrintImageHistory();
+                        refreshPrintPreview();
+                        queueSavePrintPrefs();
+                    });
+                    item.picker.appendChild(button);
+                });
+            });
+        }
+
+        function addPrintImage(slot) {
+            var input = slot === 'header' ? printHeaderImageUrlInput : printFooterImageUrlInput;
+            var picker = slot === 'header' ? printHeaderImageSource : printFooterImageSource;
+            var url = input ? input.value.trim() : '';
+            if (!/^https?:\/\//i.test(url)) {
+                return;
+            }
+            printImageHistory = printImageHistory.filter(function(image) { return image && image.url !== url; });
+            printImageHistory.push({ url: url, label: url.split('/').pop() || url });
+            if (printImageHistory.length > 20) {
+                printImageHistory = printImageHistory.slice(-20);
+            }
+            renderPrintImageHistory();
+            if (picker) {
+                picker.setAttribute('data-selected-url', url);
+            }
+            refreshPrintPreview();
+            queueSavePrintPrefs();
+        }
+
+        function uploadPrintImage(slot) {
+            if (!window.wp || typeof window.wp.media !== 'function') {
+                return;
+            }
+
+            var picker = slot === 'header' ? printHeaderImageSource : printFooterImageSource;
+            var input = slot === 'header' ? printHeaderImageUrlInput : printFooterImageUrlInput;
+            var frame = window.wp.media({
+                title: slot === 'header' ? 'Choisir une image d’en-tête' : 'Choisir une image de pied de page',
+                button: { text: 'Utiliser cette image' },
+                library: { type: 'image' },
+                multiple: false
+            });
+            frame.on('select', function() {
+                var attachment = frame.state().get('selection').first().toJSON();
+                var url = attachment && (attachment.url || (attachment.sizes && attachment.sizes.large && attachment.sizes.large.url));
+                if (!url || !picker) {
+                    return;
+                }
+                printImageHistory = printImageHistory.filter(function(image) { return image && image.url !== url; });
+                printImageHistory.push({ url: url, label: attachment.filename || attachment.title || url.split('/').pop() || url });
+                if (printImageHistory.length > 20) {
+                    printImageHistory = printImageHistory.slice(-20);
+                }
+                picker.setAttribute('data-selected-url', url);
+                if (input) {
+                    input.value = '';
+                }
+                renderPrintImageHistory();
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+            frame.open();
+        }
+
         function formatTypeLabel(typeKey) {
             if (!typeKey) {
                 return 'Type';
@@ -2501,6 +2609,13 @@
             if (printFooterImageInput && typeof prefs.footerImage !== 'undefined') {
                 printFooterImageInput.checked = !!prefs.footerImage;
             }
+            if (printHeaderImageSource && typeof prefs.headerImageUrl === 'string') {
+                printHeaderImageSource.setAttribute('data-selected-url', prefs.headerImageUrl);
+            }
+            if (printFooterImageSource && typeof prefs.footerImageUrl === 'string') {
+                printFooterImageSource.setAttribute('data-selected-url', prefs.footerImageUrl);
+            }
+            renderPrintImageHistory();
             if (printPageBreakInput && typeof prefs.pageBreak !== 'undefined') {
                 printPageBreakInput.checked = !!prefs.pageBreak;
             }
@@ -2575,6 +2690,8 @@
                 eventColor: isEventColorEnabled(),
                 headerImage: isHeaderImageEnabled(),
                 footerImage: isFooterImageEnabled(),
+                headerImageUrl: getPrintImageUrl('header'),
+                footerImageUrl: getPrintImageUrl('footer'),
                 pageBreak: isPageBreakEnabled(),
                 hideEmptyDays: isHideEmptyDaysEnabled(),
                 reduceEmptyDays: isReduceEmptyDaysEnabled(),
@@ -4124,8 +4241,8 @@
                 eventColor: eventColor,
                 headerImage: headerImage,
                 footerImage: footerImage,
-                headerImageUrl: (printConfig && printConfig.headerImageUrl) ? String(printConfig.headerImageUrl) : '',
-                footerImageUrl: (printConfig && printConfig.footerImageUrl) ? String(printConfig.footerImageUrl) : '',
+                headerImageUrl: getPrintImageUrl('header'),
+                footerImageUrl: getPrintImageUrl('footer'),
                 removeEmptyDays: hideEmptyDays,
                 reduceEmptyDays: reduceEmptyDays,
                 pagePadding: pagePadding,
@@ -4148,6 +4265,7 @@
             buildPrintPeriodEntries();
             setDefaultPrintPeriodSelection();
             renderPrintPeriodSelectors();
+            renderPrintImageHistory();
             if (!hasAppliedPrintPrefs && printPrefsFromServer) {
                 applyPrintPrefsToInputs(printPrefsFromServer);
                 hasAppliedPrintPrefs = true;
@@ -4514,6 +4632,18 @@
                 queueSavePrintPrefs();
             });
         }
+
+        toArray(root.querySelectorAll('[data-calendar-action="add-print-image"]')).forEach(function(button) {
+            button.addEventListener('click', function() {
+                addPrintImage(button.getAttribute('data-print-image-slot') || 'header');
+            });
+        });
+
+        toArray(root.querySelectorAll('[data-calendar-action="upload-print-image"]')).forEach(function(button) {
+            button.addEventListener('click', function() {
+                uploadPrintImage(button.getAttribute('data-print-image-slot') || 'header');
+            });
+        });
 
         if (printFooterImageInput) {
             printFooterImageInput.addEventListener('change', function() {

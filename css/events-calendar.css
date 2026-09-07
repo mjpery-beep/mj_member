@@ -2974,7 +2974,8 @@ button.mj-member-events-calendar__print-button:focus-visible {
 
 .mj-cal-print__option > select,
 .mj-cal-print__option > input[type="number"],
-.mj-cal-print__option > input[type="text"] {
+.mj-cal-print__option > input[type="text"],
+.mj-cal-print__option > input[type="url"] {
     width: 100%;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
@@ -2983,6 +2984,85 @@ button.mj-member-events-calendar__print-button:focus-visible {
     font-size: 0.84rem;
     color: #0f172a;
     background: #ffffff;
+}
+
+.mj-cal-print__image-picker {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.mj-cal-print__image-choice {
+    min-width: 0;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    box-sizing: border-box;
+    padding: 2px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: #ffffff;
+    color: transparent;
+    line-height: 0;
+    cursor: pointer;
+}
+
+.mj-cal-print__image-choice img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 2;
+    object-fit: cover;
+    border-radius: 5px;
+}
+
+.mj-cal-print__image-choice:hover,
+.mj-cal-print__image-choice:focus-visible {
+    border-color: #94a3b8;
+}
+
+.mj-cal-print__image-choice.is-selected {
+    border-color: #0f172a;
+    box-shadow: 0 0 0 1px #0f172a;
+}
+
+.mj-cal-print__option > button.mj-cal-print__ghost {
+    min-height: 34px;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.mj-cal-print__option > button.mj-cal-print__ghost:hover,
+.mj-cal-print__option > button.mj-cal-print__ghost:focus-visible {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.mj-cal-print__option > button.mj-cal-print__upload {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    width: 100%;
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #0f172a !important;
+    color: #ffffff !important;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.mj-cal-print__option > button.mj-cal-print__upload:hover,
+.mj-cal-print__option > button.mj-cal-print__upload:focus-visible {
+    background: #1e293b !important;
+    border-color: #1e293b;
 }
 
 .mj-cal-print__option:has(> input[type="checkbox"]) {

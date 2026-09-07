@@ -56,6 +56,7 @@ final class EventsController implements AjaxHandlerInterface {
 
         $prefs = self::sanitizePrintPreferences($decoded);
         update_user_meta(get_current_user_id(), 'mj_member_calendar_print_prefs', $prefs);
+        self::rememberCalendarPrintImages($prefs);
 
         wp_send_json_success(array('prefs' => $prefs));
     }
@@ -196,6 +197,16 @@ final class EventsController implements AjaxHandlerInterface {
             }
         }
 
+        foreach (array('headerImageUrl', 'footerImageUrl') as $field) {
+            if (!isset($prefs[$field])) {
+                continue;
+            }
+            $url = esc_url_raw((string) $prefs[$field]);
+            if ($url !== '' && preg_match('#^https?://#i', $url)) {
+                $out[$field] = $url;
+            }
+        }
+
         if (isset($prefs['mode'])) {
             $mode = sanitize_key((string) $prefs['mode']);
             if (in_array($mode, array('week', 'month'), true)) {
@@ -283,6 +294,25 @@ final class EventsController implements AjaxHandlerInterface {
         }
 
         return $out;
+    }
+
+    private static function rememberCalendarPrintImages(array $prefs): void {
+        $history = get_user_meta(get_current_user_id(), 'mj_member_calendar_print_image_history', true);
+        $history = is_array($history) ? $history : array();
+        foreach (array('headerImageUrl', 'footerImageUrl') as $field) {
+            $url = isset($prefs[$field]) ? (string) $prefs[$field] : '';
+            if ($url === '') {
+                continue;
+            }
+            $history = array_values(array_filter($history, static function ($image) use ($url) {
+                return !is_array($image) || (string) ($image['url'] ?? '') !== $url;
+            }));
+            $history[] = array(
+                'url' => $url,
+                'label' => basename((string) wp_parse_url($url, PHP_URL_PATH)),
+            );
+        }
+        update_user_meta(get_current_user_id(), 'mj_member_calendar_print_image_history', array_slice($history, -20));
     }
 
     /**

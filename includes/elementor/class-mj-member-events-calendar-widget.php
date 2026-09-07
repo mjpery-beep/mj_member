@@ -745,6 +745,23 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
         $print_default_header_image = $print_header_image_url !== '';
         $print_default_footer_image = $print_footer_image_url !== '';
+        $print_image_history = get_user_meta(get_current_user_id(), 'mj_member_calendar_print_image_history', true);
+        if (!is_array($print_image_history)) {
+            $print_image_history = array();
+        }
+        $print_image_history = array_values(array_filter(array_map(static function ($image) {
+            if (!is_array($image) || empty($image['url'])) {
+                return null;
+            }
+            $url = esc_url_raw((string) $image['url']);
+            if ($url === '' || !preg_match('#^https?://#i', $url)) {
+                return null;
+            }
+            return array(
+                'url' => $url,
+                'label' => sanitize_text_field((string) ($image['label'] ?? $url)),
+            );
+        }, $print_image_history)));
 
         $cover_width_settings = self::normalize_cover_width_settings($settings);
 
@@ -3480,6 +3497,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
 
         if ($show_print_button) {
+            if (function_exists('wp_enqueue_media')) {
+                wp_enqueue_media();
+            }
             echo '<div class="mj-cal-print" data-calendar-print-modal hidden>';
             echo '<div class="mj-cal-print__backdrop" data-calendar-print-close></div>';
             echo '<div class="mj-cal-print__panel" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr($instance_id) . '-print-title">';
@@ -3532,8 +3552,22 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<span>' . esc_html__('Afficher l’image d’en-tête', 'mj-member') . '</span>';
             echo '</label>';
             echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Image d’en-tête', 'mj-member') . '</span>';
+            echo '<div class="mj-cal-print__image-picker" data-print-image-source="header" data-selected-url="" role="listbox" aria-label="' . esc_attr__('Images d’en-tête', 'mj-member') . '"></div>';
+            echo '<button type="button" class="mj-cal-print__upload" data-calendar-action="upload-print-image" data-print-image-slot="header">' . esc_html__('Choisir dans la médiathèque', 'mj-member') . '</button>';
+            echo '<input type="url" placeholder="URL externe (optionnel)" data-print-image-url="header" />';
+            echo '<button type="button" class="mj-cal-print__ghost" data-calendar-action="add-print-image" data-print-image-slot="header">' . esc_html__('Ajouter à l’historique', 'mj-member') . '</button>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
             echo '<input type="checkbox" data-print-option="footer-image"' . ($print_default_footer_image ? ' checked' : '') . ' />';
             echo '<span>' . esc_html__('Afficher l’image de pied de page', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<span>' . esc_html__('Image de pied de page', 'mj-member') . '</span>';
+            echo '<div class="mj-cal-print__image-picker" data-print-image-source="footer" data-selected-url="" role="listbox" aria-label="' . esc_attr__('Images de pied de page', 'mj-member') . '"></div>';
+            echo '<button type="button" class="mj-cal-print__upload" data-calendar-action="upload-print-image" data-print-image-slot="footer">' . esc_html__('Choisir dans la médiathèque', 'mj-member') . '</button>';
+            echo '<input type="url" placeholder="URL externe (optionnel)" data-print-image-url="footer" />';
+            echo '<button type="button" class="mj-cal-print__ghost" data-calendar-action="add-print-image" data-print-image-slot="footer">' . esc_html__('Ajouter à l’historique', 'mj-member') . '</button>';
             echo '</label>';
             echo '<label class="mj-cal-print__option">';
             echo '<span>' . esc_html__('Padding page', 'mj-member') . '</span>';
@@ -3664,6 +3698,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'defaultFooterImage' => $print_default_footer_image,
                 'headerImageUrl' => $print_header_image_url,
                 'footerImageUrl' => $print_footer_image_url,
+                'imageHistory' => $print_image_history,
                 'defaultSpan' => $print_default_span,
                 'defaultPageBreak' => $print_default_page_break,
                 'defaultHideEmptyDays' => $print_default_hide_empty_days,

@@ -650,10 +650,12 @@ final class TestimonialsController implements AjaxHandlerInterface {
         $allowed_video_types = array('video/mp4', 'video/webm', 'video/quicktime');
 
         $file_type = wp_check_filetype($file['name']);
+        $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         $mime_type = isset($file_type['type']) ? $file_type['type'] : '';
 
         if ($media_type === 'video') {
-            if (!in_array($mime_type, $allowed_video_types, true)) {
+            $allowed_video_extensions = array('mp4', 'webm', 'mov');
+            if (!in_array($extension, $allowed_video_extensions, true) || ($mime_type !== '' && !in_array($mime_type, $allowed_video_types, true))) {
                 wp_send_json_error(__('Format vidéo non supporté. Utilisez MP4, WebM ou MOV.', 'mj-member'), 400);
             }
             // Limit video size to 100MB
@@ -682,7 +684,22 @@ final class TestimonialsController implements AjaxHandlerInterface {
         }
 
         // Process upload
+        $video_mimes_filter = null;
+        if ($media_type === 'video') {
+            $video_mimes_filter = static function ($mimes) {
+                $mimes['mp4'] = 'video/mp4';
+                $mimes['webm'] = 'video/webm';
+                $mimes['mov'] = 'video/quicktime';
+                return $mimes;
+            };
+            add_filter('upload_mimes', $video_mimes_filter);
+        }
+
         $attachment_id = media_handle_upload('file', 0);
+
+        if ($video_mimes_filter !== null) {
+            remove_filter('upload_mimes', $video_mimes_filter);
+        }
 
         if (is_wp_error($attachment_id)) {
             wp_send_json_error($attachment_id->get_error_message(), 500);
@@ -1708,6 +1725,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
         $publisher    = new MjSocialMediaPublisher();
         $results      = array();
         $has_error    = false;
+        $success_count = 0;
         $settings_url = admin_url('admin.php?page=mj_settings');
 
         if (in_array('facebook', $platforms, true)) {
@@ -1724,6 +1742,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
                 $has_error = true;
             } else {
                 $results['facebook'] = array('success' => true, 'message' => $fb_result['message'] ?? __('Publié !', 'mj-member'));
+                $success_count++;
             }
         }
 
@@ -1742,16 +1761,25 @@ final class TestimonialsController implements AjaxHandlerInterface {
                 $has_error = true;
             } else {
                 $results['instagram'] = array('success' => true, 'message' => $ig_result['message'] ?? __('Publié !', 'mj-member'));
+                $success_count++;
             }
         }
 
-        wp_send_json_success(array(
+        $response_data = array(
             'results'  => $results,
             'hasError' => $has_error,
-            'message'  => $has_error
+            'message'  => $success_count === 0
+                ? __('Aucune publication n\'a été envoyée. Vérifiez les résultats ci-dessous.', 'mj-member')
+                : ($has_error
                 ? __('Publication partielle — vérifiez les résultats ci-dessous.', 'mj-member')
-                : __('Publié avec succès sur toutes les plateformes !', 'mj-member'),
-        ));
+                : __('Publié avec succès sur toutes les plateformes !', 'mj-member')),
+        );
+
+        if ($success_count === 0) {
+            wp_send_json_error($response_data);
+        }
+
+        wp_send_json_success($response_data);
     }
 
     /**
@@ -1877,7 +1905,7 @@ final class TestimonialsController implements AjaxHandlerInterface {
                 }
             }
             $result[] = array(
-                'id'        => $id,
+                'id'        => (int) $member->id,
                 'name'      => $name,
                 'initial'   => mb_strtoupper(mb_substr($member->first_name, 0, 1)),
                 'avatarUrl' => $avatar_url,
