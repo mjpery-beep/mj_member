@@ -5061,7 +5061,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         $desktop = isset($widths['desktop']) ? (int) $widths['desktop'] : 120;
         $tablet = isset($widths['tablet']) ? (int) $widths['tablet'] : 110;
-        $mobile = isset($widths['mobile']) ? (int) $widths['mobile'] : 90;
+        $mobile = 90;
 
         $desktop = min(500, max(10, $desktop));
         $tablet = min(500, max(10, $tablet));

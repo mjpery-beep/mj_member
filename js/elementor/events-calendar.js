@@ -1271,8 +1271,7 @@
             var dateParts = dayKey.split('-');
             var dateObj = new Date(parseInt(dateParts[0], 10), parseInt(dateParts[1], 10) - 1, parseInt(dateParts[2], 10));
             var dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-            var monthNames = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-            return dayNames[dateObj.getDay()] + ' ' + dateObj.getDate() + ' ' + monthNames[dateObj.getMonth()];
+            return dayNames[dateObj.getDay()] + ' ' + dateObj.getDate();
         }
 
         function setActiveMobileDay(mobileList, dayKey) {
@@ -1371,13 +1370,24 @@
             });
         }
 
-        function scrollMobileListToDay(mobileList, dayKey) {
+        function scrollMobileListToDay(mobileList, dayKey, smooth) {
             var section = mobileList.querySelector('[data-calendar-mobile-list-day="' + dayKey + '"]');
             if (!section) {
                 return;
             }
             setActiveMobileDay(mobileList, dayKey);
-            mobileList.scrollTo({ top: section.offsetTop - mobileList.offsetTop, behavior: 'smooth' });
+            mobileList.scrollTo({
+                top: section.offsetTop - mobileList.offsetTop,
+                behavior: smooth === false ? 'auto' : 'smooth'
+            });
+        }
+
+        function getTodayDayKey() {
+            var today = new Date();
+            var year = today.getFullYear();
+            var month = String(today.getMonth() + 1).padStart(2, '0');
+            var day = String(today.getDate()).padStart(2, '0');
+            return year + '-' + month + '-' + day;
         }
 
         function syncMobileListDay(mobileList) {
@@ -1393,6 +1403,7 @@
 
         mobileLists.forEach(function(mobileList) {
             buildMobileList(mobileList);
+            scrollMobileListToDay(mobileList, getTodayDayKey(), false);
             mobileList.addEventListener('scroll', function() {
                 syncMobileListDay(mobileList);
             }, { passive: true });
