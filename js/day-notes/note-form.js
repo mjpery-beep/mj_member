@@ -328,6 +328,8 @@
 
         var stateDateMode = useState('single');
         var stateSingleDate = useState(note ? note.note_date || '' : '');
+        var stateStartTime = useState(note ? (note.start_time || '') : '');
+        var stateEndTime = useState(note ? (note.end_time || '') : '');
         var stateMultipleDates = useState([]);
         var statePendingDate = useState('');
         var stateWeeklyDays = useState([]);
@@ -350,6 +352,8 @@
 
         var dateMode = stateDateMode[0], setDateMode = stateDateMode[1];
         var singleDate = stateSingleDate[0], setSingleDate = stateSingleDate[1];
+        var startTime = stateStartTime[0], setStartTime = stateStartTime[1];
+        var endTime = stateEndTime[0], setEndTime = stateEndTime[1];
         var multipleDates = stateMultipleDates[0], setMultipleDates = stateMultipleDates[1];
         var pendingDate = statePendingDate[0], setPendingDate = statePendingDate[1];
         var weeklyDays = stateWeeklyDays[0], setWeeklyDays = stateWeeklyDays[1];
@@ -373,6 +377,8 @@
             setGroup(note && note.visibility ? note.visibility : 'staff');
             setDateMode('single');
             setSingleDate(note ? note.note_date || '' : '');
+            setStartTime(note ? (note.start_time || '') : '');
+            setEndTime(note ? (note.end_time || '') : '');
             setMultipleDates([]);
             setPendingDate('');
             setWeeklyDays([]);
@@ -448,6 +454,10 @@
                 setError(getString(strings, 'dateRequired', 'Au moins une date est requise.'));
                 return;
             }
+            if (endTime && !startTime || (startTime && endTime && endTime <= startTime)) {
+                setError(getString(strings, 'timeRangeInvalid', 'L’heure de fin doit être postérieure à l’heure de début.'));
+                return;
+            }
 
             setSaving(true);
             setError('');
@@ -459,6 +469,8 @@
                 content: content,
                 emoji: emoji,
                 color: color,
+                start_time: startTime,
+                end_time: endTime,
                 note_type_id: noteTypeId || '',
                 visibility: visMode === 'member' ? 'private' : group,
                 member_ids: JSON.stringify(visMode === 'member' ? memberIds : []),
@@ -484,7 +496,7 @@
                     setSaving(false);
                     setError(err.message);
                 });
-        }, [ajaxUrl, nonce, title, content, emoji, color, noteTypeId, visMode, group, memberIds, media, isEdit, note, resolveDates, onSaved, onClose]);
+        }, [ajaxUrl, nonce, title, content, emoji, color, startTime, endTime, noteTypeId, visMode, group, memberIds, media, isEdit, note, resolveDates, onSaved, onClose]);
 
         var handleDelete = useCallback(function () {
             if (!isEdit || !ajaxUrl) return;
@@ -632,6 +644,20 @@
                     onWeeklyStartChange: setWeeklyStart,
                     onWeeklyEndChange: setWeeklyEnd,
                 }),
+            ]),
+
+            h('div', { class: 'mj-day-note-form__group' }, [
+                h('label', { class: 'mj-regmgr-form__label' }, 'Heure (facultatif)'),
+                h('div', { class: 'mj-day-note-form__range' }, [
+                    h('label', null, [
+                        'De ',
+                        h('input', { type: 'time', class: 'mj-regmgr-form__input', value: startTime, onChange: function (e) { setStartTime(e.target.value); } }),
+                    ]),
+                    h('label', null, [
+                        'à ',
+                        h('input', { type: 'time', class: 'mj-regmgr-form__input', value: endTime, onChange: function (e) { setEndTime(e.target.value); } }),
+                    ]),
+                ]),
             ]),
 
             h('div', { class: 'mj-day-note-form__group' }, [

@@ -83,6 +83,19 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         return null;
     }
 
+    private static function validate_time_range(?string $startTime, ?string $endTime): ?WP_Error
+    {
+        if ($startTime === null && $endTime !== null) {
+            return new WP_Error('mj_agenda_note_invalid_time_range', __('L’heure de début est nécessaire si une heure de fin est renseignée.', 'mj-member'));
+        }
+
+        if ($startTime !== null && $endTime !== null && $endTime <= $startTime) {
+            return new WP_Error('mj_agenda_note_invalid_time_range', __('L’heure de fin doit être postérieure à l’heure de début.', 'mj-member'));
+        }
+
+        return null;
+    }
+
     private static function sanitize_color($value): ?string
     {
         $value = is_string($value) ? trim($value) : '';
@@ -332,14 +345,21 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             return new WP_Error('mj_agenda_note_invalid_date', __('Date de la note invalide.', 'mj-member'));
         }
 
+        $startTime = self::sanitize_time($data['start_time'] ?? null);
+        $endTime = self::sanitize_time($data['end_time'] ?? null);
+        $timeError = self::validate_time_range($startTime, $endTime);
+        if ($timeError) {
+            return $timeError;
+        }
+
         global $wpdb;
 
         $insert = array(
             'author_member_id' => $authorMemberId,
             'wp_user_id' => isset($data['wp_user_id']) ? max(0, (int) $data['wp_user_id']) : get_current_user_id(),
             'note_date' => $noteDate,
-            'start_time' => self::sanitize_time($data['start_time'] ?? null),
-            'end_time' => self::sanitize_time($data['end_time'] ?? null),
+            'start_time' => $startTime,
+            'end_time' => $endTime,
             'title' => isset($data['title']) ? (sanitize_text_field((string) $data['title']) ?: null) : null,
             'emoji' => self::sanitize_emoji($data['emoji'] ?? null),
             'content' => $content,
@@ -482,6 +502,12 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         if (array_key_exists('end_time', $data)) {
             $fields['end_time'] = self::sanitize_time($data['end_time']);
             $formats[] = '%s';
+        }
+        if (array_key_exists('start_time', $data) && array_key_exists('end_time', $data)) {
+            $timeError = self::validate_time_range($fields['start_time'], $fields['end_time']);
+            if ($timeError) {
+                return $timeError;
+            }
         }
         if (array_key_exists('title', $data)) {
             $fields['title'] = sanitize_text_field((string) $data['title']) ?: null;

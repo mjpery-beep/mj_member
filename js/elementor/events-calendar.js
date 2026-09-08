@@ -652,6 +652,13 @@
             titleEl.textContent = note.title || (note.content || '').slice(0, 40);
             row.appendChild(titleEl);
 
+            if (note.start_time) {
+                var timeEl = document.createElement('time');
+                timeEl.className = 'mj-member-events-calendar__day-note-time';
+                timeEl.textContent = note.start_time + (note.end_time ? ' - ' + note.end_time : '');
+                row.appendChild(timeEl);
+            }
+
             var thumbUrl = note.media && note.media[0] ? note.media[0].thumbUrl : '';
             if (thumbUrl) {
                 var thumbEl = document.createElement('img');
@@ -797,6 +804,11 @@
                     });
                     Object.keys(byDay).forEach(function (day) {
                         byDay[day].sort(function (a, b) {
+                            var aTime = a.start_time || '99:99';
+                            var bTime = b.start_time || '99:99';
+                            if (aTime !== bTime) {
+                                return aTime < bTime ? -1 : 1;
+                            }
                             if (a.created_at === b.created_at) return 0;
                             return a.created_at < b.created_at ? 1 : -1;
                         });
@@ -1598,6 +1610,8 @@
         var next = root.querySelector('[data-calendar-nav="next"]');
         var label = root.querySelector('[data-calendar-active-label]');
         var todayBtn = root.querySelector('[data-calendar-action="today"]');
+        var filtersToggle = root.querySelector('[data-calendar-action="toggle-filters"]');
+        var toolbar = root.querySelector('.mj-member-events-calendar__toolbar');
         var openPrintBtn = root.querySelector('[data-calendar-action="open-print"]');
         var printNowBtn = root.querySelector('[data-calendar-action="print-now"]');
         var saveImageBtn = root.querySelector('[data-calendar-action="save-image"]');
@@ -4408,6 +4422,16 @@
                     activeIndex = todayIndex;
                     sync();
                 }
+            });
+        }
+
+        if (filtersToggle && toolbar) {
+            filtersToggle.addEventListener('click', function() {
+                var isExpanded = toolbar.classList.toggle('is-filters-expanded');
+                filtersToggle.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+                filtersToggle.querySelector('.screen-reader-text').textContent = isExpanded
+                    ? 'Masquer les filtres'
+                    : 'Afficher les filtres';
             });
         }
 

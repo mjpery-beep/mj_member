@@ -739,7 +739,7 @@ final class AgendaController implements AjaxHandlerInterface
         foreach ($rows as $note) {
             $isOwner = (int) $note['author_member_id'] === $memberId && $memberId > 0;
             $day = $note['note_date'];
-            $timed = $note['start_time'] && $note['end_time'];
+            $timed = !empty($note['start_time']);
             $label = $note['title'] !== '' ? $note['title'] : wp_trim_words($note['content'], 8, '…');
 
             $out[] = array(
@@ -748,7 +748,7 @@ final class AgendaController implements AjaxHandlerInterface
                 'kind' => 'internal_note',
                 'title' => '📝 ' . $label,
                 'start' => $timed ? $day . ' ' . $note['start_time'] : $day,
-                'end' => $timed ? $day . ' ' . $note['end_time'] : $day,
+                'end' => $timed ? $day . ' ' . ($note['end_time'] ?: $note['start_time']) : $day,
                 'allDay' => !$timed,
                 'color' => $note['color'],
                 'editable' => $isOwner || $canEditOthers,
@@ -759,6 +759,8 @@ final class AgendaController implements AjaxHandlerInterface
                     'content' => $note['content'],
                     'visibility' => $note['visibility'],
                     'author_name' => $note['author_name'],
+                    'start_time' => $note['start_time'],
+                    'end_time' => $note['end_time'],
                     'is_owner' => $isOwner,
                 ),
             );

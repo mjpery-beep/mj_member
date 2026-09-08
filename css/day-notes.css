@@ -298,6 +298,13 @@
     flex-shrink: 0;
 }
 
+.mj-day-note-form .mj-regmgr-emoji-field__input {
+    width: 2.6em !important;
+    min-width: 2.6em !important;
+    flex: 0 0 2.6em !important;
+    text-align: center;
+}
+
 .mj-day-note-form .mj-regmgr-emoji-field__picker {
     width: 320px !important;
     max-width: 320px !important;
@@ -309,6 +316,17 @@
     resize: vertical;
     white-space: pre-wrap;
     overflow-wrap: break-word;
+}
+
+@media (max-width: 600px) {
+    .mj-day-note-form__row {
+        flex-wrap: wrap;
+    }
+
+    .mj-day-note-form__title {
+        flex: 1 1 100%;
+        width: 100%;
+    }
 }
 
 .mj-day-note-form__group {
@@ -526,6 +544,13 @@
     text-overflow: unset;
     white-space: normal;
     word-break: break-word;
+}
+
+.mj-member-events-calendar__day-note-time {
+    flex: 0 0 auto;
+    color: #667085;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .mj-member-events-calendar__day-note-thumb {

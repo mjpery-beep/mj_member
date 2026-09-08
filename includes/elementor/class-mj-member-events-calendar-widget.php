@@ -2405,12 +2405,18 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 echo '<button type="button" class="mj-member-events-calendar__nav-button" data-calendar-nav="next" aria-label="' . esc_attr__('Mois suivant', 'mj-member') . '"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>';
                 echo '</div>';
                 echo '<button type="button" class="mj-member-events-calendar__today-button" data-calendar-action="today">' . esc_html__('Aujourd\'hui', 'mj-member') . '</button>';
+                if ($show_toolbar_actions && !empty($sorted_filters)) {
+                    echo '<button type="button" class="mj-member-events-calendar__filters-toggle" data-calendar-action="toggle-filters" aria-expanded="false" aria-controls="' . esc_attr($instance_id) . '-filters">';
+                    echo '<span class="screen-reader-text">' . esc_html__('Afficher les filtres', 'mj-member') . '</span>';
+                    echo '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+                    echo '</button>';
+                }
                 echo '</div>';
             }
             if ($show_toolbar_actions || $show_print_button) {
                 echo '<div class="mj-member-events-calendar__toolbar-actions">';
                 if ($show_toolbar_actions && !empty($sorted_filters)) {
-                    echo '<div class="mj-member-events-calendar__filters" role="group" aria-label="' . esc_attr__('Filtrer par type d’événement', 'mj-member') . '">';
+                    echo '<div id="' . esc_attr($instance_id) . '-filters" class="mj-member-events-calendar__filters" role="group" aria-label="' . esc_attr__('Filtrer par type d’événement', 'mj-member') . '">';
                     foreach ($sorted_filters as $filter_key => $filter_meta) {
                         $filter_label = isset($filter_meta['label']) && $filter_meta['label'] !== '' ? (string) $filter_meta['label'] : ucfirst((string) $filter_key);
                         $filter_color = isset($filter_meta['color']) ? self::normalize_hex_color_value($filter_meta['color']) : '';

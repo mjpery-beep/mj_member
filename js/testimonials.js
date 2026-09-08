@@ -3457,7 +3457,7 @@
         });
 
         // Click on post to navigate to single view (only in list mode)
-        $(document).on('click', '.mj-feed-post-wrapper:not(.mj-feed-post-wrapper--single)', function(e) {
+        $(document).on('click', '.mj-feed-post-wrapper:not(.mj-feed-post-wrapper--single) .mj-feed-post__meta, .mj-feed-post-wrapper:not(.mj-feed-post-wrapper--single) .mj-feed-post__avatar', function(e) {
             // Don't navigate if clicking on interactive elements
             const $target = $(e.target);
             const isInteractive = $target.closest('button, a, input, textarea, video, .mj-feed-post__actions, .mj-feed-post__reactions-bar, .mj-feed-post__comments, .mj-feed-post__reaction-picker, .mj-feed-post__share-picker, .mj-feed-post__photo, .mj-feed-post__owner-menu, .mj-feed-post__edit-form').length > 0;
