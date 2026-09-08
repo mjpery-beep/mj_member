@@ -735,6 +735,12 @@ function mj_settings_page() {
         $nc_members_folder = isset($_POST['mj_member_nextcloud_members_folder'])
             ? sanitize_text_field(wp_unslash($_POST['mj_member_nextcloud_members_folder']))
             : '';
+        $nc_testimonials_folder = isset($_POST['mj_member_nextcloud_testimonials_folder'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_member_nextcloud_testimonials_folder']))
+            : 'temoignages';
+        $nc_testimonials_share_group = isset($_POST['mj_member_nextcloud_testimonials_share_group'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_member_nextcloud_testimonials_share_group']))
+            : 'membres';
         $nc_groups = isset($_POST['mj_member_nextcloud_groups'])
             ? sanitize_textarea_field(wp_unslash($_POST['mj_member_nextcloud_groups']))
             : '';
@@ -747,6 +753,8 @@ function mj_settings_page() {
         update_option('mj_member_nextcloud_root_folder', $nc_root_folder);
         update_option('mj_member_nextcloud_events_folder', $nc_events_folder);
         update_option('mj_member_nextcloud_members_folder', $nc_members_folder);
+        update_option('mj_member_nextcloud_testimonials_folder', $nc_testimonials_folder);
+        update_option('mj_member_nextcloud_testimonials_share_group', $nc_testimonials_share_group);
         update_option('mj_member_nextcloud_groups', $nc_groups);
 
         // --- Photo import settings ---
@@ -1284,6 +1292,14 @@ function mj_settings_page() {
     $nc_root_folder_option = get_option('mj_member_nextcloud_root_folder', '');
     $nc_events_folder_option = get_option('mj_member_nextcloud_events_folder', '');
     $nc_members_folder_option = get_option('mj_member_nextcloud_members_folder', '');
+    $nc_testimonials_folder_option = get_option('mj_member_nextcloud_testimonials_folder', 'temoignages');
+    if (!is_string($nc_testimonials_folder_option) || $nc_testimonials_folder_option === '') {
+        $nc_testimonials_folder_option = 'temoignages';
+    }
+    $nc_testimonials_share_group_option = get_option('mj_member_nextcloud_testimonials_share_group', '');
+    if (!is_string($nc_testimonials_share_group_option) || $nc_testimonials_share_group_option === '') {
+        $nc_testimonials_share_group_option = implode(', ', Config::nextcloudGroups());
+    }
     $nc_groups_option = get_option('mj_member_nextcloud_groups', '');
     $nc_groups_resolved = Config::nextcloudGroups();
     $nc_is_ready = Config::nextcloudIsReady();

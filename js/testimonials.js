@@ -563,6 +563,7 @@
             this.$videoPlayback = $form.find('.mj-testimonials__video-playback');
             this.$submitBtn = $form.find('.mj-testimonials__submit');
             this.$status = $form.find('.mj-testimonials__form-status');
+            this.$dropZone = $form.closest('.mj-testimonials__form-section');
             this.$photoIdsInput = $form.find('input[name="photo_ids"]');
             this.$videoIdInput = $form.find('input[name="video_id"]');
             this.isPhotoBoothMode = String($form.data('photo-booth')) === '1';
@@ -617,6 +618,9 @@
             if (allowFileUpload) {
                 this.$addPhotoBtn.on('click', () => this.$photoInput.trigger('click'));
                 this.$photoInput.on('change', (e) => this.handlePhotoSelect(e));
+                this.$dropZone.on('dragenter dragover', (e) => this.handleDragOver(e));
+                this.$dropZone.on('dragleave', (e) => this.handleDragLeave(e));
+                this.$dropZone.on('drop', (e) => this.handleDrop(e));
             }
             this.$photosGrid.on('click', '.mj-testimonials__photo-remove', (e) => this.removePhoto(e));
             
@@ -674,6 +678,36 @@
             }
 
             const files = e.target.files;
+            this.processSelectedFiles(files);
+            this.$photoInput.val('');
+        }
+
+        handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.originalEvent && e.originalEvent.dataTransfer) {
+                e.originalEvent.dataTransfer.dropEffect = 'copy';
+            }
+            this.$dropZone.addClass('is-dragover');
+        }
+
+        handleDragLeave(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.target === this.$dropZone[0] || !this.$dropZone.has(e.target).length) {
+                this.$dropZone.removeClass('is-dragover');
+            }
+        }
+
+        handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.$dropZone.removeClass('is-dragover');
+            const dataTransfer = e.originalEvent && e.originalEvent.dataTransfer;
+            this.processSelectedFiles(dataTransfer ? dataTransfer.files : null);
+        }
+
+        processSelectedFiles(files) {
             if (!files || files.length === 0) return;
 
             const allFiles = Array.from(files);
@@ -696,9 +730,6 @@
                     photoFiles.slice(0, remaining).forEach(file => this.uploadPhoto(file));
                 }
             }
-
-            // Reset input to allow selecting same file again
-            this.$photoInput.val('');
         }
 
         async uploadPhoto(file) {
@@ -2955,16 +2986,21 @@
 
             const platformLabels = {
                 facebook: 'Facebook',
-                instagram: 'Instagram'
+                facebook_post: 'Post Facebook',
+                instagram: 'Instagram',
+                instagram_reel: 'Instagram Reel'
             };
             const rows = Object.keys(results).map(function(platform) {
                 const result = results[platform] || {};
                 const isSuccess = result.success === true;
                 const icon = isSuccess ? '\u2714' : '\u2716';
                 const message = result.message || (isSuccess ? 'Publication réussie.' : 'Erreur inconnue.');
+                const label = platform.indexOf('facebook_reel_') === 0
+                    ? 'Reel Facebook'
+                    : (platform.indexOf('instagram_reel_') === 0 ? 'Reel Instagram' : (platformLabels[platform] || platform));
                 return '<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid #ddd;">' +
                     '<span style="color:' + (isSuccess ? '#155724' : '#721c24') + ';font-weight:700;">' + icon + '</span>' +
-                    '<div><strong>' + escapeHtml(platformLabels[platform] || platform) + '</strong><div>' + escapeHtml(message) + '</div></div>' +
+                    '<div><strong>' + escapeHtml(label) + '</strong><div>' + escapeHtml(message) + '</div></div>' +
                 '</div>';
             }).join('');
 
@@ -3018,9 +3054,12 @@
             photos = parseMediaAttribute($post, 'data-photos');
             photos = Array.isArray(photos) ? photos.filter(function(photo) { return photo && parseInt(photo.id, 10) > 0; }) : [];
 
+            let videos = parseMediaAttribute($post, 'data-videos');
+            videos = Array.isArray(videos) ? videos.filter(function(video) { return video && parseInt(video.id, 10) > 0; }) : [];
+
             const platformLabels = {
-                facebook: 'Facebook',
-                instagram: 'Instagram'
+                facebook: 'Post Facebook',
+                instagram: 'Post Instagram'
             };
 
             const platformHtml = configuredPlatforms.map(function(platform) {
@@ -3043,6 +3082,23 @@
                   '</div>'
                 : '<div class="mj-pery-social-form__section-label">Photos</div><p style="margin:0;color:#6b7280;font-size:13px;">Aucune photo attachee a ce temoignage.</p>';
 
+                        const videosHtml = videos.length
+                                ? '<div class="mj-pery-social-form__section-label">Vidéo à publier</div>' +
+                                    '<div class="mj-pery-social-form__photos">' +
+                                        videos.map(function(video) {
+                                                const url = video.url || '';
+                                                return '<button type="button" class="mj-pery-social-form__photo-thumb is-selected mj-pery-social-form__video-thumb" data-video-id="' + parseInt(video.id, 10) + '">' +
+                                                        '<video src="' + escapeHtml(url) + '" muted playsinline preload="metadata"></video>' +
+                                                        '<span class="mj-pery-social-form__photo-check" aria-hidden="true">&#10003;</span>' +
+                                            '</button>' +
+                                            '<div class="mj-pery-social-form__video-targets" data-video-targets="' + parseInt(video.id, 10) + '">' +
+                                                '<label class="mj-pery-social-form__check-label"><input type="checkbox" class="mj-pery-social-form__video-reel" value="facebook"> Publier Reel Facebook</label>' +
+                                                '<label class="mj-pery-social-form__check-label"><input type="checkbox" class="mj-pery-social-form__video-reel" value="instagram"> Publier Reel Instagram</label>' +
+                                            '</div>';
+                                        }).join('') +
+                                    '</div>'
+                                : '';
+
             const $form = $(
                 '<div class="mj-publish-fb-form mj-pery-social-form" style="margin:10px 0;padding:12px;background:#f0f4ff;border:1px solid #b3c6ff;border-radius:8px;">' +
                     '<div style="font-weight:600;margin-bottom:8px;color:#1877F2;display:flex;align-items:center;gap:6px;">' +
@@ -3054,6 +3110,7 @@
                     '<div class="mj-pery-social-form__section-label">Message</div>' +
                     '<textarea class="mj-publish-fb-form__message" rows="5" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;resize:vertical;">' + escapeHtml(defaultMessage) + '</textarea>' +
                     photosHtml +
+                    videosHtml +
                     '<div class="mj-pery-social-form__section-label">Liens</div>' +
                     '<div style="display:grid;gap:6px;margin-top:4px;">' +
                         '<label class="mj-pery-social-form__check-label"><input type="checkbox" class="mj-pery-social-form__include-post-url" checked> <span>Ajouter le lien du temoignage</span></label>' +
@@ -3072,6 +3129,9 @@
             $form.find('.mj-publish-fb-form__message').focus();
 
             $form.on('click', '.mj-pery-social-form__photo-thumb', function() {
+                if ($(this).hasClass('mj-pery-social-form__video-thumb')) {
+                    $form.find('.mj-pery-social-form__video-thumb').not(this).removeClass('is-selected');
+                }
                 $(this).toggleClass('is-selected');
             });
 
@@ -3087,16 +3147,29 @@
                     return $(this).val();
                 }).get();
 
-                if (!platforms.length) {
-                    alert('Selectionnez au moins une plateforme.');
-                    return;
-                }
-
                 const selectedPhotoIds = $form.find('.mj-pery-social-form__photo-thumb.is-selected').map(function() {
                     return parseInt($(this).data('photo-id'), 10) || 0;
                 }).get().filter(function(id) {
                     return id > 0;
                 });
+                const selectedVideoIds = $form.find('.mj-pery-social-form__video-thumb.is-selected').map(function() {
+                    return parseInt($(this).data('video-id'), 10) || 0;
+                }).get().filter(function(id) {
+                    return id > 0;
+                });
+                const videoReelTargets = {};
+                $form.find('.mj-pery-social-form__video-targets').each(function() {
+                    const videoId = parseInt($(this).data('video-targets'), 10) || 0;
+                    const targets = $(this).find('.mj-pery-social-form__video-reel:checked').map(function() {
+                        return $(this).val();
+                    }).get();
+                    if (videoId > 0 && targets.length) videoReelTargets[videoId] = targets;
+                });
+
+                if (!platforms.length && !Object.keys(videoReelTargets).length) {
+                    alert('Sélectionnez un post ou un Reel à publier.');
+                    return;
+                }
 
                 const $submitBtn = $(this);
                 $submitBtn.prop('disabled', true).text('Publication...');
@@ -3110,6 +3183,8 @@
                     message: message,
                     platforms: platforms,
                     photo_ids: JSON.stringify(selectedPhotoIds),
+                    video_ids: JSON.stringify(selectedVideoIds),
+                    video_reel_targets: JSON.stringify(videoReelTargets),
                     include_post_url: $form.find('.mj-pery-social-form__include-post-url').is(':checked') ? '1' : '',
                     include_event_urls: $form.find('.mj-pery-social-form__include-event-urls').is(':checked') ? '1' : '',
                     post_url: absolutePostUrl,
@@ -3466,7 +3541,7 @@
                 return;
             }
             
-            const postUrl = $(this).data('post-url');
+            const postUrl = $(this).closest('.mj-feed-post-wrapper').data('post-url');
             if (postUrl) {
                 window.location.href = postUrl;
             }

@@ -35,6 +35,8 @@ final class Config
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_USER', '');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_PASSWORD', '');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_ROOT_FOLDER', '');
+        self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_TESTIMONIALS_FOLDER', 'temoignages');
+        self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_TESTIMONIALS_SHARE_GROUP', 'membres');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_GROUPS', '');
         self::defineIfMissing('MJ_MEMBER_PAYMENT_EXPIRATION_DAYS', self::DEFAULT_PAYMENT_EXPIRATION);
         self::defineIfMissing('MJ_MEMBER_DATA_RETENTION_DAYS', 1095);
@@ -282,6 +284,44 @@ final class Config
 
         $option = \get_option('mj_member_nextcloud_root_folder', '');
         return is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
+    }
+
+    public static function nextcloudTestimonialsFolder(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_NEXTCLOUD_TESTIMONIALS_FOLDER');
+        if ($defined !== '') {
+            return trim(\sanitize_text_field($defined), '/');
+        }
+
+        $option = \get_option('mj_member_nextcloud_testimonials_folder', 'temoignages');
+        if (!is_string($option) || $option === '') {
+            return 'temoignages';
+        }
+
+        return trim(\sanitize_text_field($option), '/');
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    public static function nextcloudTestimonialsShareGroups(): array
+    {
+        $option = \get_option('mj_member_nextcloud_testimonials_share_group', '');
+        $raw = is_string($option) ? trim($option) : '';
+        if ($raw === '') {
+            return self::nextcloudGroups();
+        }
+
+        $parts = preg_split('/[\r\n,;]+/', $raw);
+        if (!is_array($parts)) {
+            return array();
+        }
+
+        $groups = array_map(static function ($group): string {
+            return trim(\sanitize_text_field((string) $group));
+        }, $parts);
+
+        return array_values(array_unique(array_filter($groups)));
     }
 
     /**

@@ -147,15 +147,173 @@ final class MjSocialMediaPublisher
     }
 
     /**
+     * Publish a video to a Facebook page.
+     *
+     * @param string $message Caption/description.
+     * @param string $link Event URL.
+    * @param string $videoUrl Public video URL.
+    * @param string $videoPath Optional local file path for binary upload.
+     * @return array|WP_Error
+     */
+    public function publishVideoToFacebook($message, $link, $videoUrl)
+    {
+        if (!$this->facebookPageToken || !$this->facebookPageId) {
+            return new \WP_Error(
+                'mj_facebook_not_configured',
+                __('Facebook n\'est pas configuré (token ou ID de page manquant).', 'mj-member')
+            );
+        }
+
+        $videoUrl = esc_url_raw((string) $videoUrl);
+        if ($videoUrl === '' || !wp_http_validate_url($videoUrl)) {
+            return new \WP_Error('mj_facebook_invalid_video', __('URL vidéo invalide.', 'mj-member'));
+        }
+
+        $description = trim((string) $message);
+        $link = trim((string) $link);
+        if ($link !== '' && strpos($description, $link) === false) {
+            $description = $description !== '' ? $description . "\n\n" . $link : $link;
+        }
+
+        $result = $this->makeApiRequestForm(
+            self::FACEBOOK_API_BASE . '/' . $this->facebookPageId . '/videos',
+            array(
+                'file_url' => $videoUrl,
+                'description' => $description,
+            ),
+            $this->facebookPageToken,
+            'POST'
+        );
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return array(
+            'success' => true,
+            'message' => __('Vidéo publiée sur Facebook !', 'mj-member'),
+            'postId' => isset($result['id']) ? (string) $result['id'] : '',
+        );
+    }
+
+    /**
+     * Publish a hosted video as a Facebook Page Reel.
+     *
+     * @param string $message Caption/description.
+     * @param string $link Event URL.
+     * @param string $videoUrl Public video URL.
+     * @return array|WP_Error
+     */
+    public function publishReelToFacebook($message, $link, $videoUrl, $videoPath = '')
+    {
+        if (!$this->facebookPageToken || !$this->facebookPageId) {
+            return new \WP_Error('mj_facebook_not_configured', __('Facebook n\'est pas configuré.', 'mj-member'));
+        }
+
+        $videoUrl = esc_url_raw((string) $videoUrl);
+        if ($videoUrl === '' || !wp_http_validate_url($videoUrl)) {
+            return new \WP_Error('mj_facebook_invalid_video', __('URL vidéo invalide.', 'mj-member'));
+        }
+
+        $description = trim((string) $message);
+        $link = trim((string) $link);
+        if ($link !== '' && strpos($description, $link) === false) {
+            $description = $description !== '' ? $description . "\n\n" . $link : $link;
+        }
+
+        $start = $this->makeApiRequestForm(
+            self::FACEBOOK_API_BASE . '/' . $this->facebookPageId . '/video_reels',
+            array('upload_phase' => 'start'),
+            $this->facebookPageToken,
+            'POST'
+        );
+        if (is_wp_error($start)) {
+            return $start;
+        }
+
+        $videoId = isset($start['video_id']) ? (string) $start['video_id'] : '';
+        $uploadUrl = isset($start['upload_url']) ? (string) $start['upload_url'] : '';
+        if ($videoId === '' || $uploadUrl === '') {
+            return new \WP_Error('mj_facebook_reel_upload_init', __('Facebook n\'a pas fourni de session d\'upload Reel.', 'mj-member'));
+        }
+
+        $uploadHeaders = array(
+            'Authorization' => 'OAuth ' . $this->facebookPageToken,
+            'offset' => '0',
+        );
+        $uploadArgs = array(
+            'headers' => $uploadHeaders,
+            'timeout' => 180,
+        );
+        $videoPath = (string) $videoPath;
+        if ($videoPath !== '' && is_readable($videoPath) && filesize($videoPath) > 0) {
+            $videoContents = file_get_contents($videoPath);
+            if ($videoContents === false) {
+                return new \WP_Error('mj_facebook_reel_file_read', __('Le fichier vidéo ne peut pas être lu par le serveur.', 'mj-member'));
+            }
+            $uploadArgs['headers']['Content-Type'] = 'application/octet-stream';
+            $uploadArgs['headers']['file_size'] = (string) filesize($videoPath);
+            $uploadArgs['body'] = $videoContents;
+        } else {
+            $uploadArgs['headers']['file_url'] = $videoUrl;
+        }
+        $upload = wp_remote_post($uploadUrl, $uploadArgs);
+        if (is_wp_error($upload)) {
+            return new \WP_Error('mj_facebook_reel_upload', $upload->get_error_message());
+        }
+        $upload_status = wp_remote_retrieve_response_code($upload);
+        $upload_body = wp_remote_retrieve_body($upload);
+        $upload_data = json_decode($upload_body, true);
+        $upload_error = is_array($upload_data) && isset($upload_data['error']) && is_array($upload_data['error'])
+            ? $upload_data['error']
+            : array();
+        $upload_message = isset($upload_error['message']) ? (string) $upload_error['message'] : '';
+        if ($upload_status < 200 || $upload_status >= 300 || (is_array($upload_data) && isset($upload_data['success']) && !$upload_data['success'])) {
+            if ($upload_message === '' && is_array($upload_data) && isset($upload_data['message'])) {
+                $upload_message = (string) $upload_data['message'];
+            }
+            if ($upload_message === '') {
+                $upload_message = __('Facebook n\'a pas pu téléverser la vidéo du Reel. Vérifiez que l\'URL vidéo est publique et que la vidéo respecte le format Reel.', 'mj-member');
+            }
+            return new \WP_Error('mj_facebook_reel_upload', sanitize_text_field($upload_message), array(
+                'status' => $upload_status,
+                'apiCode' => isset($upload_error['code']) ? (int) $upload_error['code'] : 0,
+            ));
+        }
+
+        $finish = $this->makeApiRequestForm(
+            self::FACEBOOK_API_BASE . '/' . $this->facebookPageId . '/video_reels',
+            array(
+                'video_id' => $videoId,
+                'upload_phase' => 'finish',
+                'video_state' => 'PUBLISHED',
+                'description' => $description,
+            ),
+            $this->facebookPageToken,
+            'POST'
+        );
+        if (is_wp_error($finish)) {
+            return $finish;
+        }
+
+        return array(
+            'success' => true,
+            'message' => __('Reel Facebook publié !', 'mj-member'),
+            'postId' => $videoId,
+        );
+    }
+
+    /**
      * Publish to Instagram (business account) via the new Instagram Graph API.
      * Requires a two-step flow: create media container, then publish it.
      *
      * @param string $caption The caption/description.
      * @param string $link The event URL (appended to caption).
-     * @param string $imageUrl Optional image URL for the post.
+    * @param string $imageUrl Optional image URL for the post.
+    * @param string $videoUrl Optional video URL; publishes an Instagram Reel when set.
      * @return array{success: bool, message: string, postId?: string}|WP_Error
      */
-    public function publishToInstagram($caption, $link, $imageUrl = '')
+    public function publishToInstagram($caption, $link, $imageUrl = '', $videoUrl = '')
     {
         if (!$this->instagramAccessToken || !$this->instagramBusinessAccountId) {
             return new \WP_Error(
@@ -179,12 +337,17 @@ final class MjSocialMediaPublisher
             $fullCaption = $fullCaption !== '' ? $fullCaption . "\n\n" . $link : $link;
         }
 
-        // Instagram requires an image for feed posts — text-only posts are not supported.
+        $videoUrl = esc_url_raw((string) $videoUrl);
+        if ($videoUrl !== '' && !wp_http_validate_url($videoUrl)) {
+            return new \WP_Error('mj_instagram_invalid_video', __('URL vidéo invalide.', 'mj-member'));
+        }
+
+        // Instagram requires media for posts; a video is published as a Reel.
         $imageUrl = trim((string) $imageUrl);
-        if ($imageUrl === '') {
+        if ($videoUrl === '' && $imageUrl === '') {
             return new \WP_Error(
                 'mj_instagram_no_image',
-                __('Instagram nécessite une image pour publier. Sélectionnez au moins une photo.', 'mj-member')
+                __('Instagram nécessite une photo ou une vidéo pour publier.', 'mj-member')
             );
         }
 
@@ -192,10 +355,13 @@ final class MjSocialMediaPublisher
 
         // Step 1 — Create media container
         $containerEndpoint = self::INSTAGRAM_API_BASE . '/' . $igUserId . '/media';
-        $containerPayload  = array(
-            'image_url' => $imageUrl,
-            'caption'   => $fullCaption,
-        );
+        $containerPayload = array('caption' => $fullCaption);
+        if ($videoUrl !== '') {
+            $containerPayload['media_type'] = 'REELS';
+            $containerPayload['video_url'] = $videoUrl;
+        } else {
+            $containerPayload['image_url'] = $imageUrl;
+        }
 
         $containerResult = $this->makeApiRequest($containerEndpoint, $containerPayload, $this->instagramAccessToken, 'POST');
         if (is_wp_error($containerResult)) {
@@ -222,7 +388,7 @@ final class MjSocialMediaPublisher
         $postId = isset($publishResult['id']) ? (string) $publishResult['id'] : '';
         return array(
             'success' => true,
-            'message' => __('Publication réussie !', 'mj-member'),
+            'message' => $videoUrl !== '' ? __('Réel publié sur Instagram !', 'mj-member') : __('Publication réussie !', 'mj-member'),
             'postId'  => $postId,
         );
     }

@@ -336,6 +336,66 @@ final class MjNextcloud
     }
 
     /**
+    * Share a folder with a Nextcloud group, if it is not already shared.
+     *
+     * @return true|WP_Error
+     */
+    public function shareFolderWithGroup(string $folderPath, string $groupId)
+    {
+        $folderPath = $this->sanitizePath($folderPath);
+        $groupId = trim(sanitize_text_field($groupId));
+        if ($folderPath === '' || $groupId === '') {
+            return new WP_Error('mj_nextcloud_share_invalid', __('Dossier ou groupe Nextcloud invalide.', 'mj-member'));
+        }
+
+        $url = $this->baseUrl . '/ocs/v2.php/apps/files_sharing/api/v1/shares';
+        $response = $this->request('GET', add_query_arg([
+            'path'     => '/' . $folderPath,
+            'reshares' => 'true',
+        ], $url), [
+            'headers' => ['Accept' => 'application/json'],
+        ]);
+
+        if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) < 400) {
+            $payload = json_decode((string) wp_remote_retrieve_body($response), true);
+            $shares = is_array($payload['ocs']['data'] ?? null) ? $payload['ocs']['data'] : [];
+            foreach ($shares as $share) {
+                if (is_array($share) && (string) ($share['share_type'] ?? '') === '1' && (string) ($share['share_with'] ?? '') === $groupId) {
+                    return true;
+                }
+            }
+        }
+
+        $response = $this->request('POST', $url, [
+            'headers' => ['Content-Type' => 'application/x-www-form-urlencoded'],
+            'body' => http_build_query([
+                'path'       => '/' . $folderPath,
+                'shareType'  => 1,
+                'shareWith'  => $groupId,
+                'permissions' => 31,
+            ]),
+        ]);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $httpCode = (int) wp_remote_retrieve_response_code($response);
+        $meta = $this->parseOcsMeta(wp_remote_retrieve_body($response));
+        if ($httpCode >= 200 && $httpCode < 300 && in_array($meta['statuscode'], [100, 200], true)) {
+            return true;
+        }
+
+        $detail = $meta['message'] !== '' ? ' ' . $meta['message'] : '';
+        return new WP_Error('mj_nextcloud_share_failed', sprintf(
+            __('Impossible de partager le dossier avec le groupe "%s" (HTTP %d).%s', 'mj-member'),
+            $groupId,
+            $httpCode,
+            $detail
+        ));
+    }
+
+    /**
      * Set a user's avatar via the WebDAV avatars endpoint.
      *
      * @param  string $userId  Nextcloud username.
@@ -1226,15 +1286,25 @@ final class MjNextcloud
      *
      * @return array{statuscode:int,status:string,message:string}
      */
-    private function parseOcsMeta(string $xml): array
+    private function parseOcsMeta(string $body): array
     {
         $default = ['statuscode' => 0, 'status' => '', 'message' => ''];
-        if ($xml === '') {
+        if ($body === '') {
             return $default;
         }
 
+        $json = json_decode($body, true);
+        if (is_array($json) && isset($json['ocs']['meta'])) {
+            $meta = $json['ocs']['meta'];
+            return [
+                'statuscode' => (int) ($meta['statuscode'] ?? 0),
+                'status'     => trim((string) ($meta['status'] ?? '')),
+                'message'    => trim((string) ($meta['message'] ?? '')),
+            ];
+        }
+
         $prev = libxml_use_internal_errors(true);
-        $doc  = simplexml_load_string($xml);
+        $doc  = simplexml_load_string($body);
         libxml_use_internal_errors($prev);
 
         if ($doc === false) {

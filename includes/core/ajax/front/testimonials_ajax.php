@@ -8,11 +8,13 @@
 namespace Mj\Member\Core\Ajax\Front;
 
 use Mj\Member\Core\Contracts\AjaxHandlerInterface;
+use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjTestimonials;
 use Mj\Member\Classes\Crud\MjTestimonialReactions;
 use Mj\Member\Classes\Crud\MjTestimonialComments;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\MjNextcloud;
 use Mj\Member\Classes\MjSocialMediaPublisher;
 
 if (!defined('ABSPATH')) {
@@ -705,6 +707,8 @@ final class TestimonialsController implements AjaxHandlerInterface {
             wp_send_json_error($attachment_id->get_error_message(), 500);
         }
 
+        $this->uploadMediaToNextcloud((int) $attachment_id, $media_type);
+
         // Get URL for response
         $url = '';
         $thumb = '';
@@ -721,6 +725,67 @@ final class TestimonialsController implements AjaxHandlerInterface {
             'thumb' => $thumb ?: $url,
             'type' => $media_type,
         ));
+    }
+
+    /**
+    * Copy testimonial media to the shared Nextcloud folder.
+     *
+     * WordPress remains the source of truth for the testimonial media. A
+     * Nextcloud failure is logged but must not prevent the testimonial upload.
+     */
+    private function uploadMediaToNextcloud(int $attachment_id, string $media_type): void {
+        if ($attachment_id <= 0 || !MjNextcloud::isAvailable()) {
+            return;
+        }
+
+        $file_path = get_attached_file($attachment_id);
+        if (!is_string($file_path) || $file_path === '' || !is_readable($file_path)) {
+            error_log(sprintf('[mj-member][testimonials] Impossible de lire le média #%d pour Nextcloud.', $attachment_id));
+            return;
+        }
+
+        $content = file_get_contents($file_path);
+        if ($content === false) {
+            error_log(sprintf('[mj-member][testimonials] Impossible de charger le média #%d pour Nextcloud.', $attachment_id));
+            return;
+        }
+
+        $file_name = sanitize_file_name((string) basename($file_path));
+        $extension = strtolower((string) pathinfo($file_name, PATHINFO_EXTENSION));
+        $base_name = sanitize_file_name((string) pathinfo($file_name, PATHINFO_FILENAME));
+        $default_name = $media_type === 'video' ? 'video' : 'photo';
+        $file_name = 'testimonial-' . $attachment_id . '-' . ($base_name !== '' ? $base_name : $default_name);
+        if ($extension !== '') {
+            $file_name .= '.' . $extension;
+        }
+
+        $mime_type = (string) get_post_mime_type($attachment_id);
+        if ($mime_type === '') {
+            $mime_type = 'application/octet-stream';
+        }
+
+        $nextcloud = MjNextcloud::make();
+        if (is_wp_error($nextcloud)) {
+            error_log('[mj-member][testimonials] Nextcloud indisponible: ' . $nextcloud->get_error_message());
+            return;
+        }
+
+        $folder_path = trim(implode('/', array_filter(array(
+            Config::nextcloudRootFolder(),
+            Config::nextcloudTestimonialsFolder(),
+        ))), '/');
+        $result = $nextcloud->uploadContent($folder_path, $file_name, $content, $mime_type);
+        if (is_wp_error($result)) {
+            error_log('[mj-member][testimonials] Échec de la copie Nextcloud: ' . $result->get_error_message());
+            return;
+        }
+
+        foreach (Config::nextcloudTestimonialsShareGroups() as $share_group) {
+            $share_result = $nextcloud->shareFolderWithGroup($folder_path, $share_group);
+            if (is_wp_error($share_result)) {
+                error_log('[mj-member][testimonials] Échec du partage Nextcloud: ' . $share_result->get_error_message());
+            }
+        }
     }
 
     /**
@@ -1672,13 +1737,10 @@ final class TestimonialsController implements AjaxHandlerInterface {
         if (isset($_POST['platforms']) && is_array($_POST['platforms'])) {
             foreach ($_POST['platforms'] as $p) {
                 $p = sanitize_key($p);
-                if (in_array($p, array('facebook', 'instagram'), true)) {
+                if (in_array($p, array('facebook', 'facebook_post', 'instagram', 'instagram_reel'), true)) {
                     $platforms[] = $p;
                 }
             }
-        }
-        if (empty($platforms)) {
-            wp_send_json_error(__('Sélectionnez au moins une plateforme.', 'mj-member'));
         }
 
         // Parse selected photo IDs → URLs
@@ -1697,6 +1759,53 @@ final class TestimonialsController implements AjaxHandlerInterface {
                 $image_urls[] = (string) $src[0];
             }
         }
+
+        // Parse selected video IDs and resolve only actual video attachments.
+        $video_media = array();
+        $selected_video_ids = array();
+        if (isset($_POST['video_ids'])) {
+            $raw = wp_unslash($_POST['video_ids']);
+            $decoded = is_string($raw) ? json_decode($raw, true) : (is_array($raw) ? $raw : array());
+            if (is_array($decoded)) {
+                $selected_video_ids = array_values(array_filter(array_map('intval', $decoded)));
+            }
+        }
+        foreach ($selected_video_ids as $video_id) {
+            $video_url = wp_get_attachment_url($video_id);
+            $mime_type = get_post_mime_type($video_id);
+            if ($video_url && strpos((string) $mime_type, 'video/') === 0) {
+                $video_media[$video_id] = array(
+                    'url' => (string) $video_url,
+                    'path' => (string) get_attached_file($video_id),
+                );
+            }
+        }
+
+        $video_reel_targets = array();
+        if (isset($_POST['video_reel_targets'])) {
+            $raw_targets = wp_unslash($_POST['video_reel_targets']);
+            $decoded_targets = is_string($raw_targets) ? json_decode($raw_targets, true) : (is_array($raw_targets) ? $raw_targets : array());
+            if (is_array($decoded_targets)) {
+                foreach ($decoded_targets as $video_id => $targets) {
+                    $video_id = (int) $video_id;
+                    if ($video_id <= 0 || !isset($video_media[$video_id]) || !is_array($targets)) {
+                        continue;
+                    }
+                    $valid_targets = array_values(array_intersect($targets, array('facebook', 'instagram')));
+                    if (!empty($valid_targets)) {
+                        $video_reel_targets[$video_id] = array_unique($valid_targets);
+                    }
+                }
+            }
+        }
+
+        if (empty($platforms) && empty($video_reel_targets)) {
+            wp_send_json_error(__('Sélectionnez un post ou un Reel à publier.', 'mj-member'));
+        }
+
+        $video_urls = array_values(array_map(function ($media) {
+            return $media['url'];
+        }, $video_media));
 
         // Build link block
         $include_post_url    = !empty($_POST['include_post_url']);
@@ -1728,12 +1837,13 @@ final class TestimonialsController implements AjaxHandlerInterface {
         $success_count = 0;
         $settings_url = admin_url('admin.php?page=mj_settings');
 
-        if (in_array('facebook', $platforms, true)) {
+        if (in_array('facebook', $platforms, true) || in_array('facebook_post', $platforms, true)) {
             $fb_result = $publisher->publishToFacebook($message, $link, $image_urls);
             if (is_wp_error($fb_result)) {
                 $err_data     = $fb_result->get_error_data() ?: array();
                 $token_expired = !empty($err_data['tokenExpired']);
-                $results['facebook'] = array(
+                $facebook_result_key = in_array('facebook_post', $platforms, true) ? 'facebook_post' : 'facebook';
+                $results[$facebook_result_key] = array(
                     'success'      => false,
                     'message'      => $fb_result->get_error_message(),
                     'tokenExpired' => $token_expired,
@@ -1741,7 +1851,8 @@ final class TestimonialsController implements AjaxHandlerInterface {
                 );
                 $has_error = true;
             } else {
-                $results['facebook'] = array('success' => true, 'message' => $fb_result['message'] ?? __('Publié !', 'mj-member'));
+                $facebook_result_key = in_array('facebook_post', $platforms, true) ? 'facebook_post' : 'facebook';
+                $results[$facebook_result_key] = array('success' => true, 'message' => $fb_result['message'] ?? __('Publié !', 'mj-member'));
                 $success_count++;
             }
         }
@@ -1762,6 +1873,33 @@ final class TestimonialsController implements AjaxHandlerInterface {
             } else {
                 $results['instagram'] = array('success' => true, 'message' => $ig_result['message'] ?? __('Publié !', 'mj-member'));
                 $success_count++;
+            }
+        }
+
+        foreach ($video_reel_targets as $video_id => $targets) {
+            foreach ($targets as $target) {
+                $video_url = $video_media[$video_id]['url'];
+                $result_key = $target . '_reel_' . $video_id;
+                $reel_result = $target === 'facebook'
+                    ? $publisher->publishReelToFacebook($message, $link, $video_url, $video_media[$video_id]['path'])
+                    : $publisher->publishToInstagram($message, $link, '', $video_url);
+
+                if (is_wp_error($reel_result)) {
+                    $err_data = $reel_result->get_error_data() ?: array();
+                    $has_error = true;
+                    $results[$result_key] = array(
+                        'success' => false,
+                        'message' => $reel_result->get_error_message(),
+                        'tokenExpired' => !empty($err_data['tokenExpired']),
+                        'settingsUrl' => !empty($err_data['tokenExpired']) ? $settings_url : '',
+                    );
+                } else {
+                    $results[$result_key] = array(
+                        'success' => true,
+                        'message' => $reel_result['message'] ?? __('Reel publié !', 'mj-member'),
+                    );
+                    $success_count++;
+                }
             }
         }
 

@@ -271,6 +271,16 @@ if (!defined('ABSPATH')) {
                                             <input type="text" id="mj-nc-members-folder" name="mj_member_nextcloud_members_folder" value="<?php echo esc_attr($nc_members_folder_option); ?>" class="regular-text" placeholder="membres" />
                                             <small style="color:#64748b; display:block; margin-top:4px;">Défaut : <code>membres</code>. Chemin : <em>racine/<strong>membres</strong>/login/photos|documents/</em></small>
                                         </div>
+                                        <div style="flex:1 1 180px;">
+                                            <label for="mj-nc-testimonials-folder" style="font-weight:600; display:block; margin-bottom:4px;">Sous-dossier témoignages</label>
+                                            <input type="text" id="mj-nc-testimonials-folder" name="mj_member_nextcloud_testimonials_folder" value="<?php echo esc_attr($nc_testimonials_folder_option); ?>" class="regular-text" placeholder="temoignages" />
+                                            <small style="color:#64748b; display:block; margin-top:4px;">Défaut : <code>temoignages</code>. Chemin : <em>racine/<strong>temoignages</strong>/</em></small>
+                                        </div>
+                                        <div style="flex:1 1 180px;">
+                                            <label for="mj-nc-testimonials-share-group" style="font-weight:600; display:block; margin-bottom:4px;">Groupe autorisé à voir les témoignages</label>
+                                            <input type="text" id="mj-nc-testimonials-share-group" name="mj_member_nextcloud_testimonials_share_group" value="<?php echo esc_attr($nc_testimonials_share_group_option); ?>" class="regular-text" placeholder="membres" />
+                                            <small style="color:#64748b; display:block; margin-top:4px;">Groupes séparés par des virgules. Par défaut, les groupes Nextcloud déjà configurés sont utilisés.</small>
+                                        </div>
                                     </div>
                                 </div>
                                 </div>
