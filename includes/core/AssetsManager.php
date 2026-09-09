@@ -591,15 +591,25 @@ final class AssetsManager
                 wp_enqueue_style('mj-member-registration-manager');
                 self::requirePackage('leave-requests');
                 wp_enqueue_style('mj-member-events-calendar');
-                wp_enqueue_script('mj-member-events-calendar');
                 // Fonctionnalités d'édition (création, notes de jour, éditeur d'occurrence) :
                 // events-calendar.js les détecte via `window.MjX` et reste fonctionnel sans elles
                 // (voir 'events-calendar-readonly'), donc on les enqueue explicitement ici.
+                // Elles doivent être enqueue AVANT mj-member-events-calendar : ce dernier n'a
+                // pas de dépendance déclarée dessus (pour garder la variante readonly légère),
+                // et lit `window.MjCreateEventModal` de façon synchrone dès son exécution.
                 wp_enqueue_script('mj-member-regmgr-services');
                 wp_enqueue_style('mj-member-create-event-modal');
                 wp_enqueue_script('mj-member-create-event-modal');
                 wp_enqueue_style('mj-member-day-notes-form');
                 wp_enqueue_script('mj-member-day-notes-form');
+                // Le mini-agenda du header (class-mj-member-header-widget.php) charge
+                // 'events-calendar-readonly' sur (quasi) toutes les pages et peut donc avoir
+                // déjà mis 'mj-member-events-calendar' en file AVANT ce bloc, ce qui fige sa
+                // position dans la queue WP_Scripts malgré l'ordre d'enqueue ci-dessus
+                // (wp_enqueue_script() est idempotent et ne déplace pas un handle déjà en
+                // file). On le retire puis le ré-enqueue pour le forcer après create-event-modal.
+                wp_dequeue_script('mj-member-events-calendar');
+                wp_enqueue_script('mj-member-events-calendar');
                 break;
 
             case 'events-calendar-readonly':

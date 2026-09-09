@@ -405,13 +405,6 @@
         if (!dropdown) return;
 
         dropdown.addEventListener('click', function (e) {
-            var filterBtn = e.target.closest('[data-notif-filter]');
-            if (filterBtn) {
-                e.preventDefault();
-                e.stopPropagation();
-                self._toggleNotificationFilter(filterBtn.getAttribute('data-notif-filter') || '');
-                return;
-            }
             var btn = e.target.closest('[data-notif-action]');
             if (!btn) return;
             e.stopPropagation();
@@ -1123,17 +1116,30 @@
             badge.hidden = !(count > 0);
             var button = badge.closest('[data-notif-filter]');
             if (button) {
+                button.hidden = !(count > 0);
                 button.classList.toggle('mj-header-notif-filter--active', self._notificationFilter === category);
                 button.setAttribute('aria-selected', self._notificationFilter === category ? 'true' : 'false');
             }
         });
     };
 
-    MjHeader.prototype._toggleNotificationFilter = function (type) {
-        this._notificationFilter = this._notificationFilter === type ? '' : type;
+    MjHeader.prototype._toggleNotificationFilter = function (category, filterBtn) {
+        this._notificationFilter = this._notificationFilter === category ? '' : category;
         if (this._notificationData) {
-            var list = this.el.querySelector('[data-mj-notif-list]');
+            var list = this.el.querySelector('.mj-header-dropdown__content');
             if (list) this._renderNotifications(list, this._notificationData);
+            return;
+        }
+
+        var dropdown = this.el.querySelector('[data-mj-header-dropdown="notifications"]');
+        if (dropdown && !this._loaded.notifications) {
+            this._loadNotifications(dropdown);
+            return;
+        }
+
+        if (filterBtn) {
+            var list = dropdown && dropdown.querySelector('.mj-header-dropdown__content');
+            if (list) this._renderNotifications(list, { notifications: [], unread_counts: {} });
         }
     };
 
@@ -1775,6 +1781,19 @@
             el._mjHeader = new MjHeader(el, config);
         });
     }
+
+    document.addEventListener('click', function (e) {
+        var filterBtn = e.target.closest('[data-notif-filter]');
+        if (!filterBtn) return;
+
+        var header = filterBtn.closest('[data-mj-header-id]');
+        var instance = header && header._mjHeader;
+        if (!instance) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        instance._toggleNotificationFilter(filterBtn.getAttribute('data-notif-filter') || '', filterBtn);
+    }, true);
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initAll);

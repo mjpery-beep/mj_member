@@ -17,10 +17,21 @@
 
 .mj-header-notif-filters {
     display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    min-height: 52px;
+    max-height: 52px;
     gap: 6px;
     padding: 8px 14px;
     border-bottom: 1px solid #e5e7eb;
     overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.mj-header-notif-filters::-webkit-scrollbar {
+    display: none;
 }
 
 .mj-header .mj-header-notif-filter {
@@ -31,6 +42,7 @@
     width: 36px;
     height: 36px;
     min-width: 36px;
+    flex: 0 0 36px;
     margin: 0;
     padding: 0;
     color: #64748b !important;
@@ -47,6 +59,10 @@
     -webkit-appearance: none;
 }
 
+.mj-header .mj-header-notif-filter[hidden] {
+    display: none !important;
+}
+
 .mj-header .mj-header-notif-filter:hover,
 .mj-header .mj-header-notif-filter:focus-visible,
 .mj-header .mj-header-notif-filter--active {
@@ -61,6 +77,7 @@
     width: 20px;
     height: 20px;
     object-fit: contain;
+    pointer-events: none;
 }
 
 .mj-header-notif-filter__badge {
