@@ -1234,6 +1234,33 @@ $this->add_control('nextcloud_label', array(
             }
         }
 
+        $notification_filters = array();
+        foreach ($acc_link_sections as $account_section) {
+            foreach (($account_section['links'] ?? array()) as $account_link) {
+                $types = isset($account_link['notification_types']) && is_array($account_link['notification_types'])
+                    ? array_values(array_filter(array_map('sanitize_key', $account_link['notification_types'])))
+                    : array();
+                if (empty($types)) {
+                    continue;
+                }
+
+                $link_icon = isset($account_link['icon']) && is_array($account_link['icon'])
+                    ? $account_link['icon']
+                    : array();
+                foreach ($types as $type) {
+                    if (isset($notification_filters[$type])) {
+                        continue;
+                    }
+                    $notification_filters[$type] = array(
+                        'type'      => $type,
+                        'label'     => wp_strip_all_tags((string) ($account_link['label'] ?? $type)),
+                        'icon_html' => isset($link_icon['html']) ? wp_kses_post($link_icon['html']) : '',
+                        'icon_url'  => isset($link_icon['url']) ? esc_url_raw($link_icon['url']) : '',
+                    );
+                }
+            }
+        }
+
         // Avatar de l'utilisateur courant — même logique que le widget Login
         $acc_avatar_url = '';
         if ($is_logged_in && !$is_preview && function_exists('mj_member_login_component_get_member_avatar')) {
@@ -1275,6 +1302,7 @@ $this->add_control('nextcloud_label', array(
             'loginBtnText'         => esc_html($acc_label_out),
             'isPreview'            => $is_preview,
             'isLoggedIn'           => $is_logged_in,
+            'notificationFilters'  => array_values($notification_filters),
         );
 
         // DEBUG TEMPORAIRE — supprimer après diagnostic

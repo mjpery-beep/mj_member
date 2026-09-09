@@ -9,6 +9,7 @@ namespace Mj\Member\Core\Ajax\Front;
 
 use Mj\Member\Core\Contracts\AjaxHandlerInterface;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjNotificationRecipients;
 use Mj\Member\Classes\MjNotificationManager;
 
 if (!defined('ABSPATH')) {
@@ -41,6 +42,7 @@ final class NotificationBellController implements AjaxHandlerInterface {
 
         $notifications = array();
         $unread_count = 0;
+        $types = $this->getPostedTypes();
 
         if (function_exists('mj_member_get_member_notifications_feed')) {
             $notifications = mj_member_get_member_notifications_feed($member_id, array(
@@ -52,9 +54,15 @@ final class NotificationBellController implements AjaxHandlerInterface {
             $unread_count = mj_member_get_member_unread_notifications_count($member_id);
         }
 
+        $unread_counts = array();
+        foreach ($types as $type) {
+            $unread_counts[$type] = MjNotificationRecipients::get_unread_count_for_member($member_id, array('types' => array($type)));
+        }
+
         wp_send_json_success(array(
             'notifications' => $notifications,
             'unread_count' => $unread_count,
+            'unread_counts' => $unread_counts,
         ));
     }
 
@@ -118,8 +126,10 @@ final class NotificationBellController implements AjaxHandlerInterface {
             wp_send_json_error(array('message' => __('Accès non autorisé.', 'mj-member')));
         }
 
+        $types = $this->getPostedTypes();
         if (function_exists('mj_member_mark_member_notifications_read')) {
-            $result = mj_member_mark_member_notifications_read($member_id);
+            $recipient_ids = $this->getRecipientIdsForTypes($member_id, $types, array('unread'));
+            $result = mj_member_mark_member_notifications_read($member_id, $recipient_ids);
             if ($result !== false) {
                 wp_send_json_success(array('marked' => $result));
             }
@@ -167,15 +177,8 @@ final class NotificationBellController implements AjaxHandlerInterface {
             wp_send_json_error(array('message' => __('Accès non autorisé.', 'mj-member')));
         }
 
-        global $wpdb;
-        $recipients_table = mj_member_get_notification_recipients_table_name();
-
-        // Récupérer tous les recipient_ids du membre qui ne sont pas déjà archivés
-        $recipient_ids = $wpdb->get_col($wpdb->prepare(
-            "SELECT id FROM {$recipients_table} 
-             WHERE member_id = %d AND status != 'archived'",
-            $member_id
-        ));
+        $types = $this->getPostedTypes();
+        $recipient_ids = $this->getRecipientIdsForTypes($member_id, $types, array('unread', 'read'));
 
         if (empty($recipient_ids)) {
             wp_send_json_success(array('archived' => 0));
@@ -254,5 +257,38 @@ final class NotificationBellController implements AjaxHandlerInterface {
         ));
 
         return !empty($owner_check);
+    }
+
+    private function getPostedTypes(): array {
+        $raw = isset($_POST['types']) ? wp_unslash($_POST['types']) : array();
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            $raw = is_array($decoded) ? $decoded : preg_split('/\s*,\s*/', $raw);
+        }
+        return is_array($raw) ? array_values(array_filter(array_map('sanitize_key', $raw))) : array();
+    }
+
+    private function getRecipientIdsForTypes(int $member_id, array $types, array $statuses): array {
+        global $wpdb;
+        $recipients_table = mj_member_get_notification_recipients_table_name();
+        $notifications_table = mj_member_get_notifications_table_name();
+        if (!$recipients_table || !$notifications_table) {
+            return array();
+        }
+
+        $status_placeholders = implode(', ', array_fill(0, count($statuses), '%s'));
+        $params = array_merge(array($member_id), $statuses);
+        $type_clause = '';
+        if (!empty($types)) {
+            $type_placeholders = implode(', ', array_fill(0, count($types), '%s'));
+            $type_clause = " AND n.type IN ({$type_placeholders})";
+            $params = array_merge($params, $types);
+        }
+
+        $sql = $wpdb->prepare(
+            "SELECT r.id FROM {$recipients_table} r INNER JOIN {$notifications_table} n ON n.id = r.notification_id WHERE r.member_id = %d AND r.status IN ({$status_placeholders}){$type_clause}",
+            ...$params
+        );
+        return array_filter(array_map('absint', $wpdb->get_col($sql)));
     }
 }

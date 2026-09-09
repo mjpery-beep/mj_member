@@ -15,6 +15,69 @@
    Header principal
    ========================================================================== */
 
+.mj-header-notif-filters {
+    display: flex;
+    gap: 6px;
+    padding: 8px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    overflow-x: auto;
+}
+
+.mj-header .mj-header-notif-filter {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    margin: 0;
+    padding: 0;
+    color: #64748b !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.mj-header .mj-header-notif-filter:hover,
+.mj-header .mj-header-notif-filter:focus-visible,
+.mj-header .mj-header-notif-filter--active {
+    color: #1d4ed8 !important;
+    background: #eff6ff !important;
+    border-color: #bfdbfe !important;
+    outline: none;
+}
+
+.mj-header-notif-filter__icon,
+.mj-header-notif-filter__icon img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+.mj-header-notif-filter__badge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    color: #fff;
+    background: #dc2626;
+    border-radius: 999px;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+}
+
 .mj-header {
     position: relative;
     display: flex;

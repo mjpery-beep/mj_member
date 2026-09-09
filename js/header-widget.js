@@ -29,6 +29,8 @@
         this._scrollLocked  = false;
         this._compactForced = false;
         this._stickyPlaceholder = null;
+        this._notificationData = null;
+        this._notificationFilter = '';
 
         /** Track which lazy dropdowns have been loaded already */
         this._loaded = {
@@ -403,6 +405,13 @@
         if (!dropdown) return;
 
         dropdown.addEventListener('click', function (e) {
+            var filterBtn = e.target.closest('[data-notif-filter]');
+            if (filterBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                self._toggleNotificationFilter(filterBtn.getAttribute('data-notif-filter') || '');
+                return;
+            }
             var btn = e.target.closest('[data-notif-action]');
             if (!btn) return;
             e.stopPropagation();
@@ -980,12 +989,14 @@
         data.append('action',    'mj_member_notification_bell_fetch');
         data.append('nonce',     this.config.notifNonce || '');
         data.append('member_id', this.config.memberId   || 0);
+        data.append('types', JSON.stringify((this.config.notificationFilters || []).map(function (filter) { return filter.type; })));
 
         fetch(this.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 self._loaded.notifications = true;
                 if (res.success && res.data) {
+                    self._notificationData = res.data;
                     self._renderNotifications(content, res.data);
                     self._updateBadge('notifications', res.data.unread_count || 0);
                 } else {
@@ -999,8 +1010,10 @@
         var self          = this;
         var notifications = data.notifications || [];
         var unread        = data.unread_count  || 0;
+        var filteredNotifications = this._getFilteredNotifications(notifications);
+        this._updateNotificationFilterBadges(data.unread_counts || {}, notifications);
 
-        if (!notifications.length) {
+        if (!filteredNotifications.length) {
             container.innerHTML =
                 '<div class="mj-header-dropdown__empty">' +
                 '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0M3.124 7.5A8.969 8.969 0 0 1 5.292 3m13.416 0a8.969 8.969 0 0 1 2.168 4.5" /></svg>' +
@@ -1014,7 +1027,7 @@
 
         var html = '<div class="mj-header-notif-list">';
 
-        notifications.forEach(function (item) {
+        filteredNotifications.forEach(function (item) {
             var notif      = item.notification || {};
             var isUnread   = item.recipient_status === 'unread';
             var emoji      = MjHeader.notifEmoji(notif.type || 'info');
@@ -1073,7 +1086,45 @@
 
         // Sync mark-all button
         var markAllBtn = container.closest('.mj-header-dropdown').querySelector('[data-notif-action="mark-all-read"]');
-        if (markAllBtn) markAllBtn.disabled = unread === 0;
+        if (markAllBtn) markAllBtn.disabled = !filteredNotifications.some(function (item) { return item.recipient_status === 'unread'; });
+        var archiveAllBtn = container.closest('.mj-header-dropdown').querySelector('[data-notif-action="archive-all"]');
+        if (archiveAllBtn) archiveAllBtn.disabled = filteredNotifications.length === 0;
+    };
+
+    MjHeader.prototype._getFilteredNotifications = function (notifications) {
+        var activeType = this._notificationFilter;
+        if (!activeType) return notifications;
+        return notifications.filter(function (item) {
+            return (item.notification && item.notification.type) === activeType;
+        });
+    };
+
+    MjHeader.prototype._updateNotificationFilterBadges = function (counts, notifications) {
+        var self = this;
+        this.el.querySelectorAll('[data-notif-filter-badge]').forEach(function (badge) {
+            var type = badge.getAttribute('data-notif-filter-badge') || '';
+            var count = counts[type];
+            if (count === undefined) {
+                count = notifications.filter(function (item) {
+                    return item.recipient_status === 'unread' && item.notification && item.notification.type === type;
+                }).length;
+            }
+            badge.textContent = count > 99 ? '99+' : String(count || 0);
+            badge.hidden = !(count > 0);
+            var button = badge.closest('[data-notif-filter]');
+            if (button) {
+                button.classList.toggle('mj-header-notif-filter--active', self._notificationFilter === type);
+                button.setAttribute('aria-selected', self._notificationFilter === type ? 'true' : 'false');
+            }
+        });
+    };
+
+    MjHeader.prototype._toggleNotificationFilter = function (type) {
+        this._notificationFilter = this._notificationFilter === type ? '' : type;
+        if (this._notificationData) {
+            var list = this.el.querySelector('[data-mj-notif-list]');
+            if (list) this._renderNotifications(list, this._notificationData);
+        }
     };
 
     MjHeader.prototype._updateBadge = function (name, count) {
@@ -1345,16 +1396,14 @@
         data.append('action',    'mj_member_notification_bell_mark_all_read');
         data.append('nonce',     this.config.notifNonce || '');
         data.append('member_id', this.config.memberId   || 0);
+        data.append('types', JSON.stringify(this._notificationFilter ? [this._notificationFilter] : []));
 
         fetch(this.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 if (!res.success) return;
-                self.el.querySelectorAll('.mj-header-notif-item--unread').forEach(function (item) {
-                    item.classList.remove('mj-header-notif-item--unread');
-                });
-                self.el.querySelectorAll('[data-notif-action="mark-read"]').forEach(function (b) { b.remove(); });
-                self._updateBadge('notifications', 0);
+                var dropdown = self.el.querySelector('[data-mj-header-dropdown="notifications"]');
+                if (dropdown) self._loadNotifications(dropdown);
                 if (btn) btn.disabled = true;
             });
     };
@@ -1367,19 +1416,14 @@
         data.append('action',    'mj_member_notification_bell_archive_all');
         data.append('nonce',     this.config.notifNonce || '');
         data.append('member_id', this.config.memberId   || 0);
+        data.append('types', JSON.stringify(this._notificationFilter ? [this._notificationFilter] : []));
 
         fetch(this.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 if (!res.success) { if (btn) btn.disabled = false; return; }
-                self.el.querySelectorAll('.mj-header-notif-item').forEach(function (item) {
-                    item.remove();
-                });
-                self._updateBadge('notifications', 0);
-                var list = self.el.querySelector('[data-mj-notif-list]');
-                if (list && !list.querySelector('.mj-header-notif-item')) {
-                    list.innerHTML = '<div class="mj-header-dropdown__empty"><p>Aucune notification</p></div>';
-                }
+                var dropdown = self.el.querySelector('[data-mj-header-dropdown="notifications"]');
+                if (dropdown) self._loadNotifications(dropdown);
             });
     };
 
