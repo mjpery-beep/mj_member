@@ -989,7 +989,9 @@
         data.append('action',    'mj_member_notification_bell_fetch');
         data.append('nonce',     this.config.notifNonce || '');
         data.append('member_id', this.config.memberId   || 0);
-        data.append('types', JSON.stringify((this.config.notificationFilters || []).map(function (filter) { return filter.type; })));
+        data.append('types', JSON.stringify((this.config.notificationFilters || []).reduce(function (types, filter) {
+            return types.concat(filter.types || []);
+        }, []).filter(function (type, index, all) { return all.indexOf(type) === index; })));
 
         fetch(this.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
@@ -1092,29 +1094,37 @@
     };
 
     MjHeader.prototype._getFilteredNotifications = function (notifications) {
-        var activeType = this._notificationFilter;
-        if (!activeType) return notifications;
+        var activeCategory = this._notificationFilter;
+        if (!activeCategory) return notifications;
+        var filter = (this.config.notificationFilters || []).find(function (entry) {
+            return entry.category === activeCategory;
+        });
+        var types = filter ? (filter.types || []) : [];
         return notifications.filter(function (item) {
-            return (item.notification && item.notification.type) === activeType;
+            return types.indexOf(item.notification && item.notification.type) !== -1;
         });
     };
 
     MjHeader.prototype._updateNotificationFilterBadges = function (counts, notifications) {
         var self = this;
         this.el.querySelectorAll('[data-notif-filter-badge]').forEach(function (badge) {
-            var type = badge.getAttribute('data-notif-filter-badge') || '';
-            var count = counts[type];
-            if (count === undefined) {
-                count = notifications.filter(function (item) {
+            var category = badge.getAttribute('data-notif-filter-badge') || '';
+            var filter = (self.config.notificationFilters || []).find(function (entry) {
+                return entry.category === category;
+            });
+            var types = filter ? (filter.types || []) : [];
+            var count = types.reduce(function (total, type) {
+                if (counts[type] !== undefined) return total + (parseInt(counts[type], 10) || 0);
+                return total + notifications.filter(function (item) {
                     return item.recipient_status === 'unread' && item.notification && item.notification.type === type;
                 }).length;
-            }
+            }, 0);
             badge.textContent = count > 99 ? '99+' : String(count || 0);
             badge.hidden = !(count > 0);
             var button = badge.closest('[data-notif-filter]');
             if (button) {
-                button.classList.toggle('mj-header-notif-filter--active', self._notificationFilter === type);
-                button.setAttribute('aria-selected', self._notificationFilter === type ? 'true' : 'false');
+                button.classList.toggle('mj-header-notif-filter--active', self._notificationFilter === category);
+                button.setAttribute('aria-selected', self._notificationFilter === category ? 'true' : 'false');
             }
         });
     };
@@ -1125,6 +1135,14 @@
             var list = this.el.querySelector('[data-mj-notif-list]');
             if (list) this._renderNotifications(list, this._notificationData);
         }
+    };
+
+    MjHeader.prototype._getActiveNotificationTypes = function () {
+        if (!this._notificationFilter) return [];
+        var filter = (this.config.notificationFilters || []).find(function (entry) {
+            return entry.category === this._notificationFilter;
+        }, this);
+        return filter ? (filter.types || []) : [];
     };
 
     MjHeader.prototype._updateBadge = function (name, count) {
@@ -1396,7 +1414,7 @@
         data.append('action',    'mj_member_notification_bell_mark_all_read');
         data.append('nonce',     this.config.notifNonce || '');
         data.append('member_id', this.config.memberId   || 0);
-        data.append('types', JSON.stringify(this._notificationFilter ? [this._notificationFilter] : []));
+        data.append('types', JSON.stringify(this._getActiveNotificationTypes()));
 
         fetch(this.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
@@ -1416,7 +1434,7 @@
         data.append('action',    'mj_member_notification_bell_archive_all');
         data.append('nonce',     this.config.notifNonce || '');
         data.append('member_id', this.config.memberId   || 0);
-        data.append('types', JSON.stringify(this._notificationFilter ? [this._notificationFilter] : []));
+        data.append('types', JSON.stringify(this._getActiveNotificationTypes()));
 
         fetch(this.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })

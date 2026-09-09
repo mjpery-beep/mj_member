@@ -336,7 +336,13 @@ final class AssetsManager
         self::registerStyle('mj-member-create-event-modal', 'css/create-event-modal.css');
         self::registerScript('mj-member-day-notes-form', 'js/day-notes/note-form.js', array('mj-member-utils', 'mj-member-preact', 'mj-member-preact-hooks', 'mj-member-regmgr-modals', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-registrations'));
         self::registerStyle('mj-member-day-notes-form', 'css/day-notes.css', array('mj-member-components', 'mj-member-registration-manager'));
-        self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils', 'mj-member-create-event-modal', 'mj-member-day-notes-form', 'mj-member-regmgr-services', 'mj-member-leave-requests'));
+        // Les dépendances d'édition (create-event-modal, day-notes-form, regmgr-services,
+        // leave-requests) ne sont PAS déclarées ici : events-calendar.js les utilise en
+        // best-effort via `window.MjX && ...` quand elles sont présentes. Elles sont
+        // enqueue explicitement dans le package complet ci-dessous (voir requirePackage()),
+        // ce qui permet un package "events-calendar-readonly" allégé pour les contextes
+        // d'affichage seul (ex. mini-agenda du header).
+        self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils'));
         self::registerScript('mj-member-registrations-widget', 'js/elementor/registrations-widget.js', array('mj-member-utils'));
         self::registerScript('mj-member-event-attendance-kiosk', 'js/elementor/event-attendance-kiosk.js', array('mj-member-utils'));
         self::registerScript('mj-member-attendance-summary', 'js/elementor/attendance-summary.js', array());
@@ -584,6 +590,22 @@ final class AssetsManager
                 // Reuse occurrence editor styles inside the shared create-event modal.
                 wp_enqueue_style('mj-member-registration-manager');
                 self::requirePackage('leave-requests');
+                wp_enqueue_style('mj-member-events-calendar');
+                wp_enqueue_script('mj-member-events-calendar');
+                // Fonctionnalités d'édition (création, notes de jour, éditeur d'occurrence) :
+                // events-calendar.js les détecte via `window.MjX` et reste fonctionnel sans elles
+                // (voir 'events-calendar-readonly'), donc on les enqueue explicitement ici.
+                wp_enqueue_script('mj-member-regmgr-services');
+                wp_enqueue_style('mj-member-create-event-modal');
+                wp_enqueue_script('mj-member-create-event-modal');
+                wp_enqueue_style('mj-member-day-notes-form');
+                wp_enqueue_script('mj-member-day-notes-form');
+                break;
+
+            case 'events-calendar-readonly':
+                // Version allégée pour un affichage lecture seule (ex. mini-agenda du
+                // header) : pas de création/édition d'événement, de notes de jour ni de
+                // demandes de congé. events-calendar.js gère nativement leur absence.
                 wp_enqueue_style('mj-member-events-calendar');
                 wp_enqueue_script('mj-member-events-calendar');
                 break;

@@ -1235,6 +1235,7 @@ $this->add_control('nextcloud_label', array(
         }
 
         $notification_filters = array();
+        $notification_filter_index = 0;
         foreach ($acc_link_sections as $account_section) {
             foreach (($account_section['links'] ?? array()) as $account_link) {
                 $types = isset($account_link['notification_types']) && is_array($account_link['notification_types'])
@@ -1244,20 +1245,28 @@ $this->add_control('nextcloud_label', array(
                     continue;
                 }
 
+                $category_source = $account_link['key'] ?? $account_link['id'] ?? $account_link['label'] ?? '';
+                $category = sanitize_key((string) $category_source);
+                if ($category === '') {
+                    $category = 'notification-category-' . $notification_filter_index;
+                }
                 $link_icon = isset($account_link['icon']) && is_array($account_link['icon'])
                     ? $account_link['icon']
                     : array();
-                foreach ($types as $type) {
-                    if (isset($notification_filters[$type])) {
-                        continue;
-                    }
-                    $notification_filters[$type] = array(
-                        'type'      => $type,
-                        'label'     => wp_strip_all_tags((string) ($account_link['label'] ?? $type)),
+                if (!isset($notification_filters[$category])) {
+                    $notification_filters[$category] = array(
+                        'category'  => $category,
+                        'types'     => array(),
+                        'label'     => wp_strip_all_tags((string) ($account_link['label'] ?? $category)),
                         'icon_html' => isset($link_icon['html']) ? wp_kses_post($link_icon['html']) : '',
                         'icon_url'  => isset($link_icon['url']) ? esc_url_raw($link_icon['url']) : '',
                     );
                 }
+                $notification_filters[$category]['types'] = array_values(array_unique(array_merge(
+                    $notification_filters[$category]['types'],
+                    $types
+                )));
+                $notification_filter_index++;
             }
         }
 
@@ -1278,7 +1287,10 @@ $this->add_control('nextcloud_label', array(
 
         AssetsManager::requirePackage('header-widget');
         if ($agenda_enabled && $agenda_view_mode === 'calendrier') {
-            AssetsManager::requirePackage('events-calendar');
+            // Le mini-agenda du header est affiché en lecture seule (show_toolbar_actions,
+            // show_leave_requests et show_todos sont désactivés dans header_widget.php) :
+            // pas besoin de charger les scripts de création/édition d'événement.
+            AssetsManager::requirePackage('events-calendar-readonly');
         }
 
         $widget_id = $this->get_id();

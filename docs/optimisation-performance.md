@@ -33,31 +33,6 @@ Constats complémentaires :
 
 ## 2. Priorités
 
-### Priorité P0 : compression HTTP
-
-Activer Brotli ou gzip pour les réponses HTML, CSS, JavaScript, JSON et SVG.
-
-Objectif : réduire immédiatement le poids de la réponse HTML d'environ 1 Mo et accélérer le transfert sur mobile ou réseau lent.
-
-À vérifier côté serveur :
-
-- `Content-Encoding: br` ou `Content-Encoding: gzip` ;
-- présence de `Vary: Accept-Encoding` ;
-- absence de double compression ;
-- compression appliquée aussi aux réponses AJAX JSON.
-
-### Priorité P0 : cache des assets statiques
-
-Ajouter une durée de cache longue pour les fichiers versionnés :
-
-```http
-Cache-Control: public, max-age=31536000, immutable
-```
-
-Cette règle concerne les fichiers CSS, JavaScript, polices, images et médias dont l'URL change lorsqu'ils sont modifiés.
-
-Pour les pages HTML publiques, utiliser une durée plus courte ou un cache de page contrôlé afin d'éviter de servir du contenu obsolète.
-
 ### Priorité P1 : chargement conditionnel des packages
 
 Le gestionnaire d'assets est centralisé dans `includes/core/AssetsManager.php`. Les packages doivent être enregistrés globalement, mais chargés uniquement si le widget correspondant est présent dans la page.

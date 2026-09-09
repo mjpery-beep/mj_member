@@ -2342,8 +2342,11 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         $instance_id = wp_unique_id('mj-member-events-calendar-');
 
-        // Charger les assets (CSS externe + JS)
-        AssetsManager::requirePackage('events-calendar');
+        // Charger les assets (CSS externe + JS). Quand toolbar d'actions, congés et
+        // todos sont tous désactivés (ex. mini-agenda en lecture seule du header),
+        // on évite les scripts de création/édition (create-event-modal, day-notes-form…).
+        $assets_readonly = !$show_toolbar_actions && !$show_leave_requests && !$show_todos;
+        AssetsManager::requirePackage($assets_readonly ? 'events-calendar-readonly' : 'events-calendar');
 
         $cover_width_settings = self::normalize_cover_width_settings($settings);
         $instance_thumb_styles = self::build_cover_width_style_block($instance_id, $cover_width_settings);
