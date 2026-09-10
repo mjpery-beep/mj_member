@@ -87,19 +87,6 @@ function mj_header_svg_icon(string $name): string {
                     <a href="<?php echo esc_url($agenda_url); ?>" class="mj-header-dropdown__header-link"><?php esc_html_e('Voir tout', 'mj-member'); ?></a>
                     <button type="button" class="mj-header-dropdown__close" aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>"><?php echo mj_header_svg_icon('close'); ?></button>
                 </div>
-                <?php if (!empty($config['notificationFilters'])): ?>
-                <div class="mj-header-notif-filters" data-mj-notif-filters role="tablist" aria-label="<?php esc_attr_e('Types de notification', 'mj-member'); ?>">
-                    <?php foreach ($config['notificationFilters'] as $notification_filter): ?>
-                    <button type="button" class="mj-header-notif-filter" data-notif-filter="<?php echo esc_attr($notification_filter['category']); ?>" data-notif-filter-types="<?php echo esc_attr(wp_json_encode($notification_filter['types'] ?? array())); ?>" role="tab" aria-selected="false" title="<?php echo esc_attr($notification_filter['label']); ?>">
-                        <span class="mj-header-notif-filter__icon" aria-hidden="true">
-                            <?php if (!empty($notification_filter['icon_html'])): echo $notification_filter['icon_html']; // phpcs:ignore WordPress.Security.EscapeOutput
-                            elseif (!empty($notification_filter['icon_url'])): ?><img src="<?php echo esc_url($notification_filter['icon_url']); ?>" alt="" loading="lazy" /><?php endif; ?>
-                        </span>
-                        <span class="mj-header-notif-filter__badge" data-notif-filter-badge="<?php echo esc_attr($notification_filter['category']); ?>">0</span>
-                    </button>
-                    <?php endforeach; ?>
-                </div>
-                <?php endif; ?>
                 <div class="mj-header-dropdown__content">
                     <?php if ($agenda_view_mode === 'calendrier'): ?>
                     <?php Mj_Member_Elementor_Events_Calendar_Widget::render_widget(

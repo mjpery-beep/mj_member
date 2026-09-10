@@ -604,11 +604,22 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-day-notes-form');
                 // Le mini-agenda du header (class-mj-member-header-widget.php) charge
                 // 'events-calendar-readonly' sur (quasi) toutes les pages et peut donc avoir
-                // déjà mis 'mj-member-events-calendar' en file AVANT ce bloc, ce qui fige sa
-                // position dans la queue WP_Scripts malgré l'ordre d'enqueue ci-dessus
-                // (wp_enqueue_script() est idempotent et ne déplace pas un handle déjà en
-                // file). On le retire puis le ré-enqueue pour le forcer après create-event-modal.
-                wp_dequeue_script('mj-member-events-calendar');
+                // déjà mis 'mj-member-events-calendar' en file AVANT ce bloc. Un simple
+                // wp_dequeue_script()/wp_enqueue_script() ne suffit pas à garantir l'ordre
+                // d'exécution final (WP_Scripts peut avoir déjà résolu/imprimé ce handle,
+                // ou la stratégie 'defer' peut réordonner l'impression). On déclare donc
+                // ces scripts comme de vraies dépendances WP du handle : WP_Dependencies
+                // les imprimera alors toujours avant, quel que soit le moment/l'ordre
+                // d'enqueue, sans affecter la variante 'events-calendar-readonly'.
+                $wp_scripts = wp_scripts();
+                if (isset($wp_scripts->registered['mj-member-events-calendar'])) {
+                    $edit_deps = array('mj-member-regmgr-services', 'mj-member-create-event-modal', 'mj-member-day-notes-form');
+                    foreach ($edit_deps as $edit_dep) {
+                        if (!in_array($edit_dep, $wp_scripts->registered['mj-member-events-calendar']->deps, true)) {
+                            $wp_scripts->registered['mj-member-events-calendar']->deps[] = $edit_dep;
+                        }
+                    }
+                }
                 wp_enqueue_script('mj-member-events-calendar');
                 break;
 
