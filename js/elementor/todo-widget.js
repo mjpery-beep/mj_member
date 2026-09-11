@@ -4,12 +4,19 @@
     var runtimeConfig = window.mjMemberTodoWidget || {};
     var preact = window.preact;
     var hooks = window.preactHooks;
+    var OccurrencePickerPkg = window.MjOccurrencePicker;
 
     if (!preact || !hooks) {
         if (typeof console !== 'undefined' && typeof console.warn === 'function') {
             console.warn('[MJ Member] Preact must be loaded before the todo widget.');
         }
         return;
+    }
+
+    if (!OccurrencePickerPkg) {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+            console.warn('[MJ Member] MjOccurrencePicker must be loaded before the todo widget.');
+        }
     }
 
     var h = preact.h;
@@ -974,7 +981,11 @@
         var _e = useState(''), error = _e[0], setError = _e[1];
         var _f = useState(''), formTitle = _f[0], setFormTitle = _f[1];
         var _g = useState(''), formProjectId = _g[0], setFormProjectId = _g[1];
-        var _h = useState(''), formDueDate = _h[0], setFormDueDate = _h[1];
+        var _h = useState(function () {
+            return OccurrencePickerPkg ? OccurrencePickerPkg.defaultOccurrenceValue() : { mode: 'single', singleDate: '' };
+        }), formOccurrence = _h[0], setFormOccurrence = _h[1];
+        var _h2 = useState(''), formStartTime = _h2[0], setFormStartTime = _h2[1];
+        var _h3 = useState(''), formEndTime = _h3[0], setFormEndTime = _h3[1];
         var _h1 = useState(''), formDescription = _h1[0], setFormDescription = _h1[1];
         var _i1 = useState(''), formEmoji = _i1[0], setFormEmoji = _i1[1];
         var defaultPriority = 3;
@@ -1127,13 +1138,15 @@
         var resetCreateForm = useCallback(function () {
             setFormTitle('');
             setFormProjectId('');
-            setFormDueDate('');
+            setFormOccurrence(OccurrencePickerPkg ? OccurrencePickerPkg.defaultOccurrenceValue() : { mode: 'single', singleDate: '' });
+            setFormStartTime('');
+            setFormEndTime('');
             setFormDescription('');
             setFormEmoji('');
             setFormPriority(defaultPriority);
             setFormMedia([]);
             setFormMediaError('');
-        }, [defaultPriority, setFormTitle, setFormProjectId, setFormDueDate, setFormDescription, setFormEmoji, setFormPriority, setFormMedia, setFormMediaError]);
+        }, [defaultPriority, setFormTitle, setFormProjectId, setFormOccurrence, setFormStartTime, setFormEndTime, setFormDescription, setFormEmoji, setFormPriority, setFormMedia, setFormMediaError]);
 
         var handleOpenCreateModal = useCallback(function () {
             if (!effectiveAccess) {
@@ -1554,11 +1567,15 @@
                 var descriptionValue = typeof todo.description === 'string' ? todo.description : '';
                 var emojiValue = typeof todo.emoji === 'string' ? sanitizeEmojiInput(todo.emoji) : '';
                 var dueDateValue = typeof todo.dueDate === 'string' ? todo.dueDate : '';
+                var startTimeValue = typeof todo.startTime === 'string' ? todo.startTime : '';
+                var endTimeValue = typeof todo.endTime === 'string' ? todo.endTime : '';
                 next.set(key, {
                     title: titleValue,
                     description: descriptionValue,
                     emoji: emojiValue,
                     dueDate: dueDateValue,
+                    startTime: startTimeValue,
+                    endTime: endTimeValue,
                 });
                 return next;
             });
@@ -1639,6 +1656,8 @@
                     description: '',
                     emoji: '',
                     dueDate: '',
+                    startTime: '',
+                    endTime: '',
                 };
                 if (field === 'title') {
                     draft = Object.assign({}, draft, { title: nextValue });
@@ -1649,6 +1668,10 @@
                     draft = Object.assign({}, draft, { emoji: sanitizedEmoji });
                 } else if (field === 'dueDate') {
                     draft = Object.assign({}, draft, { dueDate: nextValue });
+                } else if (field === 'startTime') {
+                    draft = Object.assign({}, draft, { startTime: nextValue });
+                } else if (field === 'endTime') {
+                    draft = Object.assign({}, draft, { endTime: nextValue });
                 }
                 next.set(key, draft);
                 return next;
@@ -1662,11 +1685,22 @@
             var draftDescription = draft && typeof draft.description === 'string' ? draft.description : '';
             var draftEmoji = draft && typeof draft.emoji === 'string' ? sanitizeEmojiInput(draft.emoji) : '';
             var draftDueDate = draft && typeof draft.dueDate === 'string' ? draft.dueDate : '';
+            var draftStartTime = draft && typeof draft.startTime === 'string' ? draft.startTime : '';
+            var draftEndTime = draft && typeof draft.endTime === 'string' ? draft.endTime : '';
 
             if (draftTitle === '') {
                 setEditErrors(function (previous) {
                     var next = new Map(previous);
                     next.set(key, getString(i18n, 'formError', 'Merci de saisir un titre.'));
+                    return next;
+                });
+                return;
+            }
+
+            if ((draftEndTime && !draftStartTime) || (draftStartTime && draftEndTime && draftEndTime <= draftStartTime)) {
+                setEditErrors(function (previous) {
+                    var next = new Map(previous);
+                    next.set(key, getString(i18n, 'timeRangeInvalid', 'L’heure de fin doit être postérieure à l’heure de début.'));
                     return next;
                 });
                 return;
@@ -1690,6 +1724,8 @@
                                 description: draftDescription,
                                 emoji: draftEmoji,
                                 dueDate: draftDueDate,
+                                startTime: draftStartTime,
+                                endTime: draftEndTime,
                             });
                         }
                         return todo;
@@ -1703,6 +1739,8 @@
                                 description: draftDescription,
                                 emoji: draftEmoji,
                                 dueDate: draftDueDate,
+                                startTime: draftStartTime,
+                                endTime: draftEndTime,
                             });
                         }
                         return todo;
@@ -1735,6 +1773,8 @@
                 description: draftDescription,
                 emoji: draftEmoji,
                 due_date: draftDueDate,
+                start_time: draftStartTime,
+                end_time: draftEndTime,
             });
 
             fetch(ajaxUrl, {
@@ -2118,7 +2158,18 @@
             }
 
             var projectValue = formProjectId ? String(formProjectId) : '';
-            var dueValue = formDueDate ? String(formDueDate) : '';
+            var resolvedDates = OccurrencePickerPkg
+                ? OccurrencePickerPkg.resolveOccurrenceDates(formOccurrence.mode, formOccurrence)
+                : (formOccurrence && formOccurrence.singleDate ? [formOccurrence.singleDate] : []);
+            var dueValue = resolvedDates.length ? resolvedDates[0] : '';
+            if (formEndTime && !formStartTime) {
+                setCreateError(getString(i18n, 'timeRangeInvalid', 'L’heure de fin doit être postérieure à l’heure de début.'));
+                return;
+            }
+            if (formStartTime && formEndTime && formEndTime <= formStartTime) {
+                setCreateError(getString(i18n, 'timeRangeInvalid', 'L’heure de fin doit être postérieure à l’heure de début.'));
+                return;
+            }
             var rawDescription = typeof formDescription === 'string' ? formDescription : '';
             var normalizedDescription = rawDescription.replace(/\r\n/g, '\n');
             var hasDescription = normalizedDescription.trim() !== '';
@@ -2182,6 +2233,8 @@
                     projectId: projectValue,
                     projectTitle: projectLabel_1,
                     dueDate: dueValue,
+                    startTime: formStartTime,
+                    endTime: formEndTime,
                     completedAt: '',
                     assignees: selectedAssignees,
                     priority: priorityValue,
@@ -2213,7 +2266,9 @@
                 nonce: nonce || '',
                 title: trimmedTitle,
                 project_id: projectValue,
-                due_date: dueValue,
+                dates: JSON.stringify(resolvedDates),
+                start_time: formStartTime,
+                end_time: formEndTime,
                 description: normalizedDescription,
                 emoji: normalizedEmoji,
                 priority: String(priorityValue),
@@ -2256,7 +2311,7 @@
                     }
                     setSubmitting(false);
                 });
-        }, [effectiveAccess, preview, createAction, ajaxUrl, nonce, formTitle, formProjectId, formDueDate, formDescription, formPriority, formMedia, refresh, i18n, projects, assignableMembers, assigneeSelection, resetCreateForm, setCreateModalOpen, setCreateError, setFormMediaError]);
+        }, [effectiveAccess, preview, createAction, ajaxUrl, nonce, formTitle, formProjectId, formOccurrence, formStartTime, formEndTime, formDescription, formPriority, formMedia, refresh, i18n, projects, assignableMembers, assigneeSelection, resetCreateForm, setCreateModalOpen, setCreateError, setFormMediaError]);
 
         var toggleProjectForm = useCallback(function () {
             setProjectFeedback({ text: '', kind: '' });
@@ -3814,14 +3869,43 @@
                         return h('option', { value: optionValue }, label);
                     }),
                 ]),
-                h('input', {
-                    type: 'date',
-                    className: 'mj-todo-widget__input mj-todo-widget__input--date',
-                    value: formDueDate,
-                    onInput: function (event) { return setFormDueDate(event.target.value); },
-                    placeholder: getString(i18n, 'dueLabel', 'Échéance'),
-                    disabled: submitting,
-                }),
+            ]),
+            h('div', { className: 'mj-todo-widget__form-occurrence' }, [
+                h('label', { className: 'mj-todo-widget__form-label' }, getString(i18n, 'dueLabel', 'Échéance')),
+                OccurrencePickerPkg
+                    ? h(OccurrencePickerPkg.OccurrencePicker, {
+                        value: formOccurrence,
+                        onChange: setFormOccurrence,
+                    })
+                    : h('input', {
+                        type: 'date',
+                        className: 'mj-todo-widget__input mj-todo-widget__input--date',
+                        value: formOccurrence.singleDate || '',
+                        onInput: function (event) { return setFormOccurrence(Object.assign({}, formOccurrence, { mode: 'single', singleDate: event.target.value })); },
+                        disabled: submitting,
+                    }),
+                h('div', { className: 'mj-todo-widget__form-time-range' }, [
+                    h('label', null, [
+                        getString(i18n, 'timeFromLabel', 'De '),
+                        h('input', {
+                            type: 'time',
+                            className: 'mj-todo-widget__input',
+                            value: formStartTime,
+                            onInput: function (event) { return setFormStartTime(event.target.value); },
+                            disabled: submitting,
+                        }),
+                    ]),
+                    h('label', null, [
+                        getString(i18n, 'timeToLabel', 'à '),
+                        h('input', {
+                            type: 'time',
+                            className: 'mj-todo-widget__input',
+                            value: formEndTime,
+                            onInput: function (event) { return setFormEndTime(event.target.value); },
+                            disabled: submitting,
+                        }),
+                    ]),
+                ]),
             ]),
             h('div', { className: 'mj-todo-widget__form-description' }, [
                 h('label', {
@@ -4100,6 +4184,12 @@
                 var draftDueDate = draft && typeof draft.dueDate === 'string'
                     ? draft.dueDate
                     : (typeof todo.dueDate === 'string' ? todo.dueDate : '');
+                var draftStartTime = draft && typeof draft.startTime === 'string'
+                    ? draft.startTime
+                    : (typeof todo.startTime === 'string' ? todo.startTime : '');
+                var draftEndTime = draft && typeof draft.endTime === 'string'
+                    ? draft.endTime
+                    : (typeof todo.endTime === 'string' ? todo.endTime : '');
                 var updatePending = pendingUpdates.has(todoKey);
                 var editErrorMessage = editErrors.has(todoKey) ? editErrors.get(todoKey) : '';
                 var itemClasses = 'mj-todo-widget__item';
@@ -4682,7 +4772,11 @@
                     metaEntries.push(h('span', { className: 'mj-todo-widget__badge', style: projectBadgeStyle }, projectLabel));
                 }
                 if (dueDisplay) {
-                    metaEntries.push(h('span', { className: 'mj-todo-widget__deadline' }, dueDisplay));
+                    var dueDisplayText = dueDisplay;
+                    if (typeof todo.startTime === 'string' && todo.startTime !== '') {
+                        dueDisplayText += ' · ' + todo.startTime + (typeof todo.endTime === 'string' && todo.endTime !== '' ? '–' + todo.endTime : '');
+                    }
+                    metaEntries.push(h('span', { className: 'mj-todo-widget__deadline' }, dueDisplayText));
                 }
                 if (isArchived && completedDisplay) {
                     metaEntries.push(h('span', { className: 'mj-todo-widget__archives-date' }, completedDisplay));
@@ -4745,6 +4839,31 @@
                                 onInput: function (event) { return handleEditDraftChange(todoId, 'dueDate', event.target.value); },
                                 disabled: updatePending,
                             }),
+                        ]),
+                        h('div', { className: 'mj-todo-widget__edit-field mj-todo-widget__edit-field--time-range' }, [
+                            h('label', { className: 'mj-todo-widget__edit-label' }, getString(i18n, 'timeRangeLabel', 'Heure (facultatif)')),
+                            h('div', { className: 'mj-todo-widget__form-time-range' }, [
+                                h('label', null, [
+                                    getString(i18n, 'timeFromLabel', 'De '),
+                                    h('input', {
+                                        type: 'time',
+                                        className: 'mj-todo-widget__edit-input',
+                                        value: draftStartTime,
+                                        onInput: function (event) { return handleEditDraftChange(todoId, 'startTime', event.target.value); },
+                                        disabled: updatePending,
+                                    }),
+                                ]),
+                                h('label', null, [
+                                    getString(i18n, 'timeToLabel', 'à '),
+                                    h('input', {
+                                        type: 'time',
+                                        className: 'mj-todo-widget__edit-input',
+                                        value: draftEndTime,
+                                        onInput: function (event) { return handleEditDraftChange(todoId, 'endTime', event.target.value); },
+                                        disabled: updatePending,
+                                    }),
+                                ]),
+                            ]),
                         ]),
                         h('div', { className: 'mj-todo-widget__edit-field mj-todo-widget__edit-field--emoji mj-todo-widget__form-emoji' }, [
                             h('label', { className: 'mj-todo-widget__edit-label', htmlFor: emojiFieldId }, emojiStrings.eventEmoji || getString(i18n, 'emojiLabel', 'Emoji')),

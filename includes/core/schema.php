@@ -2545,6 +2545,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_95($wpdb);
     mj_member_upgrade_to_2_96($wpdb);
     mj_member_upgrade_to_2_97($wpdb);
+    mj_member_upgrade_to_2_98($wpdb);
 
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -7461,6 +7462,27 @@ function mj_member_upgrade_to_2_97($wpdb) {
 
     if (!mj_member_column_exists($agenda_notes_table, 'assigned_member_ids')) {
         $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD COLUMN assigned_member_ids varchar(500) DEFAULT NULL AFTER member_id");
+    }
+}
+
+/**
+ * Migration 2.98: todos — support a time range (start_time/end_time), aligning
+ * the "tâches" widget with the day notes widget's ability to assign a time slot
+ * alongside a date.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_98($wpdb) {
+    $todos_table = mj_member_get_todos_table_name();
+    if (!$todos_table || !mj_member_table_exists($todos_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($todos_table, 'start_time')) {
+        $wpdb->query("ALTER TABLE {$todos_table} ADD COLUMN start_time time DEFAULT NULL AFTER due_date");
+    }
+    if (!mj_member_column_exists($todos_table, 'end_time')) {
+        $wpdb->query("ALTER TABLE {$todos_table} ADD COLUMN end_time time DEFAULT NULL AFTER start_time");
     }
 }
 

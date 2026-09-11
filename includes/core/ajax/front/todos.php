@@ -188,6 +188,43 @@ final class TodosController implements AjaxHandlerInterface {
         wp_send_json_success(array('todo' => $payload));
     }
 
+    /**
+     * Accepte soit une date unique (`due_date`), soit une liste de dates
+     * encodée en JSON (`dates`, produite par le composant partagé
+     * OccurrencePicker pour les modes plage/hebdomadaire/mensuel/multiple).
+     *
+     * @return array<int,string>|\WP_Error
+     */
+    private function resolveRequestedDates()
+    {
+        $datesRaw = isset($_POST['dates']) ? wp_unslash((string) $_POST['dates']) : '';
+        $candidates = array();
+
+        if ($datesRaw !== '') {
+            $decoded = json_decode($datesRaw, true);
+            if (is_array($decoded)) {
+                $candidates = $decoded;
+            }
+        }
+
+        if (empty($candidates) && isset($_POST['due_date'])) {
+            $candidates = array((string) $_POST['due_date']);
+        }
+
+        $dates = array();
+        foreach ($candidates as $candidate) {
+            $sanitized = MjTodos::sanitize_due_date($candidate);
+            if ($sanitized instanceof \WP_Error) {
+                return $sanitized;
+            }
+            if ($sanitized !== null) {
+                $dates[$sanitized] = $sanitized;
+            }
+        }
+
+        return array_values($dates);
+    }
+
     public function create(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
@@ -199,7 +236,6 @@ final class TodosController implements AjaxHandlerInterface {
 
         $title = isset($_POST['title']) ? sanitize_text_field(wp_unslash((string) $_POST['title'])) : '';
         $projectId = isset($_POST['project_id']) ? (int) $_POST['project_id'] : 0;
-        $dueDateRaw = isset($_POST['due_date']) ? (string) $_POST['due_date'] : '';
         $descriptionRaw = isset($_POST['description']) ? wp_unslash((string) $_POST['description']) : '';
         $description = sanitize_textarea_field($descriptionRaw);
         $emojiRaw = isset($_POST['emoji']) ? wp_unslash((string) $_POST['emoji']) : '';
@@ -214,10 +250,16 @@ final class TodosController implements AjaxHandlerInterface {
             wp_send_json_error(array('message' => __('Merci de saisir un titre.', 'mj-member')));
         }
 
-        $dueDate = MjTodos::sanitize_due_date($dueDateRaw);
-        if ($dueDate instanceof WP_Error) {
-            wp_send_json_error(array('message' => $dueDate->get_error_message()));
+        $dates = $this->resolveRequestedDates();
+        if (is_wp_error($dates)) {
+            wp_send_json_error(array('message' => $dates->get_error_message()));
         }
+        if (empty($dates)) {
+            $dates = array(null);
+        }
+
+        $startTime = isset($_POST['start_time']) ? wp_unslash((string) $_POST['start_time']) : '';
+        $endTime = isset($_POST['end_time']) ? wp_unslash((string) $_POST['end_time']) : '';
 
         if ($projectId > 0 && !MjTodoProjects::get($projectId)) {
             wp_send_json_error(array('message' => __('Dossier introuvable.', 'mj-member')));
@@ -261,47 +303,48 @@ final class TodosController implements AjaxHandlerInterface {
             }
         }
 
-        $data = array(
-            'title' => $title,
-            'project_id' => $projectId,
-            'due_date' => $dueDate,
-            'assigned_member_id' => !empty($assignedMemberIds) ? (int) $assignedMemberIds[0] : $currentMemberId,
-            'assigned_member_ids' => $assignedMemberIds,
-            'assigned_by' => get_current_user_id(),
-            'created_by' => get_current_user_id(),
-            'status' => MjTodos::STATUS_OPEN,
-            'position' => $priority,
-            'emoji' => $emoji,
-        );
-
-        if ($description !== '') {
-            $data['description'] = $description;
-        }
-
-        $created = MjTodos::create($data);
-        if (is_wp_error($created)) {
-            wp_send_json_error(array('message' => $created->get_error_message()));
-        }
-
-        $todoId = (int) $created;
-
         $attachmentIdList = array_values($attachmentIds);
-        if (!empty($attachmentIdList) && class_exists(MjTodoMedia::class)) {
-            $memberIdForMedia = (int) $member->get('id', 0);
-            $mediaResult = MjTodoMedia::attach_multiple($todoId, $attachmentIdList, $memberIdForMedia, get_current_user_id());
-            if (is_wp_error($mediaResult)) {
-                wp_send_json_error(array('message' => $mediaResult->get_error_message()));
+        $memberIdForMedia = (int) $member->get('id', 0);
+        $createdTodoIds = array();
+
+        foreach ($dates as $date) {
+            $data = array(
+                'title' => $title,
+                'project_id' => $projectId,
+                'due_date' => $date,
+                'start_time' => $startTime,
+                'end_time' => $endTime,
+                'assigned_member_id' => !empty($assignedMemberIds) ? (int) $assignedMemberIds[0] : $currentMemberId,
+                'assigned_member_ids' => $assignedMemberIds,
+                'assigned_by' => get_current_user_id(),
+                'created_by' => get_current_user_id(),
+                'status' => MjTodos::STATUS_OPEN,
+                'position' => $priority,
+                'emoji' => $emoji,
+            );
+
+            if ($description !== '') {
+                $data['description'] = $description;
             }
-        }
 
-        $todo = MjTodos::get($todoId);
-        if (!$todo) {
-            wp_send_json_error(array('message' => __('Impossible de récupérer la tâche créée.', 'mj-member')));
-        }
+            $created = MjTodos::create($data);
+            if (is_wp_error($created)) {
+                wp_send_json_error(array('message' => $created->get_error_message()));
+            }
 
-        // Notifier les membres assignés
-        if (!empty($assignedMemberIds)) {
-            do_action('mj_member_todo_assigned', $todoId, $assignedMemberIds, $title, get_current_user_id());
+            $todoId = (int) $created;
+            $createdTodoIds[] = $todoId;
+
+            if (!empty($attachmentIdList) && class_exists(MjTodoMedia::class)) {
+                $mediaResult = MjTodoMedia::attach_multiple($todoId, $attachmentIdList, $memberIdForMedia, get_current_user_id());
+                if (is_wp_error($mediaResult)) {
+                    wp_send_json_error(array('message' => $mediaResult->get_error_message()));
+                }
+            }
+
+            if (!empty($assignedMemberIds)) {
+                do_action('mj_member_todo_assigned', $todoId, $assignedMemberIds, $title, get_current_user_id());
+            }
         }
 
         $projectMap = array();
@@ -312,9 +355,20 @@ final class TodosController implements AjaxHandlerInterface {
             }
         }
 
-        $payload = mj_member_todo_prepare_payload($todo, $projectMap, $currentMemberId);
+        $payloadTodos = array();
+        foreach ($createdTodoIds as $createdTodoId) {
+            $todo = MjTodos::get($createdTodoId);
+            if (!$todo) {
+                continue;
+            }
+            $payloadTodos[] = mj_member_todo_prepare_payload($todo, $projectMap, $currentMemberId);
+        }
 
-        wp_send_json_success(array('todo' => $payload));
+        if (empty($payloadTodos)) {
+            wp_send_json_error(array('message' => __('Impossible de récupérer la tâche créée.', 'mj-member')));
+        }
+
+        wp_send_json_success(array('todos' => $payloadTodos, 'todo' => $payloadTodos[0]));
     }
 
     public function projectCreate(): void
@@ -427,6 +481,16 @@ final class TodosController implements AjaxHandlerInterface {
                 wp_send_json_error(array('message' => $dueDate->get_error_message()));
             }
             $payload['due_date'] = $dueDate;
+            $hasField = true;
+        }
+
+        if (array_key_exists('start_time', $_POST) || array_key_exists('end_time', $_POST)) {
+            if (array_key_exists('start_time', $_POST)) {
+                $payload['start_time'] = wp_unslash((string) $_POST['start_time']);
+            }
+            if (array_key_exists('end_time', $_POST)) {
+                $payload['end_time'] = wp_unslash((string) $_POST['end_time']);
+            }
             $hasField = true;
         }
 

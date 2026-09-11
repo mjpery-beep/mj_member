@@ -13,9 +13,10 @@
     var ModalsPkg = global.MjRegMgrModals;
     var EmojiPickerPkg = global.MjRegMgrEmojiPicker;
     var RegComps = global.MjRegMgrRegistrations;
+    var OccurrencePickerPkg = global.MjOccurrencePicker;
 
-    if (!preact || !hooks || !ModalsPkg) {
-        console.warn('[MjDayNoteForm] Dépendances manquantes (preact/preactHooks/MjRegMgrModals).');
+    if (!preact || !hooks || !ModalsPkg || !OccurrencePickerPkg) {
+        console.warn('[MjDayNoteForm] Dépendances manquantes (preact/preactHooks/MjRegMgrModals/MjOccurrencePicker).');
         return;
     }
 
@@ -29,8 +30,6 @@
     var Modal = ModalsPkg.Modal;
     var EmojiPickerField = EmojiPickerPkg ? EmojiPickerPkg.EmojiPickerField : null;
     var MemberAvatar = RegComps ? RegComps.MemberAvatar : function () { return null; };
-
-    var WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
     var DEFAULT_GROUP_OPTIONS = [
         { value: 'private', label: 'Uniquement moi' },
@@ -82,55 +81,6 @@
                 return payload.data;
             });
         });
-    }
-
-    function pad2(n) {
-        return n < 10 ? '0' + n : String(n);
-    }
-
-    function toIsoDate(date) {
-        return date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate());
-    }
-
-    function parseIsoDate(value) {
-        var parts = String(value || '').split('-');
-        if (parts.length !== 3) return null;
-        var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        return isNaN(d.getTime()) ? null : d;
-    }
-
-    /**
-     * @param {string} startIso
-     * @param {string} endIso
-     * @param {number[]} weekdays 0=Lundi ... 6=Dimanche
-     * @return {string[]}
-     */
-    function expandWeeklyDates(startIso, endIso, weekdays) {
-        var start = parseIsoDate(startIso);
-        var end = parseIsoDate(endIso);
-        if (!start || !end || !weekdays || !weekdays.length) {
-            return [];
-        }
-        if (end < start) {
-            var tmp = start; start = end; end = tmp;
-        }
-
-        var set = {};
-        weekdays.forEach(function (d) { set[d] = true; });
-
-        var dates = [];
-        var cursor = new Date(start.getTime());
-        var guard = 0;
-        while (cursor <= end && guard < 730) {
-            var isoWeekday = (cursor.getDay() + 6) % 7; // 0=Lundi
-            if (set[isoWeekday]) {
-                dates.push(toIsoDate(cursor));
-            }
-            cursor.setDate(cursor.getDate() + 1);
-            guard++;
-        }
-
-        return dates;
     }
 
     // ============================================
@@ -209,96 +159,6 @@
     }
 
     // ============================================
-    // Date picker (single / multiple / weekly)
-    // ============================================
-    function DatesPicker(props) {
-        var mode = props.mode;
-        var onModeChange = props.onModeChange;
-        var singleDate = props.singleDate;
-        var onSingleDateChange = props.onSingleDateChange;
-        var multipleDates = props.multipleDates || [];
-        var onAddDate = props.onAddDate;
-        var onRemoveDate = props.onRemoveDate;
-        var weeklyDays = props.weeklyDays || [];
-        var onToggleWeekday = props.onToggleWeekday;
-        var weeklyStart = props.weeklyStart;
-        var weeklyEnd = props.weeklyEnd;
-        var onWeeklyStartChange = props.onWeeklyStartChange;
-        var onWeeklyEndChange = props.onWeeklyEndChange;
-        var disableModeChange = props.disableModeChange;
-        var pendingDateValue = props.pendingDateValue;
-        var onPendingDateChange = props.onPendingDateChange;
-
-        return h('div', { class: 'mj-day-note-form__dates' }, [
-            !disableModeChange && h('div', { class: 'mj-day-note-form__date-mode' }, [
-                h('label', null, [
-                    h('input', { type: 'radio', checked: mode === 'single', onChange: function () { onModeChange('single'); } }),
-                    ' Date unique',
-                ]),
-                h('label', null, [
-                    h('input', { type: 'radio', checked: mode === 'multiple', onChange: function () { onModeChange('multiple'); } }),
-                    ' Dates multiples',
-                ]),
-                h('label', null, [
-                    h('input', { type: 'radio', checked: mode === 'weekly', onChange: function () { onModeChange('weekly'); } }),
-                    ' Jours de la semaine récurrents',
-                ]),
-            ]),
-
-            mode === 'single' && h('input', {
-                type: 'date',
-                class: 'mj-regmgr-form__input',
-                value: singleDate || '',
-                onChange: function (e) { onSingleDateChange(e.target.value); },
-            }),
-
-            mode === 'multiple' && h(Fragment, null, [
-                h('div', { class: 'mj-day-note-form__multi-add' }, [
-                    h('input', {
-                        type: 'date',
-                        class: 'mj-regmgr-form__input',
-                        value: pendingDateValue || '',
-                        onChange: function (e) { onPendingDateChange(e.target.value); },
-                    }),
-                    h('button', {
-                        type: 'button',
-                        class: 'mj-regmgr-btn mj-regmgr-btn--secondary',
-                        onClick: function () { if (pendingDateValue) onAddDate(pendingDateValue); },
-                    }, 'Ajouter'),
-                ]),
-                h('div', { class: 'mj-day-note-form__chips' }, multipleDates.map(function (d) {
-                    return h('span', { key: d, class: 'mj-day-note-form__chip' }, [
-                        d,
-                        h('button', { type: 'button', onClick: function () { onRemoveDate(d); } }, '×'),
-                    ]);
-                })),
-            ]),
-
-            mode === 'weekly' && h(Fragment, null, [
-                h('div', { class: 'mj-day-note-form__weekdays' }, WEEKDAY_LABELS.map(function (label, index) {
-                    var active = weeklyDays.indexOf(index) >= 0;
-                    return h('button', {
-                        key: index,
-                        type: 'button',
-                        class: 'mj-day-note-form__weekday' + (active ? ' mj-day-note-form__weekday--active' : ''),
-                        onClick: function () { onToggleWeekday(index); },
-                    }, label);
-                })),
-                h('div', { class: 'mj-day-note-form__range' }, [
-                    h('label', null, [
-                        'Du ',
-                        h('input', { type: 'date', class: 'mj-regmgr-form__input', value: weeklyStart || '', onChange: function (e) { onWeeklyStartChange(e.target.value); } }),
-                    ]),
-                    h('label', null, [
-                        'au ',
-                        h('input', { type: 'date', class: 'mj-regmgr-form__input', value: weeklyEnd || '', onChange: function (e) { onWeeklyEndChange(e.target.value); } }),
-                    ]),
-                ]),
-            ]),
-        ]);
-    }
-
-    // ============================================
     // Main form
     // ============================================
     function NoteFormModal(props) {
@@ -326,15 +186,14 @@
         var stateMemberIds = useState(note && note.assigned_member_ids ? note.assigned_member_ids.map(String) : []);
         var stateGroup = useState(note && note.visibility ? note.visibility : 'staff');
 
-        var stateDateMode = useState('single');
-        var stateSingleDate = useState(note ? note.note_date || '' : '');
+        var stateOccurrence = useState(function () {
+            return OccurrencePickerPkg.defaultOccurrenceValue({
+                mode: 'single',
+                singleDate: note ? note.note_date || '' : '',
+            });
+        });
         var stateStartTime = useState(note ? (note.start_time || '') : '');
         var stateEndTime = useState(note ? (note.end_time || '') : '');
-        var stateMultipleDates = useState([]);
-        var statePendingDate = useState('');
-        var stateWeeklyDays = useState([]);
-        var stateWeeklyStart = useState('');
-        var stateWeeklyEnd = useState('');
 
         var stateMedia = useState((note && note.media) || []);
         var stateUploading = useState(false);
@@ -350,15 +209,9 @@
         var memberIds = stateMemberIds[0], setMemberIds = stateMemberIds[1];
         var group = stateGroup[0], setGroup = stateGroup[1];
 
-        var dateMode = stateDateMode[0], setDateMode = stateDateMode[1];
-        var singleDate = stateSingleDate[0], setSingleDate = stateSingleDate[1];
+        var occurrence = stateOccurrence[0], setOccurrence = stateOccurrence[1];
         var startTime = stateStartTime[0], setStartTime = stateStartTime[1];
         var endTime = stateEndTime[0], setEndTime = stateEndTime[1];
-        var multipleDates = stateMultipleDates[0], setMultipleDates = stateMultipleDates[1];
-        var pendingDate = statePendingDate[0], setPendingDate = statePendingDate[1];
-        var weeklyDays = stateWeeklyDays[0], setWeeklyDays = stateWeeklyDays[1];
-        var weeklyStart = stateWeeklyStart[0], setWeeklyStart = stateWeeklyStart[1];
-        var weeklyEnd = stateWeeklyEnd[0], setWeeklyEnd = stateWeeklyEnd[1];
 
         var media = stateMedia[0], setMedia = stateMedia[1];
         var uploading = stateUploading[0], setUploading = stateUploading[1];
@@ -375,36 +228,15 @@
             setVisMode(note && note.assigned_member_ids && note.assigned_member_ids.length ? 'member' : 'group');
             setMemberIds(note && note.assigned_member_ids ? note.assigned_member_ids.map(String) : []);
             setGroup(note && note.visibility ? note.visibility : 'staff');
-            setDateMode('single');
-            setSingleDate(note ? note.note_date || '' : '');
+            setOccurrence(OccurrencePickerPkg.defaultOccurrenceValue({
+                mode: 'single',
+                singleDate: note ? note.note_date || '' : '',
+            }));
             setStartTime(note ? (note.start_time || '') : '');
             setEndTime(note ? (note.end_time || '') : '');
-            setMultipleDates([]);
-            setPendingDate('');
-            setWeeklyDays([]);
-            setWeeklyStart('');
-            setWeeklyEnd('');
             setMedia((note && note.media) || []);
             setError('');
         }, [isOpen, note]);
-
-        var handleAddDate = useCallback(function (date) {
-            setMultipleDates(function (prev) {
-                if (prev.indexOf(date) >= 0) return prev;
-                return prev.concat([date]).sort();
-            });
-            setPendingDate('');
-        }, []);
-
-        var handleRemoveDate = useCallback(function (date) {
-            setMultipleDates(function (prev) { return prev.filter(function (d) { return d !== date; }); });
-        }, []);
-
-        var handleToggleWeekday = useCallback(function (index) {
-            setWeeklyDays(function (prev) {
-                return prev.indexOf(index) >= 0 ? prev.filter(function (d) { return d !== index; }) : prev.concat([index]).sort();
-            });
-        }, []);
 
         var handleUpload = useCallback(function (file) {
             if (!ajaxUrl) return;
@@ -436,14 +268,8 @@
         }, [ajaxUrl, nonce, isEdit, note]);
 
         var resolveDates = useCallback(function () {
-            if (dateMode === 'single') {
-                return singleDate ? [singleDate] : [];
-            }
-            if (dateMode === 'multiple') {
-                return multipleDates.slice();
-            }
-            return expandWeeklyDates(weeklyStart, weeklyEnd, weeklyDays);
-        }, [dateMode, singleDate, multipleDates, weeklyStart, weeklyEnd, weeklyDays]);
+            return OccurrencePickerPkg.resolveOccurrenceDates(occurrence.mode, occurrence);
+        }, [occurrence]);
 
         var handleSubmit = useCallback(function (e) {
             if (e && e.preventDefault) e.preventDefault();
@@ -626,23 +452,10 @@
 
             h('div', { class: 'mj-day-note-form__group' }, [
                 h('label', { class: 'mj-regmgr-form__label' }, 'Date(s)'),
-                h(DatesPicker, {
-                    mode: dateMode,
-                    onModeChange: setDateMode,
+                h(OccurrencePickerPkg.OccurrencePicker, {
+                    value: occurrence,
+                    onChange: setOccurrence,
                     disableModeChange: isEdit,
-                    singleDate: singleDate,
-                    onSingleDateChange: setSingleDate,
-                    multipleDates: multipleDates,
-                    onAddDate: handleAddDate,
-                    onRemoveDate: handleRemoveDate,
-                    pendingDateValue: pendingDate,
-                    onPendingDateChange: setPendingDate,
-                    weeklyDays: weeklyDays,
-                    onToggleWeekday: handleToggleWeekday,
-                    weeklyStart: weeklyStart,
-                    weeklyEnd: weeklyEnd,
-                    onWeeklyStartChange: setWeeklyStart,
-                    onWeeklyEndChange: setWeeklyEnd,
                 }),
             ]),
 
@@ -680,7 +493,6 @@
 
     global.MjDayNoteForm = {
         NoteFormModal: NoteFormModal,
-        expandWeeklyDates: expandWeeklyDates,
     };
 
 })(window);

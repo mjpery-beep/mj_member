@@ -1536,10 +1536,12 @@ button.mj-member-events-calendar__day-add {
 .mj-cal-mobile__day-actions {
     position: relative;
     flex: 0 0 auto;
+    isolation: isolate;
+    z-index: 1;
 }
 
-.mj-cal-mobile__day-actions.is-open {
-    z-index: 10001;
+.mj-member-events-calendar .mj-cal-mobile__day-actions.is-open {
+    z-index: 999999 !important;
 }
 
 .mj-cal-mobile__day-menu-toggle {
@@ -1577,11 +1579,11 @@ button.mj-member-events-calendar__day-add {
     height: 18px;
 }
 
-.mj-cal-mobile__day-menu {
+.mj-member-events-calendar .mj-cal-mobile__day-menu {
     position: absolute;
     top: calc(100% + 4px);
     right: 0;
-    z-index: 10002;
+    z-index: 999999 !important;
     display: flex;
     flex-direction: column;
     min-width: 190px;
@@ -1870,6 +1872,7 @@ button.mj-member-events-calendar__day-add {
 
 .mj-member-events-calendar__mobile-event {
     position: relative;
+    isolation: isolate;
     background: var(--mj-event-surface, #f8fafc);
     border-radius: 12px;
     border: 1px solid var(--mj-event-border, transparent);
@@ -1879,7 +1882,8 @@ button.mj-member-events-calendar__day-add {
 
 .mj-member-events-calendar__mobile-event:has(.mj-member-events-calendar__event-actions--mobile.is-open) {
     overflow: visible;
-    z-index: 1000;
+    isolation: isolate;
+    z-index: 999999 !important;
 }
 
 .mj-member-events-calendar__mobile-event.is-cancelled {
@@ -1945,7 +1949,7 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
     position: absolute;
     top: 0;
     left: 0;
-    z-index: 1;
+    z-index: 5 !important;
     margin: 0;
     line-height: 15px;
     border-radius: 999px;
@@ -2699,12 +2703,18 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease;
+    isolation: isolate;
     z-index: 360;
 }
 
+.mj-member-events-calendar .mj-member-events-calendar__event-actions.is-open {
+    z-index: 999999 !important;
+}
+
 .mj-member-events-calendar__event:has(.mj-member-events-calendar__event-actions.is-open),
-.mj-member-events-calendar__mobile-event:has(.mj-member-events-calendar__event-actions--mobile.is-open) {
-    z-index: 1000;
+.mj-member-events-calendar .mj-member-events-calendar__mobile-event:has(.mj-member-events-calendar__event-actions--mobile.is-open) {
+    isolation: isolate;
+    z-index: 999999 !important;
 }
 
 .mj-member-events-calendar__event:hover .mj-member-events-calendar__event-actions,
@@ -2753,7 +2763,7 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
     transform: translateY(-1px);
 }
 
-.mj-member-events-calendar__event-menu {
+.mj-member-events-calendar .mj-member-events-calendar__event-menu {
     position: absolute;
     top: calc(100% + 6px);
     right: 0;
@@ -2765,7 +2775,7 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
     border-radius: 8px;
     background: linear-gradient(180deg, #ffffff, #f8fafc);
     box-shadow: 0 18px 42px rgba(15, 23, 42, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.7) inset;
-    z-index: 1002;
+    z-index: 999999 !important;
 }
 
 .mj-member-events-calendar__event-menu::before {

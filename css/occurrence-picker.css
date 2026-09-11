@@ -1,0 +1,88 @@
+/**
+ * Occurrence Picker - styles partagés (widgets Notes et Tâches).
+ */
+.mj-occurrence-picker__mode {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.mj-occurrence-picker__mode-option {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-weight: 400 !important;
+    font-size: 13px !important;
+    margin: 0 !important;
+    cursor: pointer;
+}
+
+.mj-occurrence-picker__range {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.mj-occurrence-picker__monthly-rule {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.mj-occurrence-picker__weekdays {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.mj-occurrence-picker__weekday {
+    border: 1px solid #d0d5dd;
+    background: #fff;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.mj-occurrence-picker__weekday--active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+}
+
+.mj-occurrence-picker__multi-add {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.mj-occurrence-picker__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mj-occurrence-picker__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #eef2ff;
+    color: #3730a3;
+    border-radius: 999px;
+    padding: 4px 8px 4px 12px;
+    font-size: 13px;
+}
+
+.mj-occurrence-picker__chip button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: inherit;
+}

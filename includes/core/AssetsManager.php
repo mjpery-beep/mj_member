@@ -334,8 +334,10 @@ final class AssetsManager
         self::registerScript('mj-member-member-account', 'js/member-account.js', array(), false);
         self::registerScript('mj-member-create-event-modal', 'js/create-event-modal.js', array('mj-member-utils', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-occurrence-editor'));
         self::registerStyle('mj-member-create-event-modal', 'css/create-event-modal.css');
-        self::registerScript('mj-member-day-notes-form', 'js/day-notes/note-form.js', array('mj-member-utils', 'mj-member-preact', 'mj-member-preact-hooks', 'mj-member-regmgr-modals', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-registrations'));
-        self::registerStyle('mj-member-day-notes-form', 'css/day-notes.css', array('mj-member-components', 'mj-member-registration-manager'));
+        self::registerScript('mj-member-occurrence-picker', 'js/shared/occurrence-picker.js', array('mj-member-preact'));
+        self::registerStyle('mj-member-occurrence-picker', 'css/occurrence-picker.css', array('mj-member-components'));
+        self::registerScript('mj-member-day-notes-form', 'js/day-notes/note-form.js', array('mj-member-utils', 'mj-member-preact', 'mj-member-preact-hooks', 'mj-member-regmgr-modals', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-registrations', 'mj-member-occurrence-picker'));
+        self::registerStyle('mj-member-day-notes-form', 'css/day-notes.css', array('mj-member-components', 'mj-member-registration-manager', 'mj-member-occurrence-picker'));
         // Les dépendances d'édition (create-event-modal, day-notes-form, regmgr-services,
         // leave-requests) ne sont PAS déclarées ici : events-calendar.js les utilise en
         // best-effort via `window.MjX && ...` quand elles sont présentes. Elles sont
@@ -381,7 +383,7 @@ final class AssetsManager
             '10.19.3',
             true
         );
-        self::registerScript('mj-member-todo-widget', 'js/elementor/todo-widget.js', array('mj-member-utils', 'mj-member-preact-hooks', 'media-editor', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-services', 'mj-member-regmgr-nextcloud-files'));
+        self::registerScript('mj-member-todo-widget', 'js/elementor/todo-widget.js', array('mj-member-utils', 'mj-member-preact-hooks', 'media-editor', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-services', 'mj-member-regmgr-nextcloud-files', 'mj-member-occurrence-picker'));
 
         self::registerStyle('mj-member-login-component', 'css/login-component.css');
         self::registerScript('mj-member-login-component', 'js/login-component.js');
@@ -392,7 +394,7 @@ final class AssetsManager
         self::registerStyle('mj-member-photo-import-timeline', 'css/photo-import-timeline.css', array('mj-member-components'));
         self::registerStyle('mj-member-grimlins-gallery', 'css/grimlins-gallery.css', array('mj-member-components'));
         self::registerStyle('mj-member-grim-gif', 'css/grim-gif.css', array('mj-member-components'));
-        self::registerStyle('mj-member-todo-widget', 'css/todo-widget.css', array('mj-member-components'));
+        self::registerStyle('mj-member-todo-widget', 'css/todo-widget.css', array('mj-member-components', 'mj-member-occurrence-picker'));
         self::registerStyle('mj-member-idea-box', 'css/idea-box.css', array('mj-member-components'));
         self::registerStyle('mj-member-documents-manager', 'css/documents-manager.css', array('mj-member-components'));
         self::registerStyle('mj-member-badges-overview', 'css/badges-overview.css', array('mj-member-components'));

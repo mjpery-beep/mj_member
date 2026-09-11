@@ -79,8 +79,27 @@
 
 @media (min-width: 600px) {
     .mj-todo-widget__form-fields {
-        grid-template-columns: 1fr 220px 160px;
+        grid-template-columns: 1fr 220px;
     }
+}
+
+.mj-todo-widget__form-occurrence {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.mj-todo-widget__form-time-range {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.mj-todo-widget__form-time-range label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
 }
 
 .mj-todo-widget__form-description {

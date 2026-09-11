@@ -467,6 +467,15 @@ class MjTodos extends MjTools implements CrudRepositoryInterface
             return $dueDate;
         }
 
+        $startTime = self::sanitize_time_value($data['start_time'] ?? null);
+        $endTime = self::sanitize_time_value($data['end_time'] ?? null);
+        if ($startTime === null && $endTime !== null) {
+            return new WP_Error('mj_member_todo_invalid_time_range', __('L’heure de début est nécessaire si une heure de fin est renseignée.', 'mj-member'));
+        }
+        if ($startTime !== null && $endTime !== null && $endTime <= $startTime) {
+            return new WP_Error('mj_member_todo_invalid_time_range', __('L’heure de fin doit être postérieure à l’heure de début.', 'mj-member'));
+        }
+
         $createdBy = isset($data['created_by']) ? (int) $data['created_by'] : get_current_user_id();
         if ($createdBy < 0) {
             $createdBy = 0;
@@ -514,6 +523,16 @@ class MjTodos extends MjTools implements CrudRepositoryInterface
 
         if ($dueDate !== null) {
             $insert['due_date'] = $dueDate;
+            $formats[] = '%s';
+        }
+
+        if ($startTime !== null) {
+            $insert['start_time'] = $startTime;
+            $formats[] = '%s';
+        }
+
+        if ($endTime !== null) {
+            $insert['end_time'] = $endTime;
             $formats[] = '%s';
         }
 
@@ -684,6 +703,27 @@ class MjTodos extends MjTools implements CrudRepositoryInterface
                 return $dueDate;
             }
             $fields['due_date'] = $dueDate;
+            $formats[] = '%s';
+        }
+
+        if (array_key_exists('start_time', $data) || array_key_exists('end_time', $data)) {
+            $startTime = array_key_exists('start_time', $data)
+                ? self::sanitize_time_value($data['start_time'])
+                : (isset($existing['start_time']) && $existing['start_time'] !== '' ? $existing['start_time'] . ':00' : null);
+            $endTime = array_key_exists('end_time', $data)
+                ? self::sanitize_time_value($data['end_time'])
+                : (isset($existing['end_time']) && $existing['end_time'] !== '' ? $existing['end_time'] . ':00' : null);
+
+            if ($startTime === null && $endTime !== null) {
+                return new WP_Error('mj_member_todo_invalid_time_range', __('L’heure de début est nécessaire si une heure de fin est renseignée.', 'mj-member'));
+            }
+            if ($startTime !== null && $endTime !== null && $endTime <= $startTime) {
+                return new WP_Error('mj_member_todo_invalid_time_range', __('L’heure de fin doit être postérieure à l’heure de début.', 'mj-member'));
+            }
+
+            $fields['start_time'] = $startTime;
+            $formats[] = '%s';
+            $fields['end_time'] = $endTime;
             $formats[] = '%s';
         }
 
@@ -865,6 +905,8 @@ class MjTodos extends MjTools implements CrudRepositoryInterface
             'emoji' => isset($row['emoji']) ? self::sanitize_emoji_value($row['emoji']) : '',
             'status' => $status,
             'due_date' => isset($row['due_date']) ? (string) $row['due_date'] : '',
+            'start_time' => isset($row['start_time']) && $row['start_time'] !== null ? substr((string) $row['start_time'], 0, 5) : '',
+            'end_time' => isset($row['end_time']) && $row['end_time'] !== null ? substr((string) $row['end_time'], 0, 5) : '',
             'assigned_member_id' => isset($row['assigned_member_id']) ? (int) $row['assigned_member_id'] : 0,
             'assigned_by' => isset($row['assigned_by']) ? (int) $row['assigned_by'] : 0,
             'created_by' => isset($row['created_by']) ? (int) $row['created_by'] : 0,
@@ -919,6 +961,24 @@ class MjTodos extends MjTools implements CrudRepositoryInterface
         }
 
         return sprintf('%04d-%02d-%02d', $year, $month, $day);
+    }
+
+    /**
+     * @param mixed $value
+     * @return string|null
+     */
+    public static function sanitize_time_value($value): ?string
+    {
+        $value = is_string($value) ? trim($value) : '';
+        if ($value === '') {
+            return null;
+        }
+
+        if (preg_match('/^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/', $value, $matches)) {
+            return $matches[1] . ':' . $matches[2] . ':00';
+        }
+
+        return null;
     }
 
     public static function sanitize_emoji_value($value): string

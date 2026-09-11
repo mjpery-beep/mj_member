@@ -113,6 +113,11 @@ if (!function_exists('mj_member_todo_widget_localize')) {
                 'scopeMine' => __('Mes tâches', 'mj-member'),
                 'scopeAll' => __('Toutes les tâches', 'mj-member'),
                 'scopeLabel' => __('Affichage', 'mj-member'),
+                'dateRequired' => __('Au moins une date est requise.', 'mj-member'),
+                'timeRangeInvalid' => __('L’heure de fin doit être postérieure à l’heure de début.', 'mj-member'),
+                'timeRangeLabel' => __('Heure (facultatif)', 'mj-member'),
+                'timeFromLabel' => __('De ', 'mj-member'),
+                'timeToLabel' => __('à ', 'mj-member'),
             ),
         );
 
@@ -540,6 +545,8 @@ if (!function_exists('mj_member_todo_prepare_payload')) {
         $position = isset($todo['position']) ? (int) $todo['position'] : 0;
         $priority = isset($todo['priority']) ? (int) $todo['priority'] : $position;
         $dueDate = isset($todo['due_date']) ? sanitize_text_field((string) $todo['due_date']) : '';
+        $startTime = isset($todo['start_time']) ? sanitize_text_field((string) $todo['start_time']) : '';
+        $endTime = isset($todo['end_time']) ? sanitize_text_field((string) $todo['end_time']) : '';
         $completedAt = isset($todo['completed_at']) ? sanitize_text_field((string) $todo['completed_at']) : '';
 
         $assignees = mj_member_todo_prepare_assignees_payload($todo, $viewerMemberId);
@@ -568,6 +575,8 @@ if (!function_exists('mj_member_todo_prepare_payload')) {
             'priority' => $priority,
             'position' => $position,
             'dueDate' => $dueDate,
+            'startTime' => $startTime,
+            'endTime' => $endTime,
             'completedAt' => $completedAt,
             'assignees' => $assignees,
             'assignedMemberId' => $assignedMemberId,
