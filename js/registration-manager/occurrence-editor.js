@@ -2537,9 +2537,7 @@
                         : null;
                     if (responseEvent) {
                         if (Array.isArray(responseEvent.occurrenceGenerationBatches)) {
-                            setLocalBatches(responseEvent.occurrenceGenerationBatches.filter(function (batch) {
-                                return batch && isOccurrenceBatchActive(batch.status);
-                            }));
+                            setLocalBatches(responseEvent.occurrenceGenerationBatches);
                         }
 
                         if (responseEvent.occurrenceGenerator && typeof responseEvent.occurrenceGenerator === 'object') {

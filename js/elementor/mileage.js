@@ -140,6 +140,13 @@
             for (var i = 0; i < cbs.length; i++) cbs[i]();
         };
 
+        window.gm_authFailure = function () {
+            mapsLoadState = 'error';
+            var cbs = mapsCallbacks.slice();
+            mapsCallbacks = [];
+            for (var i = 0; i < cbs.length; i++) cbs[i]();
+        };
+
         var script = document.createElement('script');
         script.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(D.googleApiKey) + '&libraries=places&callback=__mjMileageMapsReady';
         script.async = true;

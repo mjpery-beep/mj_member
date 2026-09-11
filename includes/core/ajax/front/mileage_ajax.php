@@ -121,7 +121,10 @@ final class MileageController implements AjaxHandlerInterface
             );
         };
 
-        $googleApiKey = get_option('elementor_google_maps_api_key', '');
+        $googleApiKey = Config::googleMapsApiKey();
+        if ($googleApiKey === '') {
+            $googleApiKey = (string) get_option('elementor_google_maps_api_key', '');
+        }
 
         wp_localize_script('mj-member-mileage', 'mjMileage', array(
             'ajaxUrl'         => admin_url('admin-ajax.php'),

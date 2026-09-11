@@ -2182,7 +2182,7 @@
                 'a{color:#2563eb;text-decoration:underline;}' +
                 '.regdoc-header{}' +
                 '.regdoc-content{min-height:150px;}' +
-                '.regdoc-footer{border-top:1px solid #999;padding-top:15pt;margin-top:20pt;font-size:10pt;color:#666;}' +
+                '.regdoc-footer{font-size:10pt;color:#666;}' +
                 '.regdoc-page{page-break-after:always;}' +
                 '.regdoc-page:last-child{page-break-after:auto;}' +
                 '</style></head><body>';
@@ -2281,7 +2281,7 @@
                 'a{color:#2563eb;text-decoration:underline;}' +
                 '.regdoc-header{}' +
                 '.regdoc-content{min-height:150px;}' +
-                '.regdoc-footer{border-top:1px solid #999;padding-top:15pt;margin-top:20pt;font-size:10pt;color:#666;}' +
+                '.regdoc-footer{font-size:10pt;color:#666;}' +
                 '</style></head><body>' +
                 (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
                 '<div class="regdoc-content">' + processedContent + '</div>' +
@@ -2438,7 +2438,7 @@
                 'a{color:#2563eb;text-decoration:underline;}' +
                 '.regdoc-header{}' +
                 '.regdoc-content{min-height:150px;}' +
-                '.regdoc-footer{border-top:1px solid #999;padding-top:15pt;margin-top:20pt;font-size:10pt;color:#666;}' +
+                '.regdoc-footer{font-size:10pt;color:#666;}' +
                 '</style></head><body>' +
                 (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
                 '<div class="regdoc-content">' + processedContent + '</div>' +
