@@ -417,6 +417,19 @@
             },
 
             /**
+             * Génère puis retourne le document d'inscription vierge (sans membre) en PDF.
+             */
+            downloadRegistrationDocumentBlankPdf: function (eventId, content) {
+                var payload = {
+                    eventId: eventId,
+                };
+                if (typeof content === 'string' && content !== '') {
+                    payload.content = content;
+                }
+                return post('mj_regmgr_download_registration_document_blank_pdf', payload);
+            },
+
+            /**
              * Met à jour la présence
              */
             updateAttendance: function (eventId, memberId, occurrence, status) {

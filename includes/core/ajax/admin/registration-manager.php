@@ -138,6 +138,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_update_registration_occurrences', [$this, 'updateRegistrationOccurrences']);
         add_action('wp_ajax_mj_regmgr_send_registration_contract', [$this, 'sendRegistrationContract']);
         add_action('wp_ajax_mj_regmgr_download_registration_contract_pdf', [$this, 'downloadRegistrationContractPdf']);
+        add_action('wp_ajax_mj_regmgr_download_registration_document_blank_pdf', [$this, 'downloadRegistrationDocumentBlankPdf']);
         add_action('wp_ajax_mj_regmgr_mark_membership_paid', [$this, 'markMembershipPaid']);
         add_action('wp_ajax_mj_regmgr_create_membership_payment_link', [$this, 'createMembershipPaymentLink']);
         add_action('wp_ajax_mj_regmgr_update_member_idea', [$this, 'updateMemberIdea']);
@@ -8874,6 +8875,129 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             error_log('[MjRegMgr] downloadRegistrationContractPdf fatal: ' . $e->getMessage());
             wp_send_json_error(array('message' => __('Erreur interne lors de la génération du PDF.', 'mj-member')), 500);
         }
+    }
+
+    /**
+     * Generate a blank registration document (no member) as PDF: event/site placeholders
+     * stay interpolated, member_/guardian_ placeholders become a dotted line to fill in by hand.
+     */
+    public function downloadRegistrationDocumentBlankPdf() {
+        try {
+            $auth = $this->verifyRequest();
+            if (!$auth) return;
+
+            $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+            if ($event_id <= 0) {
+                wp_send_json_error(array('message' => __('ID événement invalide.', 'mj-member')), 400);
+                return;
+            }
+
+            $event = MjEvents::find($event_id);
+            if (!$event) {
+                wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+                return;
+            }
+
+            $registration_document = isset($event->registration_document) ? (string) $event->registration_document : '';
+            if (isset($_POST['content']) && trim((string) $_POST['content']) !== '') {
+                $registration_document = trim((string) wp_unslash($_POST['content']));
+            } else {
+                $registration_document = wp_unslash($registration_document);
+            }
+            if ($registration_document === '') {
+                wp_send_json_error(array('message' => __('Aucun contrat n\'est configuré pour cet événement.', 'mj-member')), 400);
+                return;
+            }
+
+            $variables = $this->buildBlankRegistrationDocumentVariables($event);
+            $processed_header = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_header', ''), $variables);
+            $processed_content = $this->interpolateRegistrationDocumentTemplate($registration_document, $variables);
+            $processed_footer = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_footer', ''), $variables);
+
+            $event_title = isset($event->title) ? (string) $event->title : __('Événement', 'mj-member');
+
+            $pdf_result = $this->buildRegistrationContractPdf(
+                $processed_header,
+                $processed_content,
+                $processed_footer,
+                $event_title,
+                ''
+            );
+
+            if (is_wp_error($pdf_result)) {
+                error_log('[MjRegMgr] Blank PDF generation failed for event #' . $event_id . ': ' . $pdf_result->get_error_message());
+                wp_send_json_error(array('message' => $pdf_result->get_error_message()), 500);
+                return;
+            }
+
+            $filename = isset($pdf_result['filename']) ? (string) $pdf_result['filename'] : '';
+            if ($filename === '') {
+                $filename = 'document-vierge-' . date_i18n('Ymd') . '.pdf';
+            }
+
+            $content = isset($pdf_result['content']) ? (string) $pdf_result['content'] : '';
+            if ($content === '') {
+                wp_send_json_error(array('message' => __('Impossible de générer le PDF.', 'mj-member')), 500);
+                return;
+            }
+
+            $renderer = isset($pdf_result['renderer']) ? (string) $pdf_result['renderer'] : 'unknown';
+            error_log('[MjRegMgr] Blank PDF renderer for event #' . $event_id . ': ' . $renderer);
+
+            $upload_dir = wp_upload_dir();
+            if (!is_array($upload_dir) || !empty($upload_dir['error'])) {
+                wp_send_json_error(array('message' => __('Impossible de préparer le dossier de téléchargement.', 'mj-member')), 500);
+                return;
+            }
+
+            $subdir = '/mj-member/reg-contracts';
+            $target_dir = trailingslashit($upload_dir['basedir']) . ltrim($subdir, '/');
+            if (!wp_mkdir_p($target_dir)) {
+                wp_send_json_error(array('message' => __('Impossible de créer le dossier de téléchargement.', 'mj-member')), 500);
+                return;
+            }
+
+            $stored_name = wp_unique_filename($target_dir, $filename);
+            $stored_path = trailingslashit($target_dir) . $stored_name;
+            $write_result = file_put_contents($stored_path, $content);
+            if ($write_result === false) {
+                wp_send_json_error(array('message' => __('Impossible d\'écrire le fichier PDF.', 'mj-member')), 500);
+                return;
+            }
+
+            $download_url = trailingslashit($upload_dir['baseurl']) . ltrim($subdir, '/') . '/' . rawurlencode($stored_name);
+
+            wp_send_json_success(array(
+                'message' => __('PDF généré.', 'mj-member'),
+                'eventId' => $event_id,
+                'filename' => $stored_name,
+                'downloadUrl' => $download_url,
+                'renderer' => $renderer,
+            ));
+        } catch (\Throwable $e) {
+            error_log('[MjRegMgr] downloadRegistrationDocumentBlankPdf fatal: ' . $e->getMessage());
+            wp_send_json_error(array('message' => __('Erreur interne lors de la génération du PDF.', 'mj-member')), 500);
+        }
+    }
+
+    /**
+     * Build template variables for a blank registration document: event/site data stay
+     * real, member_/guardian_ placeholders become a dotted line to fill in by hand.
+     */
+    private function buildBlankRegistrationDocumentVariables($event): array {
+        $variables = $this->buildRegistrationDocumentVariables($event, null, null);
+
+        $blank_line = str_repeat('.', 30);
+        $blank_line_long = str_repeat('.', 58);
+        $long_fields = array('member_address' => true, 'guardian_address' => true);
+
+        foreach ($variables as $key => $value) {
+            if (strpos($key, 'member_') === 0 || strpos($key, 'guardian_') === 0) {
+                $variables[$key] = !empty($long_fields[$key]) ? $blank_line_long : $blank_line;
+            }
+        }
+
+        return $variables;
     }
 
     /**

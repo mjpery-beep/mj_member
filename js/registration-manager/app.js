@@ -2225,6 +2225,8 @@
             }
 
             var blankLine = '..............................';
+            var blankLineLong = '..........................................................';
+            var longBlankFields = { member_address: true, guardian_address: true };
 
             // Event/site variables are known values and stay interpolated; only
             // member_/guardian_ placeholders are replaced by a dotted line to fill in by hand
@@ -2255,7 +2257,7 @@
                     if (Object.prototype.hasOwnProperty.call(knownVariables, lowerKey)) {
                         return knownVariables[lowerKey];
                     }
-                    return blankLine;
+                    return longBlankFields[lowerKey] ? blankLineLong : blankLine;
                 });
             };
 
@@ -2286,18 +2288,16 @@
                 (processedFooter ? '<div class="regdoc-footer">' + processedFooter + '</div>' : '') +
                 '</body></html>';
 
-            var printWindow = window.open('', '_blank', 'width=800,height=600');
-            if (printWindow) {
-                printWindow.document.write(htmlDoc);
-                printWindow.document.close();
-                printWindow.focus();
-                setTimeout(function () {
-                    printWindow.print();
-                }, 250);
-            } else {
-                showError('Impossible d\'ouvrir la fenêtre d\'impression. Vérifiez que les popups ne sont pas bloqués.');
-            }
-        }, [selectedEvent, eventDetails, regDocState, config, strings, showError]);
+            setRegDocPreviewState({
+                isOpen: true,
+                title: getString(strings, 'regDocBlankPreviewTitle', 'Document vierge à imprimer'),
+                html: htmlDoc,
+                registrationId: 0,
+                eventId: selectedEvent.id,
+                isBlank: true,
+                content: content,
+            });
+        }, [selectedEvent, eventDetails, regDocState, config, strings, showError, setRegDocPreviewState]);
 
         // Download document for a single member
         var handleDownloadMemberDoc = useCallback(function (registration) {
@@ -2455,12 +2455,21 @@
         }, [selectedEvent, eventDetails, regDocState, config, strings, showError, setRegDocPreviewState]);
 
         var handleDownloadRegDocPreviewPdf = useCallback(function () {
+            var isBlank = !!(regDocPreviewState && regDocPreviewState.isBlank);
             var registrationId = regDocPreviewState && regDocPreviewState.registrationId
                 ? parseInt(regDocPreviewState.registrationId, 10)
                 : 0;
+            var eventIdForBlank = regDocPreviewState && regDocPreviewState.eventId
+                ? parseInt(regDocPreviewState.eventId, 10)
+                : 0;
 
-            if (!registrationId || registrationId <= 0) {
+            if (!isBlank && (!registrationId || registrationId <= 0)) {
                 showError(getString(strings, 'regDocPreviewDownloadUnavailable', 'Impossible de télécharger ce contrat.'));
+                return;
+            }
+
+            if (isBlank && (!eventIdForBlank || eventIdForBlank <= 0)) {
+                showError(getString(strings, 'regDocPreviewDownloadUnavailable', 'Impossible de télécharger ce document.'));
                 return;
             }
 
@@ -2475,11 +2484,17 @@
                 || (eventDetails && eventDetails.registrationDocument)
                 || '';
 
-            api.downloadRegistrationContractPdf(registrationId, content)
+            var downloadPromise = isBlank
+                ? api.downloadRegistrationDocumentBlankPdf(eventIdForBlank, content)
+                : api.downloadRegistrationContractPdf(registrationId, content);
+
+            downloadPromise
                 .then(function (data) {
                     var fileName = data && typeof data.filename === 'string' && data.filename
                         ? data.filename
-                        : ('contrat-inscription-' + registrationId + '.pdf');
+                        : (isBlank
+                            ? ('document-vierge-' + eventIdForBlank + '.pdf')
+                            : ('contrat-inscription-' + registrationId + '.pdf'));
                     var downloadUrl = data && typeof data.downloadUrl === 'string' ? data.downloadUrl : '';
                     var pdfBase64 = data && typeof data.pdfBase64 === 'string' ? data.pdfBase64 : '';
 
@@ -2522,7 +2537,7 @@
                 .finally(function () {
                     setRegDocPreviewDownloading(false);
                 });
-        }, [regDocPreviewState, regDocPreviewDownloading, api, strings, showError]);
+        }, [regDocPreviewState, regDocPreviewDownloading, regDocState, eventDetails, api, strings, showError]);
 
         var handleSendRegistrationContract = useCallback(function (registration, recipientType) {
             if (!registration || !registration.id) {
