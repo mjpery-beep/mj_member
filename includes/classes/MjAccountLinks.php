@@ -377,6 +377,9 @@ class MjAccountLinks {
             if (!array_key_exists('screenshot_id', $link_config)) {
                 $link_config['screenshot_id'] = 0;
             }
+            if (!array_key_exists('show_in_slider', $link_config)) {
+                $link_config['show_in_slider'] = true;
+            }
         }
         unset($link_config);
 
@@ -459,6 +462,10 @@ class MjAccountLinks {
                 ? mj_member_account_menu_extract_attachment_id($saved_row['screenshot_id'] ?? 0)
                 : (isset($saved_row['screenshot_id']) && is_numeric($saved_row['screenshot_id']) ? (int) $saved_row['screenshot_id'] : 0);
             $defaults[$key]['screenshot_id'] = $screenshot_id > 0 ? $screenshot_id : 0;
+
+            $defaults[$key]['show_in_slider'] = isset($saved_row['show_in_slider'])
+                ? (bool) $saved_row['show_in_slider']
+                : (!empty($config['show_in_slider']) || !array_key_exists('show_in_slider', $config));
 
             // Récupérer la description si sauvegardée
             $description = isset($saved_row['description']) ? sanitize_text_field($saved_row['description']) : '';
@@ -710,6 +717,7 @@ class MjAccountLinks {
 
             $screenshot_id = isset($config['screenshot_id']) && is_numeric($config['screenshot_id']) ? (int) $config['screenshot_id'] : 0;
             $screenshot_payload = self::buildScreenshotPayload($screenshot_id);
+            $show_in_slider = isset($config['show_in_slider']) ? (bool) $config['show_in_slider'] : true;
 
             if ($type === 'logout') {
                 $links[] = array(
@@ -723,6 +731,7 @@ class MjAccountLinks {
                     'icon' => $icon_payload,
                     'screenshot_id' => $screenshot_id,
                     'screenshot' => $screenshot_payload,
+                    'show_in_slider' => $show_in_slider,
                 );
                 continue;
             }
@@ -791,6 +800,7 @@ class MjAccountLinks {
                 'icon' => $icon_payload,
                 'screenshot_id' => $screenshot_id,
                 'screenshot' => $screenshot_payload,
+                'show_in_slider' => $show_in_slider,
             );
         }
 
@@ -835,6 +845,7 @@ class MjAccountLinks {
                 'icon' => $icon_payload,
                 'screenshot_id' => isset($link['screenshot_id']) && is_numeric($link['screenshot_id']) ? (int) $link['screenshot_id'] : 0,
                 'screenshot' => self::sanitizeScreenshotPayload(isset($link['screenshot']) ? $link['screenshot'] : array()),
+                'show_in_slider' => !isset($link['show_in_slider']) || (bool) $link['show_in_slider'],
             );
         }
 

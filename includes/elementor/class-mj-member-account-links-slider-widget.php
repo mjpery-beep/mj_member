@@ -435,6 +435,10 @@ class Mj_Member_Elementor_Account_Links_Slider_Widget extends Widget_Base {
                 continue;
             }
 
+            if (isset($link['show_in_slider']) && !$link['show_in_slider']) {
+                continue;
+            }
+
             $screenshot = isset($link['screenshot']) && is_array($link['screenshot']) ? $link['screenshot'] : array();
             $screenshot_url = !empty($screenshot['url']) ? esc_url($screenshot['url']) : '';
 

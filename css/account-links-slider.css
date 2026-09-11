@@ -1,0 +1,188 @@
+.mj-member-account-links-slider {
+    --mj-als-bullet-size: 44px;
+    --mj-als-radius: 12px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+}
+
+.mj-member-account-links-slider__title {
+    margin: 0;
+    font-size: 1.4em;
+}
+
+.mj-member-account-links-slider__intro {
+    margin: 0;
+    opacity: 0.8;
+}
+
+.mj-member-account-links-slider__stage {
+    position: relative;
+}
+
+.mj-member-account-links-slider__viewport {
+    overflow: hidden;
+    border-radius: var(--mj-als-radius);
+}
+
+.mj-member-account-links-slider__track {
+    display: flex;
+    width: 100%;
+    transition: transform 0.45s ease;
+    will-change: transform;
+}
+
+.mj-member-account-links-slider__slide {
+    flex: 0 0 100%;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.mj-member-account-links-slider__media {
+    position: relative;
+    display: block;
+    height: 360px;
+    background: rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+    border-radius: var(--mj-als-radius) var(--mj-als-radius) 0 0;
+}
+
+.mj-member-account-links-slider__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.mj-member-account-links-slider__media-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 3em;
+    opacity: 0.35;
+}
+
+.mj-member-account-links-slider__media-placeholder img,
+.mj-member-account-links-slider__media-placeholder svg {
+    width: 1.4em;
+    height: 1.4em;
+}
+
+.mj-member-account-links-slider__content {
+    padding: 16px 20px 20px;
+    background: #fff;
+    border-radius: 0 0 var(--mj-als-radius) var(--mj-als-radius);
+}
+
+.mj-member-account-links-slider__link {
+    text-decoration: none;
+}
+
+.mj-member-account-links-slider__label {
+    display: block;
+    font-weight: 600;
+    font-size: 1.1em;
+    color: inherit;
+}
+
+.mj-member-account-links-slider__description {
+    margin: 6px 0 0;
+    opacity: 0.75;
+    line-height: 1.4;
+}
+
+.mj-member-account-links-slider__arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    color: #1f2933;
+    font-size: 1.4em;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 2;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.mj-member-account-links-slider__arrow:hover {
+    background: #fff;
+    transform: translateY(-50%) scale(1.05);
+}
+
+.mj-member-account-links-slider__arrow--prev {
+    left: 12px;
+}
+
+.mj-member-account-links-slider__arrow--next {
+    right: 12px;
+}
+
+.mj-member-account-links-slider__bullets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+}
+
+.mj-member-account-links-slider__bullet {
+    width: var(--mj-als-bullet-size);
+    height: var(--mj-als-bullet-size);
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 8px;
+    transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+.mj-member-account-links-slider__bullet:hover {
+    transform: translateY(-2px);
+}
+
+.mj-member-account-links-slider__bullet.is-active {
+    border-color: currentColor;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.mj-member-account-links-slider__bullet img,
+.mj-member-account-links-slider__bullet svg,
+.mj-member-account-links-slider__bullet i {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.mj-member-account-links-slider__bullet-dot {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.4;
+}
+
+.mj-member-account-links-slider__bullet.is-active .mj-member-account-links-slider__bullet-dot {
+    opacity: 1;
+}
+
+@media (max-width: 600px) {
+    .mj-member-account-links-slider__media {
+        height: 220px;
+    }
+}

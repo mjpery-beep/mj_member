@@ -1237,6 +1237,7 @@ if (!defined('ABSPATH')) {
                                     );
                                 }
                                 $screenshot_id_value = isset($link_config['screenshot_id']) && is_numeric($link_config['screenshot_id']) ? (int) $link_config['screenshot_id'] : 0;
+                                $show_in_slider_value = !isset($link_config['show_in_slider']) || (bool) $link_config['show_in_slider'];
                                 $screenshot_preview_url = $screenshot_id_value > 0 ? (wp_get_attachment_image_url($screenshot_id_value, 'thumbnail') ?: '') : '';
                                 $screenshot_preview_markup = $screenshot_preview_url !== ''
                                     ? sprintf('<img src="%1$s" alt="" class="mj-member-menu-icon-preview-image" />', esc_url($screenshot_preview_url))
@@ -1348,6 +1349,14 @@ if (!defined('ABSPATH')) {
                                                     </div>
                                                 </div>
                                                 <small style="color:#666;"><?php esc_html_e('Utilisée par le widget "Slider Mon compte".', 'mj-member'); ?></small>
+                                            </div>
+                                            <div class="mj-account-link-field">
+                                                <label for="<?php echo esc_attr($field_prefix . '-show-in-slider'); ?>"><?php esc_html_e('Afficher dans le slider', 'mj-member'); ?></label>
+                                                <label style="display:flex; align-items:center; gap:6px; font-weight:normal;">
+                                                    <input type="hidden" name="mj_account_links[<?php echo esc_attr($link_key); ?>][show_in_slider]" value="0" />
+                                                    <input type="checkbox" id="<?php echo esc_attr($field_prefix . '-show-in-slider'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][show_in_slider]" value="1" <?php checked($show_in_slider_value); ?> />
+                                                    <?php esc_html_e('Inclure ce lien comme puce dans le widget "Slider Mon compte"', 'mj-member'); ?>
+                                                </label>
                                             </div>
                                             <?php if (!$is_logout && !empty($notification_type_groups)) :
                                                 $current_notif_types = isset($link_config['notification_types']) && is_array($link_config['notification_types']) ? $link_config['notification_types'] : array();

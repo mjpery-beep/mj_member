@@ -2212,6 +2212,93 @@
             }
         }, [selectedEvent, eventDetails, regDocState, config, strings, showError, registrations]);
 
+        // Print blank registration document (placeholders replaced by dotted lines to fill in by hand)
+        var handlePrintRegDocBlank = useCallback(function () {
+            if (!selectedEvent || !eventDetails) {
+                return;
+            }
+
+            var content = regDocState.draft || '';
+            if (!content) {
+                showError(getString(strings, 'regDocEmpty', 'Aucun contenu à imprimer.'));
+                return;
+            }
+
+            var blankLine = '..............................';
+
+            // Event/site variables are known values and stay interpolated; only
+            // member_/guardian_ placeholders are replaced by a dotted line to fill in by hand
+            var knownVariables = {
+                event_name: eventDetails.title || '',
+                event_type: eventDetails.typeLabel || eventDetails.type || '',
+                event_status: eventDetails.statusLabel || eventDetails.status || '',
+                event_date_start: eventDetails.dateDebutFormatted || eventDetails.dateDebut || '',
+                event_date_end: eventDetails.dateFinFormatted || eventDetails.dateFin || '',
+                event_date_deadline: eventDetails.dateFinInscription || '',
+                event_price: (eventDetails.prix || 0) + ' €',
+                event_url: eventDetails.eventPageUrl || eventDetails.frontUrl || '',
+                event_location: eventDetails.location ? eventDetails.location.name : '',
+                event_location_address: eventDetails.location ? eventDetails.location.address : '',
+                event_age_min: (eventDetails.ageMin || '').toString(),
+                event_age_max: (eventDetails.ageMax || '').toString(),
+                event_capacity: (eventDetails.capacityTotal || '').toString(),
+                site_name: config.siteName || '',
+                site_url: config.siteUrl || '',
+                current_date: new Date().toLocaleDateString('fr-FR'),
+                current_year: new Date().getFullYear().toString(),
+            };
+
+            var blankifyVariables = function (text) {
+                if (!text) return '';
+                return text.replace(/\[([a-z_]+)\]/gi, function (match, key) {
+                    var lowerKey = key.toLowerCase();
+                    if (Object.prototype.hasOwnProperty.call(knownVariables, lowerKey)) {
+                        return knownVariables[lowerKey];
+                    }
+                    return blankLine;
+                });
+            };
+
+            var processedHeader = blankifyVariables(config.regDocHeader || '');
+            var processedContent = blankifyVariables(content);
+            var processedFooter = blankifyVariables(config.regDocFooter || '');
+
+            var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document vierge - ' +
+                (eventDetails.title || 'Événement') + '</title><style>' +
+                '@page{size:A4;margin:20mm;}' +
+                'body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}' +
+                'h1{font-size:18pt;margin:0 0 0.75em 0;}h2{font-size:14pt;margin:1em 0 0.5em 0;}h3{font-size:12pt;margin:0.8em 0 0.4em 0;}' +
+                'p{margin:0 0 0.75em 0;}p:last-child{margin-bottom:0;}' +
+                'ul,ol{margin:0 0 0.75em 1.5em;padding:0;}' +
+                'li{margin-bottom:0.4em;}' +
+                'br{display:block;content:"";margin-top:0.5em;}' +
+                'table{width:100%;border-collapse:collapse;margin:0.75em 0;border:none;}' +
+                'th,td{border:none;padding:6pt 8pt;text-align:left;}' +
+                'th{background:transparent;font-weight:bold;}' +
+                'img{max-width:100%;height:auto;}' +
+                'a{color:#2563eb;text-decoration:underline;}' +
+                '.regdoc-header{}' +
+                '.regdoc-content{min-height:150px;}' +
+                '.regdoc-footer{border-top:1px solid #999;padding-top:15pt;margin-top:20pt;font-size:10pt;color:#666;}' +
+                '</style></head><body>' +
+                (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
+                '<div class="regdoc-content">' + processedContent + '</div>' +
+                (processedFooter ? '<div class="regdoc-footer">' + processedFooter + '</div>' : '') +
+                '</body></html>';
+
+            var printWindow = window.open('', '_blank', 'width=800,height=600');
+            if (printWindow) {
+                printWindow.document.write(htmlDoc);
+                printWindow.document.close();
+                printWindow.focus();
+                setTimeout(function () {
+                    printWindow.print();
+                }, 250);
+            } else {
+                showError('Impossible d\'ouvrir la fenêtre d\'impression. Vérifiez que les popups ne sont pas bloqués.');
+            }
+        }, [selectedEvent, eventDetails, regDocState, config, strings, showError]);
+
         // Download document for a single member
         var handleDownloadMemberDoc = useCallback(function (registration) {
             if (!selectedEvent || !eventDetails || !registration || !registration.member) {
@@ -6019,6 +6106,11 @@
                                                 disabled: regDocSaving || !regDocDirty,
                                                 onClick: function () { handleResetRegDoc(); },
                                             }, getString(strings, 'regDocResetButton', 'Annuler les modifications')),
+                                            regDocState.draft && h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--secondary',
+                                                onClick: function () { handlePrintRegDocBlank(); },
+                                            }, getString(strings, 'regDocPrintBlankButton', 'Imprimer le document vierge')),
                                             regDocState.draft && h('button', {
                                                 type: 'button',
                                                 class: 'mj-btn mj-btn--danger-outline',
