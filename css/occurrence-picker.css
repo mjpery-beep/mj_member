@@ -86,3 +86,27 @@
     line-height: 1;
     color: inherit;
 }
+
+/*
+ * Fallback pour les champs natifs quand le composant est utilisé hors du
+ * contexte "registration-manager" (ex. widget tâches) où .mj-regmgr-form__input
+ * / .mj-regmgr-btn ne sont pas chargées. Sélecteurs peu spécifiques : les
+ * styles registration-manager.css priment quand ils sont présents.
+ */
+.mj-occurrence-picker input[type="date"],
+.mj-occurrence-picker input[type="time"],
+.mj-occurrence-picker select {
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+}
+
+.mj-occurrence-picker__multi-add button {
+    border: 1px solid #d0d5dd;
+    background: #fff;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
