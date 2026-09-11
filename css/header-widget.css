@@ -499,45 +499,74 @@ a.mj-header-dropdown__header-link:hover {
     text-decoration: none;
 }
 
-/* Bouton action header (ex : tout marquer comme lu) */
-.mj-header .mj-header-dropdown__header-action {
-    display: inline-flex;
+/* Rangée d'actions groupées (tout lire / tout supprimer), sous les filtres */
+.mj-header-notif-bulk-actions {
+    display: flex !important;
     align-items: center;
-    justify-content: center;
-    width: auto;
-    min-width: 28px;
-    height: 28px;
-    padding: 0 10px;
-    gap: 5px;
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    border-radius: 99px;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+    gap: 8px;
+    min-height: 0;
+    padding: 6px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    transition: background-color 0.15s ease;
+}
+
+.mj-header-notif-bulk-actions--filtered {
+    background: #eff6ff;
+}
+
+.mj-header-notif-bulk-actions__sep {
+    width: 1px;
+    height: 10px;
+    background: #e2e8f0;
+    flex-shrink: 0;
+}
+
+.mj-header .mj-header-notif-bulk-action {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
     cursor: pointer;
-    color: #16a34a;
-    font-size: 0.75rem;
-    font-weight: 600;
+    color: #64748b !important;
+    font-family: inherit !important;
+    font-size: 0.7rem !important;
+    line-height: 1.2 !important;
+    font-weight: 600 !important;
+    text-transform: none !important;
+    text-decoration: none !important;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    transition: color 0.15s ease;
 }
 
-.mj-header .mj-header-dropdown__header-action:hover {
-    background: #dcfce7;
-    border-color: #86efac;
-    color: #15803d;
+.mj-header .mj-header-notif-bulk-action:hover,
+.mj-header .mj-header-notif-bulk-action:focus-visible {
+    color: #1d4ed8 !important;
+    text-decoration: underline !important;
 }
 
-.mj-header .mj-header-dropdown__header-action:disabled {
+.mj-header .mj-header-notif-bulk-action:disabled {
     opacity: 0.4;
     cursor: default;
     pointer-events: none;
+    text-decoration: none !important;
 }
 
-.mj-header .mj-header-dropdown__header-action svg {
-    width: 13px;
-    height: 13px;
-    fill: currentColor;
-    flex-shrink: 0;
+.mj-header .mj-header-notif-bulk-action--danger:hover,
+.mj-header .mj-header-notif-bulk-action--danger:focus-visible {
+    color: #dc2626 !important;
 }
 
 /* Bouton fermer */
@@ -613,16 +642,6 @@ a.mj-header-dropdown__header-link:hover {
 
 .mj-header-dropdown--agenda .mj-cal-mobile__modal-body {
     overflow-y: auto;
-}
-
-/* Pied de page */
-.mj-header-dropdown__footer {
-    flex-shrink: 0;
-    padding: 10px 14px;
-    border-top: 1px solid rgba(0, 0, 0, 0.06);
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
 }
 
 /* États : loader, vide, erreur */
@@ -1022,7 +1041,7 @@ a.mj-header-dropdown__header-link:hover {
     fill: currentColor;
 }
 
-/* Bouton "Tout supprimer" dans le footer notifications */
+/* Bouton "Tout supprimer" (aperçu notifications de la carte compte) */
 button.mj-header-notif-delete-all {
     display: inline-flex;
     align-items: center;

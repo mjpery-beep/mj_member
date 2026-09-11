@@ -1053,7 +1053,7 @@ $form_values['schedule_range_end'] = '';
 $form_values['schedule_series_items'] = array();
 $form_values['article_id'] = isset($defaults['article_id']) ? (int) $defaults['article_id'] : 0;
 $form_values['article_cat'] = 0;
-$form_values['requires_validation'] = isset($defaults['requires_validation']) ? !empty($defaults['requires_validation']) : true;
+$form_values['requires_validation'] = isset($defaults['requires_validation']) ? !empty($defaults['requires_validation']) : false;
 $form_values['free_participation'] = !empty($defaults['free_participation']);
 $form_values['registration_is_free_participation'] = !empty($form_values['free_participation']);
 $form_values['attendance_show_all_members'] = false;
@@ -1172,7 +1172,7 @@ $form_values['occurrence_editor'] = mj_member_build_occurrence_editor_config($ev
 
 $form_values['allow_guardian_registration'] = !empty($form_values['allow_guardian_registration']);
 $form_values['attendance_show_all_members'] = !empty($form_values['attendance_show_all_members']);
-$form_values['requires_validation'] = array_key_exists('requires_validation', $form_values) ? !empty($form_values['requires_validation']) : true;
+$form_values['requires_validation'] = array_key_exists('requires_validation', $form_values) ? !empty($form_values['requires_validation']) : false;
 $form_values['free_participation'] = !empty($form_values['free_participation']) ? 1 : 0;
 $form_values['registration_is_free_participation'] = $form_values['free_participation'] === 1;
 

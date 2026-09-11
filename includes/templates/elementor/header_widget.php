@@ -388,12 +388,6 @@ function mj_header_svg_icon(string $name): string {
             <div class="mj-header-dropdown mj-header-dropdown--notifications" data-mj-header-dropdown="notifications" role="dialog" aria-label="<?php echo esc_attr($notif_label); ?>">
                 <div class="mj-header-dropdown__header">
                     <span class="mj-header-dropdown__title"><?php echo esc_html($notif_label); ?></span>
-                    <button type="button" class="mj-header-dropdown__header-action" data-notif-action="mark-all-read" title="<?php esc_attr_e('Tout marquer comme lu', 'mj-member'); ?>">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" />
-                        </svg>
-                        <span><?php esc_html_e('Tout lire', 'mj-member'); ?></span>
-                    </button>
                     <button type="button" class="mj-header-dropdown__close" aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>"><?php echo mj_header_svg_icon('close'); ?></button>
                 </div>
                 <?php if (!empty($config['notificationFilters'])): ?>
@@ -409,6 +403,15 @@ function mj_header_svg_icon(string $name): string {
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
+                <div class="mj-header-notif-bulk-actions" data-mj-notif-bulk-actions>
+                    <button type="button" class="mj-header-notif-bulk-action" data-notif-action="mark-all-read">
+                        <span data-mj-notif-bulk-text><?php esc_html_e('Tout lire', 'mj-member'); ?></span>
+                    </button>
+                    <span class="mj-header-notif-bulk-actions__sep" aria-hidden="true"></span>
+                    <button type="button" class="mj-header-notif-bulk-action mj-header-notif-bulk-action--danger" data-notif-action="archive-all" data-member-id="<?php echo (int)get_current_user_id(); ?>">
+                        <span data-mj-notif-bulk-text><?php esc_html_e('Tout supprimer', 'mj-member'); ?></span>
+                    </button>
+                </div>
                 <div class="mj-header-dropdown__content">
                     <div class="mj-header-notif-list" data-mj-notif-list>
                         <?php if ($is_preview): ?>
@@ -435,11 +438,6 @@ function mj_header_svg_icon(string $name): string {
                         </div>
                         <?php endif; ?>
                     </div>
-                </div>
-                <div class="mj-header-dropdown__footer">
-                    <button type="button" class="mj-header-notif-delete-all" data-notif-action="archive-all" data-member-id="<?php echo (int)get_current_user_id(); ?>">
-                        <?php esc_html_e('Tout supprimer', 'mj-member'); ?>
-                    </button>
                 </div>
             </div>
         </div>

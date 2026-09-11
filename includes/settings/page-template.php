@@ -1236,6 +1236,11 @@ if (!defined('ABSPATH')) {
                                         esc_url($icon_preview_url)
                                     );
                                 }
+                                $screenshot_id_value = isset($link_config['screenshot_id']) && is_numeric($link_config['screenshot_id']) ? (int) $link_config['screenshot_id'] : 0;
+                                $screenshot_preview_url = $screenshot_id_value > 0 ? (wp_get_attachment_image_url($screenshot_id_value, 'thumbnail') ?: '') : '';
+                                $screenshot_preview_markup = $screenshot_preview_url !== ''
+                                    ? sprintf('<img src="%1$s" alt="" class="mj-member-menu-icon-preview-image" />', esc_url($screenshot_preview_url))
+                                    : '<span class="mj-member-menu-icon-placeholder">' . esc_html__('Aucune image', 'mj-member') . '</span>';
                                 $field_prefix_base = sanitize_key($link_key);
                                 if ($field_prefix_base === '') {
                                     $field_prefix_base = 'link_' . md5($link_key);
@@ -1329,6 +1334,20 @@ if (!defined('ABSPATH')) {
                                                         <button type="button" class="button-link-delete mj-member-menu-icon-remove"<?php echo $icon_id_value > 0 ? '' : ' style="display:none;"'; ?>>×</button>
                                                     </div>
                                                 </div>
+                                            </div>
+                                            <div class="mj-account-link-field mj-account-link-field--icon">
+                                                <label><?php esc_html_e('Capture d\'écran', 'mj-member'); ?></label>
+                                                <div class="mj-member-menu-icon-control mj-member-menu-icon-control--compact" data-mj-member-menu-icon>
+                                                    <div class="mj-member-menu-icon-preview" data-image-url="<?php echo esc_attr($screenshot_preview_url); ?>">
+                                                        <?php echo $screenshot_preview_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                                                    </div>
+                                                    <div class="mj-member-menu-icon-actions">
+                                                        <input type="hidden" class="mj-member-menu-icon-input" name="mj_account_links[<?php echo esc_attr($link_key); ?>][screenshot_id]" value="<?php echo esc_attr((string) $screenshot_id_value); ?>" />
+                                                        <button type="button" class="button button-small mj-member-menu-icon-select"><?php esc_html_e('Choisir', 'mj-member'); ?></button>
+                                                        <button type="button" class="button-link-delete mj-member-menu-icon-remove"<?php echo $screenshot_id_value > 0 ? '' : ' style="display:none;"'; ?>>×</button>
+                                                    </div>
+                                                </div>
+                                                <small style="color:#666;"><?php esc_html_e('Utilisée par le widget "Slider Mon compte".', 'mj-member'); ?></small>
                                             </div>
                                             <?php if (!$is_logout && !empty($notification_type_groups)) :
                                                 $current_notif_types = isset($link_config['notification_types']) && is_array($link_config['notification_types']) ? $link_config['notification_types'] : array();

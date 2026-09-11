@@ -373,6 +373,13 @@ class MjAccountLinks {
             ),
         );
 
+        foreach ($default_links as &$link_config) {
+            if (!array_key_exists('screenshot_id', $link_config)) {
+                $link_config['screenshot_id'] = 0;
+            }
+        }
+        unset($link_config);
+
         return apply_filters('mj_member_login_component_default_account_links', $default_links);
     }
 
@@ -447,6 +454,11 @@ class MjAccountLinks {
                 ? mj_member_account_menu_extract_attachment_id($saved_row['icon_id'] ?? 0)
                 : (isset($saved_row['icon_id']) && is_numeric($saved_row['icon_id']) ? (int) $saved_row['icon_id'] : 0);
             $defaults[$key]['icon_id'] = $icon_id > 0 ? $icon_id : 0;
+
+            $screenshot_id = function_exists('mj_member_account_menu_extract_attachment_id')
+                ? mj_member_account_menu_extract_attachment_id($saved_row['screenshot_id'] ?? 0)
+                : (isset($saved_row['screenshot_id']) && is_numeric($saved_row['screenshot_id']) ? (int) $saved_row['screenshot_id'] : 0);
+            $defaults[$key]['screenshot_id'] = $screenshot_id > 0 ? $screenshot_id : 0;
 
             // Récupérer la description si sauvegardée
             $description = isset($saved_row['description']) ? sanitize_text_field($saved_row['description']) : '';
@@ -696,6 +708,9 @@ class MjAccountLinks {
 
             $description = isset($config['description']) ? trim((string) $config['description']) : '';
 
+            $screenshot_id = isset($config['screenshot_id']) && is_numeric($config['screenshot_id']) ? (int) $config['screenshot_id'] : 0;
+            $screenshot_payload = self::buildScreenshotPayload($screenshot_id);
+
             if ($type === 'logout') {
                 $links[] = array(
                     'key' => sanitize_key($key),
@@ -706,6 +721,8 @@ class MjAccountLinks {
                     'badge' => 0,
                     'icon_id' => $icon_id,
                     'icon' => $icon_payload,
+                    'screenshot_id' => $screenshot_id,
+                    'screenshot' => $screenshot_payload,
                 );
                 continue;
             }
@@ -772,6 +789,8 @@ class MjAccountLinks {
                 'notification_types' => $linkNotificationTypes,
                 'icon_id' => $icon_id,
                 'icon' => $icon_payload,
+                'screenshot_id' => $screenshot_id,
+                'screenshot' => $screenshot_payload,
             );
         }
 
@@ -814,6 +833,8 @@ class MjAccountLinks {
                     ? mj_member_account_menu_extract_attachment_id($link['icon_id'] ?? 0)
                     : (isset($link['icon_id']) && is_numeric($link['icon_id']) ? (int) $link['icon_id'] : 0),
                 'icon' => $icon_payload,
+                'screenshot_id' => isset($link['screenshot_id']) && is_numeric($link['screenshot_id']) ? (int) $link['screenshot_id'] : 0,
+                'screenshot' => self::sanitizeScreenshotPayload(isset($link['screenshot']) ? $link['screenshot'] : array()),
             );
         }
 
@@ -1065,6 +1086,49 @@ class MjAccountLinks {
         }
 
         return array('contact' => 0, 'notifications' => 0, 'total' => 0);
+    }
+
+    /**
+     * Construit le payload (id/url/alt) de la capture d'écran associée à un lien.
+     *
+     * @return array{id:int,url:string,alt:string}
+     */
+    public static function buildScreenshotPayload(int $screenshotId): array {
+        $payload = array('id' => 0, 'url' => '', 'alt' => '');
+
+        if ($screenshotId <= 0 || !function_exists('wp_get_attachment_image_url')) {
+            return $payload;
+        }
+
+        $url = wp_get_attachment_image_url($screenshotId, 'large');
+        if (!is_string($url) || $url === '') {
+            return $payload;
+        }
+
+        $alt = function_exists('get_post_meta') ? get_post_meta($screenshotId, '_wp_attachment_image_alt', true) : '';
+
+        return array(
+            'id' => $screenshotId,
+            'url' => esc_url_raw($url),
+            'alt' => is_string($alt) ? sanitize_text_field($alt) : '',
+        );
+    }
+
+    /**
+     * Nettoie un payload de capture d'écran issu d'un filtre externe.
+     *
+     * @return array{id:int,url:string,alt:string}
+     */
+    private static function sanitizeScreenshotPayload($payload): array {
+        if (!is_array($payload)) {
+            return array('id' => 0, 'url' => '', 'alt' => '');
+        }
+
+        return array(
+            'id' => isset($payload['id']) && is_numeric($payload['id']) ? (int) $payload['id'] : 0,
+            'url' => isset($payload['url']) && is_string($payload['url']) ? esc_url($payload['url']) : '',
+            'alt' => isset($payload['alt']) && is_string($payload['alt']) ? sanitize_text_field($payload['alt']) : '',
+        );
     }
 
     private static function resolveAccountLink(string $path, string $fallback, array $query = array()): string {

@@ -385,6 +385,8 @@ final class AssetsManager
 
         self::registerStyle('mj-member-login-component', 'css/login-component.css');
         self::registerScript('mj-member-login-component', 'js/login-component.js');
+        self::registerStyle('mj-member-account-links-slider', 'css/account-links-slider.css', array('mj-member-components'));
+        self::registerScript('mj-member-account-links-slider', 'js/elementor/account-links-slider.js', array());
         self::registerStyle('mj-member-hour-encode', 'css/hour-encode.css', array('mj-member-components'));
         self::registerStyle('mj-member-photo-grimlins', 'css/photo-grimlins.css', array('mj-member-components'));
         self::registerStyle('mj-member-photo-import-timeline', 'css/photo-import-timeline.css', array('mj-member-components'));
@@ -563,6 +565,11 @@ final class AssetsManager
             case 'login-component':
                 wp_enqueue_style('mj-member-login-component');
                 wp_enqueue_script('mj-member-login-component');
+                break;
+
+            case 'account-links-slider':
+                wp_enqueue_style('mj-member-account-links-slider');
+                wp_enqueue_script('mj-member-account-links-slider');
                 break;
 
             case 'contact-form':

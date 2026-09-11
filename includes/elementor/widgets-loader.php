@@ -17,6 +17,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Login_Widget' => 'includes/elementor/class-mj-member-login-widget.php',
             'Mj_Member_Elementor_Profile_Widget' => 'includes/elementor/class-mj-member-profile-widget.php',
             'Mj_Member_Elementor_Account_Links_Widget' => 'includes/elementor/class-mj-member-account-links-widget.php',
+            'Mj_Member_Elementor_Account_Links_Slider_Widget' => 'includes/elementor/class-mj-member-account-links-slider-widget.php',
             'Mj_Member_Elementor_Account_Menu_Widget' => 'includes/elementor/class-mj-member-account-menu-widget.php',
             'Mj_Member_Elementor_Subscription_Widget' => 'includes/elementor/class-mj-member-subscription-widget.php',
             'Mj_Member_Elementor_Registration_Widget' => 'includes/elementor/class-mj-member-registration-widget.php',

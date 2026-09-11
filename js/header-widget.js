@@ -1100,6 +1100,7 @@
 
     MjHeader.prototype._updateNotificationFilterBadges = function (counts, notifications) {
         var self = this;
+        var anyVisible = false;
         this.el.querySelectorAll('[data-notif-filter-badge]').forEach(function (badge) {
             var category = badge.getAttribute('data-notif-filter-badge') || '';
             var filter = (self.config.notificationFilters || []).find(function (entry) {
@@ -1119,19 +1120,48 @@
                 button.hidden = !(count > 0);
                 button.classList.toggle('mj-header-notif-filter--active', self._notificationFilter === category);
                 button.setAttribute('aria-selected', self._notificationFilter === category ? 'true' : 'false');
+                if (count > 0) anyVisible = true;
             }
         });
+
+        var filtersContainer = this.el.querySelector('[data-mj-notif-filters]');
+        if (filtersContainer) filtersContainer.hidden = !anyVisible;
+    };
+
+    MjHeader.prototype._updateBulkActionLabels = function () {
+        var self = this;
+        var dropdown = this.el.querySelector('[data-mj-header-dropdown="notifications"]');
+        if (!dropdown) return;
+
+        var filter = (this.config.notificationFilters || []).find(function (entry) {
+            return entry.category === self._notificationFilter;
+        });
+
+        dropdown.querySelectorAll('[data-mj-notif-bulk-text]').forEach(function (span) {
+            if (!span.dataset.baseText) span.dataset.baseText = span.textContent;
+            span.textContent = filter ? span.dataset.baseText + ' • ' + filter.label : span.dataset.baseText;
+        });
+
+        var bulkActions = dropdown.querySelector('[data-mj-notif-bulk-actions]');
+        if (bulkActions) {
+            bulkActions.classList.toggle('mj-header-notif-bulk-actions--filtered', !!filter);
+            bulkActions.title = filter
+                ? filter.label
+                : '';
+        }
     };
 
     MjHeader.prototype._toggleNotificationFilter = function (category, filterBtn) {
         this._notificationFilter = this._notificationFilter === category ? '' : category;
+        this._updateBulkActionLabels();
+        var dropdown = this.el.querySelector('[data-mj-header-dropdown="notifications"]');
+
         if (this._notificationData) {
-            var list = this.el.querySelector('.mj-header-dropdown__content');
+            var list = dropdown && dropdown.querySelector('.mj-header-dropdown__content');
             if (list) this._renderNotifications(list, this._notificationData);
             return;
         }
 
-        var dropdown = this.el.querySelector('[data-mj-header-dropdown="notifications"]');
         if (dropdown && !this._loaded.notifications) {
             this._loadNotifications(dropdown);
             return;

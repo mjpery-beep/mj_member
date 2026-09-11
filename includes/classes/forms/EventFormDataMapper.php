@@ -76,7 +76,7 @@ final class EventFormDataMapper
             'event_allow_guardian_registration' => !empty($values['allow_guardian_registration']),
             'event_attendance_show_all_members' => $attendance_show_all_members,
             'event_free_participation' => !empty($values['registration_is_free_participation']),
-            'event_requires_validation' => array_key_exists('requires_validation', $values) ? !empty($values['requires_validation']) : true,
+            'event_requires_validation' => array_key_exists('requires_validation', $values) ? !empty($values['requires_validation']) : false,
             'event_capacity_total' => isset($values['capacity_total']) ? (int) $values['capacity_total'] : 0,
             'event_capacity_waitlist' => isset($values['capacity_waitlist']) ? (int) $values['capacity_waitlist'] : 0,
             'event_capacity_notify_threshold' => isset($values['capacity_notify_threshold']) ? (int) $values['capacity_notify_threshold'] : 0,
@@ -137,7 +137,7 @@ final class EventFormDataMapper
         $values['attendance_show_all_members'] = array_key_exists('event_attendance_show_all_members', $formData) ? !empty($formData['event_attendance_show_all_members']) : (isset($values['attendance_show_all_members']) ? $values['attendance_show_all_members'] : false);
         $values['registration_is_free_participation'] = array_key_exists('event_free_participation', $formData) ? !empty($formData['event_free_participation']) : (isset($values['registration_is_free_participation']) ? $values['registration_is_free_participation'] : false);
         $values['free_participation'] = array_key_exists('event_free_participation', $formData) ? !empty($formData['event_free_participation']) : (isset($values['free_participation']) ? $values['free_participation'] : false);
-        $values['requires_validation'] = array_key_exists('event_requires_validation', $formData) ? !empty($formData['event_requires_validation']) : (isset($values['requires_validation']) ? $values['requires_validation'] : true);
+        $values['requires_validation'] = array_key_exists('event_requires_validation', $formData) ? !empty($formData['event_requires_validation']) : (isset($values['requires_validation']) ? $values['requires_validation'] : false);
 
         if (!isset($values['registration_payload']) || !is_array($values['registration_payload'])) {
             $values['registration_payload'] = array();

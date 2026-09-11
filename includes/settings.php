@@ -893,6 +893,9 @@ function mj_settings_page() {
             $icon_id = function_exists('mj_member_account_menu_extract_attachment_id')
                 ? mj_member_account_menu_extract_attachment_id($raw_row['icon_id'] ?? 0)
                 : (isset($raw_row['icon_id']) && is_numeric($raw_row['icon_id']) ? (int) $raw_row['icon_id'] : 0);
+            $screenshot_id = function_exists('mj_member_account_menu_extract_attachment_id')
+                ? mj_member_account_menu_extract_attachment_id($raw_row['screenshot_id'] ?? 0)
+                : (isset($raw_row['screenshot_id']) && is_numeric($raw_row['screenshot_id']) ? (int) $raw_row['screenshot_id'] : 0);
             $position = isset($raw_row['position']) ? (int) $raw_row['position'] : 999;
             $visibility = isset($raw_row['visibility']) ? sanitize_key($raw_row['visibility']) : 'all';
 
@@ -916,6 +919,7 @@ function mj_settings_page() {
                 'page_id' => $page_id > 0 ? $page_id : 0,
                 'page_slug' => $page_slug,
                 'icon_id' => $icon_id > 0 ? $icon_id : 0,
+                'screenshot_id' => $screenshot_id > 0 ? $screenshot_id : 0,
                 'position' => $position,
                 'visibility' => $visibility,
                 'notification_types' => $notification_types,

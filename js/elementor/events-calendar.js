@@ -182,14 +182,29 @@
         }
 
         // ---- Create modal (delegated to shared module) ----
+        // MjCreateEventModal is a separately-enqueued script (js/create-event-modal.js).
+        // It should always execute before this one (see AssetsManager::requirePackage()),
+        // but we retry briefly here as a safety net against any loading-order edge case.
         var ccmInstance = null;
-        if (window.MjCreateEventModal && root.querySelector('[data-ccm-modal]')) {
-            ccmInstance = window.MjCreateEventModal.init(root, config);
+        var ccmModalEl = root.querySelector('[data-ccm-modal]');
+        function tryInitCcm(attemptsLeft) {
+            if (ccmInstance || !ccmModalEl) {
+                return;
+            }
+            if (window.MjCreateEventModal) {
+                ccmInstance = window.MjCreateEventModal.init(root, config);
+                if (!ccmInstance) {
+                    console.warn('[Calendar] CCM modal markup found but MjCreateEventModal.init() returned null.');
+                }
+                return;
+            }
+            if (attemptsLeft > 0) {
+                setTimeout(function () { tryInitCcm(attemptsLeft - 1); }, 100);
+                return;
+            }
+            console.warn('[Calendar] CCM modal markup found but MjCreateEventModal never became available.');
         }
-        if (!ccmInstance && root.querySelector('[data-ccm-modal]')) {
-            console.warn('[Calendar] CCM modal markup found but MjCreateEventModal.init() returned null.',
-                'MjCreateEventModal available:', !!window.MjCreateEventModal);
-        }
+        tryInitCcm(20);
 
         var occurrenceModal = null;
         var occurrenceEvents = null;

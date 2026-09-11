@@ -1104,7 +1104,7 @@ class MjEvents implements CrudRepositoryInterface {
             'cover_id' => 0,
             'location_id' => 0,
             'allow_guardian_registration' => 0,
-            'requires_validation' => 1,
+            'requires_validation' => 0,
             'free_participation' => 0,
             'registration_payload' => array(),
             'animateur_id' => 0,

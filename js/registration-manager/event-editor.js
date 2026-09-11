@@ -5182,7 +5182,7 @@
                                 h('input', {
                                     type: 'checkbox',
                                     id: requiresValidationId,
-                                    checked: formState.event_requires_validation !== false,
+                                    checked: formState.event_requires_validation === true,
                                     onChange: function (e) { updateFormValue('event_requires_validation', e.target.checked); },
                                 }),
                                 h('span', null, getString(strings, 'requiresValidationToggle', 'Confirmer manuellement chaque inscription recue pour cet evenement')),
