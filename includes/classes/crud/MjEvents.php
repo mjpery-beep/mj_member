@@ -49,6 +49,7 @@ class MjEvents implements CrudRepositoryInterface {
         'registration_payload' => '%s',
         'description' => '%s',
         'registration_document' => '%s',
+        'registration_document_templates' => '%s',
         'age_min' => '%d',
         'age_max' => '%d',
         'date_debut' => '%s',
@@ -1161,7 +1162,7 @@ class MjEvents implements CrudRepositoryInterface {
             }
 
             if ($value === null || $value === '') {
-                if (in_array($column, array('description', 'title', 'registration_document'), true)) {
+                if (in_array($column, array('description', 'title', 'registration_document', 'registration_document_templates'), true)) {
                     $prepared[$column] = '';
                     $formats[] = $format;
                 }
@@ -1206,6 +1207,7 @@ class MjEvents implements CrudRepositoryInterface {
                     }
                     break;
                 case 'registration_payload':
+                case 'registration_document_templates':
                     if (is_array($value)) {
                         $value = wp_json_encode($value);
                     } else {

@@ -88,6 +88,10 @@
     var GenerateAiModal = Modals.GenerateAiModal;
     var NextcloudLoginModal = Modals.NextcloudLoginModal;
 
+    var DocTpl = global.MjRegMgrDocumentTemplates;
+    var TemplateSectionPicker = DocTpl ? DocTpl.TemplateSectionPicker : null;
+    var TemplateEditModal = DocTpl ? DocTpl.TemplateEditModal : null;
+
     // ============================================
     // EVENT DETAIL PANEL
     // ============================================
@@ -457,13 +461,69 @@
     // DESCRIPTION EDITOR FIELD
     // ============================================
 
+    // Variables available in registration-document templates (header, footer,
+    // authorization/attestation, signatures, activity description). Kept as one
+    // shared source of truth for the "Insérer une variable" picker below.
+    var REGDOC_VARIABLE_GROUPS = [
+        { label: 'Événement', items: [
+            { token: '[event_name]', description: "Nom de l'événement" },
+            { token: '[event_type]', description: "Type d'événement" },
+            { token: '[event_status]', description: 'Statut' },
+            { token: '[event_date_start]', description: 'Date de début' },
+            { token: '[event_date_end]', description: 'Date de fin' },
+            { token: '[event_date_deadline]', description: "Date limite d'inscription" },
+            { token: '[event_price]', description: 'Tarif' },
+            { token: '[event_url]', description: "URL de l'événement" },
+            { token: '[event_location]', description: 'Lieu' },
+            { token: '[event_location_address]', description: 'Adresse du lieu' },
+            { token: '[event_age_min]', description: 'Âge minimum' },
+            { token: '[event_age_max]', description: 'Âge maximum' },
+            { token: '[event_capacity]', description: 'Capacité totale' },
+        ] },
+        { label: 'Membre', items: [
+            { token: '[member_name]', description: 'Nom complet' },
+            { token: '[member_first_name]', description: 'Prénom' },
+            { token: '[member_last_name]', description: 'Nom de famille' },
+            { token: '[member_email]', description: 'Email' },
+            { token: '[member_phone]', description: 'Téléphone' },
+            { token: '[member_birth_date]', description: 'Date de naissance' },
+            { token: '[member_address]', description: 'Adresse complète' },
+            { token: '[member_address_line]', description: 'Rue' },
+            { token: '[member_postal_code]', description: 'Code postal' },
+            { token: '[member_city]', description: 'Ville' },
+        ] },
+        { label: 'Tuteur', items: [
+            { token: '[guardian_name]', description: 'Nom complet' },
+            { token: '[guardian_first_name]', description: 'Prénom' },
+            { token: '[guardian_last_name]', description: 'Nom de famille' },
+            { token: '[guardian_email]', description: 'Email' },
+            { token: '[guardian_phone]', description: 'Téléphone' },
+            { token: '[guardian_address]', description: 'Adresse complète' },
+            { token: '[guardian_address_line]', description: 'Rue' },
+            { token: '[guardian_postal_code]', description: 'Code postal' },
+            { token: '[guardian_city]', description: 'Ville' },
+        ] },
+        { label: 'Site', items: [
+            { token: '[site_name]', description: 'Nom du site' },
+            { token: '[site_url]', description: 'URL du site' },
+            { token: '[current_date]', description: 'Date actuelle' },
+            { token: '[current_year]', description: 'Année actuelle' },
+        ] },
+    ];
+
     function DescriptionEditorField(props) {
         var value = typeof props.value === 'string' ? props.value : '';
         var onChange = typeof props.onChange === 'function' ? props.onChange : function () {};
         var rows = props.rows || 10;
         var className = props.className || '';
         var placeholder = typeof props.placeholder === 'string' ? props.placeholder : '';
+        var variableGroups = Array.isArray(props.variableGroups) ? props.variableGroups : null;
+        var contentFontSize = props.contentFontSize || null;
         var editorAvailable = !!(global.wp && global.wp.editor && typeof global.wp.editor.initialize === 'function');
+
+        var _variablesOpen = useState(false);
+        var variablesOpen = _variablesOpen[0];
+        var setVariablesOpen = _variablesOpen[1];
 
         var idRef = useRef(null);
         if (!idRef.current) {
@@ -511,6 +571,7 @@
                     toolbar1: 'bold italic underline | bullist numlist | link unlink | undo redo',
                     plugins: 'lists link paste',
                     wpautop: true,
+                    content_style: contentFontSize ? ('body{font-size:' + contentFontSize + ';}') : undefined,
                 },
             };
 
@@ -552,7 +613,7 @@
                     }
                 }
             };
-        }, [editorAvailable, editorId, onChange]);
+        }, [editorAvailable, editorId, onChange, contentFontSize]);
 
         useEffect(function () {
             if (!editorAvailable) {
@@ -575,31 +636,89 @@
             }
         }, [editorAvailable, editorId, value]);
 
-        if (!editorAvailable) {
-            return h('textarea', {
-                ref: textareaRef,
-                class: className,
-                rows: rows,
-                value: valueRef.current || '',
-                placeholder: placeholder,
-                onInput: function (event) {
-                    var nextValue = event && event.target ? event.target.value : '';
-                    valueRef.current = nextValue;
-                    onChange(nextValue);
+        function insertVariable(token) {
+            var editor = editorRef.current;
+            if (editorAvailable && editor && editor.initialized) {
+                editor.focus();
+                editor.execCommand('mceInsertContent', false, token);
+                var content = editor.getContent();
+                valueRef.current = content;
+                onChange(content);
+            } else if (textareaRef.current) {
+                var el = textareaRef.current;
+                var start = typeof el.selectionStart === 'number' ? el.selectionStart : (valueRef.current || '').length;
+                var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+                var current = valueRef.current || '';
+                var next = current.slice(0, start) + token + current.slice(end);
+                valueRef.current = next;
+                onChange(next);
+                var cursorPos = start + token.length;
+                setTimeout(function () {
+                    el.focus();
+                    if (typeof el.setSelectionRange === 'function') {
+                        el.setSelectionRange(cursorPos, cursorPos);
+                    }
+                }, 0);
+            }
+            setVariablesOpen(false);
+        }
+
+        var variablesButton = variableGroups && variableGroups.length > 0 && h('div', { class: 'mj-regmgr-editor-variables' }, [
+            h('button', {
+                type: 'button',
+                class: 'mj-btn mj-btn--secondary mj-regmgr-editor-variables__toggle',
+                onClick: function (event) {
+                    event.preventDefault();
+                    setVariablesOpen(function (open) { return !open; });
                 },
-            });
+            }, '{ } Insérer une variable'),
+            variablesOpen && h('div', { class: 'mj-regmgr-editor-variables__menu' }, variableGroups.map(function (group) {
+                return h('div', { class: 'mj-regmgr-editor-variables__group', key: group.label }, [
+                    h('div', { class: 'mj-regmgr-editor-variables__group-label' }, group.label),
+                    group.items.map(function (item) {
+                        return h('button', {
+                            type: 'button',
+                            class: 'mj-regmgr-editor-variables__item',
+                            key: item.token,
+                            onClick: function () { insertVariable(item.token); },
+                        }, [h('code', null, item.token), h('span', null, ' — ' + item.description)]);
+                    }),
+                ]);
+            })),
+        ]);
+
+        if (!editorAvailable) {
+            return h(Fragment, null, [
+                variablesButton,
+                h('textarea', {
+                    ref: textareaRef,
+                    class: className,
+                    rows: rows,
+                    style: contentFontSize ? ('font-size:' + contentFontSize + ';') : undefined,
+                    value: valueRef.current || '',
+                    placeholder: placeholder,
+                    onInput: function (event) {
+                        var nextValue = event && event.target ? event.target.value : '';
+                        valueRef.current = nextValue;
+                        onChange(nextValue);
+                    },
+                }),
+            ]);
         }
 
         var editorClassName = className ? className + ' wp-editor-area' : 'wp-editor-area';
 
-        return h('textarea', {
-            id: editorId,
-            ref: textareaRef,
-            class: editorClassName,
-            rows: rows,
-            defaultValue: valueRef.current || '',
-            placeholder: placeholder,
-        });
+        return h(Fragment, null, [
+            variablesButton,
+            h('textarea', {
+                id: editorId,
+                ref: textareaRef,
+                class: editorClassName,
+                rows: rows,
+                defaultValue: valueRef.current || '',
+                placeholder: placeholder,
+            }),
+        ]);
     }
 
     // ============================================
@@ -1087,6 +1206,19 @@
         var _aiRegDocGenerating = useState(false);
         var aiRegDocGenerating = _aiRegDocGenerating[0];
         var setAiRegDocGenerating = _aiRegDocGenerating[1];
+
+        // Document-template library (header/footer/authorization/attestation/signatures)
+        var _docTemplates = useState((config && config.documentTemplates) || {});
+        var docTemplates = _docTemplates[0];
+        var setDocTemplates = _docTemplates[1];
+
+        var _docTemplatesSaving = useState(false);
+        var docTemplatesSaving = _docTemplatesSaving[0];
+        var setDocTemplatesSaving = _docTemplatesSaving[1];
+
+        var _docTemplateEditState = useState({ isOpen: false, mode: 'create', section: '', id: 0, name: '', content: '', saving: false, error: '' });
+        var docTemplateEditState = _docTemplateEditState[0];
+        var setDocTemplateEditState = _docTemplateEditState[1];
 
         var _publishDescription = useState('');
         var publishDescription = _publishDescription[0];
@@ -1958,6 +2090,120 @@
             setRegDocError('');
         }, [setRegDocState, setRegDocError]);
 
+        // --- Document-template library (header/footer/authorization/attestation/signatures) ---
+
+        var docTemplateSelection = (eventDetails && eventDetails.registrationDocumentTemplates) || {};
+
+        var refreshDocTemplates = useCallback(function () {
+            api.listDocumentTemplates()
+                .then(function (data) {
+                    if (data && data.templates) {
+                        setDocTemplates(data.templates);
+                    }
+                })
+                .catch(function () { /* keep last known library on failure */ });
+        }, [api, setDocTemplates]);
+
+        var handleSelectDocTemplate = useCallback(function (section, templateId) {
+            if (!selectedEvent || !selectedEvent.id) return;
+            var nextMap = Object.assign({}, docTemplateSelection);
+            if (templateId) {
+                nextMap[section] = templateId;
+            } else {
+                delete nextMap[section];
+            }
+            setEventDetails(function (prev) {
+                return prev ? Object.assign({}, prev, { registrationDocumentTemplates: nextMap }) : prev;
+            });
+            api.updateEvent(selectedEvent.id, { event_registration_document_templates: nextMap }, {})
+                .catch(function (error) {
+                    showError((error && error.message) || getString(strings, 'docTplSelectError', "Impossible d'enregistrer le choix du modèle."));
+                });
+        }, [selectedEvent, docTemplateSelection, api, setEventDetails, showError, strings]);
+
+        var handleOpenCreateDocTemplate = useCallback(function (section) {
+            setDocTemplateEditState({ isOpen: true, mode: 'create', section: section, id: 0, name: '', content: '', saving: false, error: '' });
+        }, [setDocTemplateEditState]);
+
+        var handleOpenDuplicateDocTemplate = useCallback(function (template) {
+            setDocTemplateEditState({
+                isOpen: true, mode: 'create', section: template.section, id: 0,
+                name: template.name + ' (copie)', content: template.content || '', saving: false, error: '',
+            });
+        }, [setDocTemplateEditState]);
+
+        var handleOpenEditDocTemplate = useCallback(function (template) {
+            setDocTemplateEditState({
+                isOpen: true, mode: 'edit', section: template.section, id: template.id,
+                name: template.name, content: template.content || '', saving: false, error: '',
+            });
+        }, [setDocTemplateEditState]);
+
+        var handleCloseDocTemplateModal = useCallback(function () {
+            setDocTemplateEditState(function (prev) { return Object.assign({}, prev, { isOpen: false }); });
+        }, [setDocTemplateEditState]);
+
+        var handleSaveDocTemplateModal = useCallback(function (values) {
+            var section = docTemplateEditState.section;
+            var mode = docTemplateEditState.mode;
+            var id = docTemplateEditState.id;
+
+            setDocTemplateEditState(function (prev) { return Object.assign({}, prev, { saving: true, error: '' }); });
+
+            var promise = mode === 'edit'
+                ? api.updateDocumentTemplate(id, values.name, values.content)
+                : api.createDocumentTemplate(section, values.name, values.content);
+
+            promise
+                .then(function (data) {
+                    setDocTemplateEditState({ isOpen: false, mode: 'create', section: '', id: 0, name: '', content: '', saving: false, error: '' });
+                    refreshDocTemplates();
+                    if (mode === 'create' && data && data.template && data.template.id) {
+                        handleSelectDocTemplate(section, data.template.id);
+                    }
+                })
+                .catch(function (error) {
+                    setDocTemplateEditState(function (prev) {
+                        return Object.assign({}, prev, { saving: false, error: (error && error.message) || getString(strings, 'docTplSaveError', "Impossible d'enregistrer le modèle.") });
+                    });
+                });
+        }, [docTemplateEditState, api, refreshDocTemplates, handleSelectDocTemplate, strings]);
+
+        var handleSetDefaultDocTemplate = useCallback(function (template) {
+            setDocTemplatesSaving(true);
+            api.setDefaultDocumentTemplate(template.id)
+                .then(function () {
+                    refreshDocTemplates();
+                })
+                .catch(function (error) {
+                    showError((error && error.message) || getString(strings, 'docTplDefaultError', "Impossible de définir ce modèle par défaut."));
+                })
+                .finally(function () {
+                    setDocTemplatesSaving(false);
+                });
+        }, [api, refreshDocTemplates, showError, strings]);
+
+        var handleDeleteDocTemplate = useCallback(function (template) {
+            if (!window.confirm(getString(strings, 'docTplDeleteConfirm', 'Supprimer ce modèle ? Cette action est irréversible.'))) {
+                return;
+            }
+
+            setDocTemplatesSaving(true);
+            api.deleteDocumentTemplate(template.id)
+                .then(function () {
+                    if (docTemplateSelection[template.section] === template.id) {
+                        handleSelectDocTemplate(template.section, null);
+                    }
+                    refreshDocTemplates();
+                })
+                .catch(function (error) {
+                    showError((error && error.message) || getString(strings, 'docTplDeleteError', 'Impossible de supprimer ce modèle.'));
+                })
+                .finally(function () {
+                    setDocTemplatesSaving(false);
+                });
+        }, [api, docTemplateSelection, handleSelectDocTemplate, refreshDocTemplates, showError, strings]);
+
         var handleSaveRegDoc = useCallback(function (overrideContent) {
             if (!selectedEvent || !selectedEvent.id) {
                 return Promise.resolve();
@@ -2168,7 +2414,7 @@
             // Create HTML document for PDF
             var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document d\'inscription - ' + 
                 (eventDetails.title || 'Événement') + '</title><style>' +
-                '@page{size:A4;margin:20mm;}' +
+                '@page{size:A4;margin:8mm 7mm;}' +
                 'body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}' +
                 'h1{font-size:18pt;margin:0 0 0.75em 0;}h2{font-size:14pt;margin:1em 0 0.5em 0;}h3{font-size:12pt;margin:0.8em 0 0.4em 0;}' +
                 'p{margin:0 0 0.75em 0;}p:last-child{margin-bottom:0;}' +
@@ -2213,7 +2459,7 @@
         }, [selectedEvent, eventDetails, regDocState, config, strings, showError, registrations]);
 
         // Print blank registration document (placeholders replaced by dotted lines to fill in by hand)
-        var handlePrintRegDocBlank = useCallback(function () {
+        var handlePrintRegDocBlank = useCallback(function (isAutonomous) {
             if (!selectedEvent || !eventDetails) {
                 return;
             }
@@ -2224,9 +2470,31 @@
                 return;
             }
 
-            var blankLine = '..............................';
-            var blankLineLong = '..........................................................';
-            var longBlankFields = { member_address: true, guardian_address: true };
+            // Blank-line length per field: a postal code needs far less room
+            // to fill in by hand than a full address or an email.
+            var blankLengthBySuffix = {
+                name: 48,
+                first_name: 20,
+                last_name: 20,
+                email: 30,
+                phone: 16,
+                birth_date: 14,
+                address: 58,
+                address_line: 40,
+                postal_code: 8,
+                city: 22,
+            };
+            var defaultBlankLength = 30;
+            var blankLineForKey = function (lowerKey) {
+                var suffix = null;
+                if (lowerKey.indexOf('member_') === 0) {
+                    suffix = lowerKey.slice('member_'.length);
+                } else if (lowerKey.indexOf('guardian_') === 0) {
+                    suffix = lowerKey.slice('guardian_'.length);
+                }
+                var length = (suffix && blankLengthBySuffix[suffix]) || defaultBlankLength;
+                return new Array(length + 1).join('.');
+            };
 
             // Event/site variables are known values and stay interpolated; only
             // member_/guardian_ placeholders are replaced by a dotted line to fill in by hand
@@ -2257,17 +2525,26 @@
                     if (Object.prototype.hasOwnProperty.call(knownVariables, lowerKey)) {
                         return knownVariables[lowerKey];
                     }
-                    return longBlankFields[lowerKey] ? blankLineLong : blankLine;
+                    return blankLineForKey(lowerKey);
                 });
             };
 
-            var processedHeader = blankifyVariables(config.regDocHeader || '');
-            var processedContent = blankifyVariables(content);
-            var processedFooter = blankifyVariables(config.regDocFooter || '');
+            // Blank document = printed by hand: the admin explicitly picks the
+            // "Autorisation parentale" or "Attestation de présence" variant.
+            var blocks = DocTpl
+                ? DocTpl.resolveDocumentBlocks(docTemplates, docTemplateSelection, !!isAutonomous, content)
+                : [{ cssClass: 'mj-regdoc-content', html: content }];
+            var bodyHtml = blocks
+                .map(function (block) {
+                    var html = blankifyVariables(block.html);
+                    return html ? '<div class="' + block.cssClass + '">' + html + '</div>' : '';
+                })
+                .filter(function (fragment) { return fragment !== ''; })
+                .join('');
 
             var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document vierge - ' +
                 (eventDetails.title || 'Événement') + '</title><style>' +
-                '@page{size:A4;margin:20mm;}' +
+                '@page{size:A4;margin:8mm 7mm;}' +
                 'body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}' +
                 'h1{font-size:18pt;margin:0 0 0.75em 0;}h2{font-size:14pt;margin:1em 0 0.5em 0;}h3{font-size:12pt;margin:0.8em 0 0.4em 0;}' +
                 'p{margin:0 0 0.75em 0;}p:last-child{margin-bottom:0;}' +
@@ -2279,28 +2556,24 @@
                 'th{background:transparent;font-weight:bold;}' +
                 'img{max-width:100%;height:auto;}' +
                 'a{color:#2563eb;text-decoration:underline;}' +
-                '.regdoc-header{}' +
-                '.regdoc-content{min-height:150px;}' +
-                '.regdoc-footer{font-size:10pt;color:#666;}' +
-                '</style></head><body>' +
-                (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
-                '<div class="regdoc-content">' + processedContent + '</div>' +
-                (processedFooter ? '<div class="regdoc-footer">' + processedFooter + '</div>' : '') +
-                '</body></html>';
+                (DocTpl ? DocTpl.PREVIEW_STYLE : '.regdoc-content{min-height:150px;}') +
+                '</style></head><body>' + bodyHtml + '</body></html>';
 
             setRegDocPreviewState({
                 isOpen: true,
-                title: getString(strings, 'regDocBlankPreviewTitle', 'Document vierge à imprimer'),
+                title: getString(strings, 'regDocBlankPreviewTitle', 'Document vierge à imprimer')
+                    + (isAutonomous ? ' — ' + getString(strings, 'docTplVariantAutonomous', 'membre autonome') : ' — ' + getString(strings, 'docTplVariantGuardian', 'autorisation parentale')),
                 html: htmlDoc,
                 registrationId: 0,
                 eventId: selectedEvent.id,
                 isBlank: true,
+                isAutonomous: !!isAutonomous,
                 content: content,
             });
-        }, [selectedEvent, eventDetails, regDocState, config, strings, showError, setRegDocPreviewState]);
+        }, [selectedEvent, eventDetails, regDocState, docTemplates, docTemplateSelection, config, strings, showError, setRegDocPreviewState]);
 
         // Download document for a single member
-        var handleDownloadMemberDoc = useCallback(function (registration) {
+        var handleDownloadMemberDoc = useCallback(function (registration, isAutonomousOverride) {
             if (!selectedEvent || !eventDetails || !registration || !registration.member) {
                 return;
             }
@@ -2415,16 +2688,20 @@
             };
 
             var allVariables = Object.assign({}, baseVariables, memberVars);
+            var isAutonomous = typeof isAutonomousOverride === 'boolean' ? isAutonomousOverride : !!(member && member.isAutonomous);
 
-            // Process content
-            var processedHeader = interpolateVariables(config.regDocHeader || '', allVariables);
-            var processedContent = interpolateVariables(content, allVariables);
-            var processedFooter = interpolateVariables(config.regDocFooter || '', allVariables);
+            // Process content: header + autorisation/attestation (per member
+            // autonomy) + description + signature + footer, same order as the
+            // server-side PDF composition.
+            var blocks = DocTpl
+                ? DocTpl.resolveDocumentBlocks(docTemplates, docTemplateSelection, isAutonomous, content)
+                : [{ cssClass: 'mj-regdoc-content', html: content }];
+            var bodyHtml = DocTpl ? DocTpl.buildBlocksHtml(blocks, allVariables) : interpolateVariables(content, allVariables);
 
             // Create HTML document for PDF
-            var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document d\'inscription - ' + 
+            var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document d\'inscription - ' +
                 fullName + ' - ' + (eventDetails.title || 'Événement') + '</title><style>' +
-                '@page{size:A4;margin:20mm;}' +
+                '@page{size:A4;margin:8mm 7mm;}' +
                 'body{font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}' +
                 'h1{font-size:18pt;margin:0 0 0.75em 0;}h2{font-size:14pt;margin:1em 0 0.5em 0;}h3{font-size:12pt;margin:0.8em 0 0.4em 0;}' +
                 'p{margin:0 0 0.75em 0;}p:last-child{margin-bottom:0;}' +
@@ -2436,23 +2713,19 @@
                 'th{background:transparent;font-weight:bold;}' +
                 'img{max-width:100%;height:auto;}' +
                 'a{color:#2563eb;text-decoration:underline;}' +
-                '.regdoc-header{}' +
-                '.regdoc-content{min-height:150px;}' +
-                '.regdoc-footer{font-size:10pt;color:#666;}' +
-                '</style></head><body>' +
-                (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
-                '<div class="regdoc-content">' + processedContent + '</div>' +
-                (processedFooter ? '<div class="regdoc-footer">' + processedFooter + '</div>' : '') +
-                '</body></html>';
+                (DocTpl ? DocTpl.PREVIEW_STYLE : '.regdoc-content{min-height:150px;}') +
+                '</style></head><body>' + bodyHtml + '</body></html>';
 
             setRegDocPreviewState({
                 isOpen: true,
-                title: getString(strings, 'registrationDocPreviewTitle', "Aperçu du document d'inscription"),
+                title: getString(strings, 'registrationDocPreviewTitle', "Aperçu du document d'inscription")
+                    + (isAutonomous ? ' — ' + getString(strings, 'docTplVariantAutonomous', 'membre autonome') : ' — ' + getString(strings, 'docTplVariantGuardian', 'autorisation parentale')),
                 html: htmlDoc,
                 registrationId: registration.id,
+                isAutonomous: isAutonomous,
                 content: content,
             });
-        }, [selectedEvent, eventDetails, regDocState, config, strings, showError, setRegDocPreviewState]);
+        }, [selectedEvent, eventDetails, regDocState, docTemplates, docTemplateSelection, config, strings, showError, setRegDocPreviewState]);
 
         var handleDownloadRegDocPreviewPdf = useCallback(function () {
             var isBlank = !!(regDocPreviewState && regDocPreviewState.isBlank);
@@ -2485,8 +2758,8 @@
                 || '';
 
             var downloadPromise = isBlank
-                ? api.downloadRegistrationDocumentBlankPdf(eventIdForBlank, content)
-                : api.downloadRegistrationContractPdf(registrationId, content);
+                ? api.downloadRegistrationDocumentBlankPdf(eventIdForBlank, content, regDocPreviewState && regDocPreviewState.isAutonomous)
+                : api.downloadRegistrationContractPdf(registrationId, content, regDocPreviewState && regDocPreviewState.isAutonomous);
 
             downloadPromise
                 .then(function (data) {
@@ -6022,79 +6295,107 @@
                                         h('p', { class: 'mj-regmgr-loading__text' }, getString(strings, 'loading', 'Chargement des détails...')),
                                     ])
                                     : h(Fragment, null, [
-                                        // Variables disponibles
-                                        h('div', { class: 'mj-regmgr-regdoc-variables' }, [
-                                            h('h4', { class: 'mj-regmgr-regdoc-variables__title' }, getString(strings, 'regDocVariablesTitle', 'Variables disponibles')),
-                                            h('p', { class: 'mj-regmgr-regdoc-variables__hint' }, getString(strings, 'regDocVariablesHint', 'Utilisez ces variables dans le contenu du document. Elles seront remplacées par les valeurs réelles lors du téléchargement.')),
-                                            h('div', { class: 'mj-regmgr-regdoc-variables__list' }, [
-                                                h('div', { class: 'mj-regmgr-regdoc-variables__group' }, [
-                                                    h('h5', null, 'Événement'),
-                                                    h('ul', null, [
-                                                        h('li', null, [h('code', null, '[event_name]'), ' - Nom de l\'événement']),
-                                                        h('li', null, [h('code', null, '[event_type]'), ' - Type d\'événement']),
-                                                        h('li', null, [h('code', null, '[event_status]'), ' - Statut']),
-                                                        h('li', null, [h('code', null, '[event_date_start]'), ' - Date de début']),
-                                                        h('li', null, [h('code', null, '[event_date_end]'), ' - Date de fin']),
-                                                        h('li', null, [h('code', null, '[event_date_deadline]'), ' - Date limite d\'inscription']),
-                                                        h('li', null, [h('code', null, '[event_price]'), ' - Tarif']),
-                                                        h('li', null, [h('code', null, '[event_url]'), ' - URL de l\'événement']),
-                                                        h('li', null, [h('code', null, '[event_location]'), ' - Lieu']),
-                                                        h('li', null, [h('code', null, '[event_location_address]'), ' - Adresse du lieu']),
-                                                        h('li', null, [h('code', null, '[event_age_min]'), ' - Âge minimum']),
-                                                        h('li', null, [h('code', null, '[event_age_max]'), ' - Âge maximum']),
-                                                        h('li', null, [h('code', null, '[event_capacity]'), ' - Capacité totale']),
-                                                    ]),
-                                                ]),
-                                                h('div', { class: 'mj-regmgr-regdoc-variables__group' }, [
-                                                    h('h5', null, 'Membre'),
-                                                    h('ul', null, [
-                                                        h('li', null, [h('code', null, '[member_name]'), ' - Nom complet']),
-                                                        h('li', null, [h('code', null, '[member_first_name]'), ' - Prénom']),
-                                                        h('li', null, [h('code', null, '[member_last_name]'), ' - Nom de famille']),
-                                                        h('li', null, [h('code', null, '[member_email]'), ' - Email']),
-                                                        h('li', null, [h('code', null, '[member_phone]'), ' - Téléphone']),
-                                                        h('li', null, [h('code', null, '[member_birth_date]'), ' - Date de naissance']),
-                                                        h('li', null, [h('code', null, '[member_address]'), ' - Adresse complète']),
-                                                        h('li', null, [h('code', null, '[member_address_line]'), ' - Rue']),
-                                                        h('li', null, [h('code', null, '[member_postal_code]'), ' - Code postal']),
-                                                        h('li', null, [h('code', null, '[member_city]'), ' - Ville']),
-                                                    ]),
-                                                ]),
-                                                h('div', { class: 'mj-regmgr-regdoc-variables__group' }, [
-                                                    h('h5', null, 'Tuteur'),
-                                                    h('ul', null, [
-                                                        h('li', null, [h('code', null, '[guardian_name]'), ' - Nom complet']),
-                                                        h('li', null, [h('code', null, '[guardian_first_name]'), ' - Prénom']),
-                                                        h('li', null, [h('code', null, '[guardian_last_name]'), ' - Nom de famille']),
-                                                        h('li', null, [h('code', null, '[guardian_email]'), ' - Email']),
-                                                        h('li', null, [h('code', null, '[guardian_phone]'), ' - Téléphone']),
-                                                        h('li', null, [h('code', null, '[guardian_address]'), ' - Adresse complète']),
-                                                        h('li', null, [h('code', null, '[guardian_address_line]'), ' - Rue']),
-                                                        h('li', null, [h('code', null, '[guardian_postal_code]'), ' - Code postal']),
-                                                        h('li', null, [h('code', null, '[guardian_city]'), ' - Ville']),
-                                                    ]),
-                                                ]),
-                                                h('div', { class: 'mj-regmgr-regdoc-variables__group' }, [
-                                                    h('h5', null, 'Site'),
-                                                    h('ul', null, [
-                                                        h('li', null, [h('code', null, '[site_name]'), ' - Nom du site']),
-                                                        h('li', null, [h('code', null, '[site_url]'), ' - URL du site']),
-                                                        h('li', null, [h('code', null, '[current_date]'), ' - Date actuelle']),
-                                                        h('li', null, [h('code', null, '[current_year]'), ' - Année actuelle']),
-                                                    ]),
-                                                ]),
-                                            ]),
+                                        // Bibliothèque de modèles (header, autorisation/attestation, signatures, footer)
+                                        TemplateSectionPicker && h('details', { class: 'mj-regmgr-regdoc-sections' }, [
+                                            h('summary', { class: 'mj-regmgr-regdoc-sections__title' }, getString(strings, 'docTplSectionsTitle', 'Sections du document (modèles réutilisables)')),
+                                            h('p', { class: 'mj-regmgr-regdoc-sections__hint' }, getString(strings, 'docTplSectionsHint', "Seule la description de l'activité est propre à cet événement. Les autres sections viennent d'une bibliothèque de modèles partagée : choisissez un modèle existant ou créez-en un nouveau.")),
+                                            h(TemplateSectionPicker, {
+                                                section: 'header',
+                                                templates: docTemplates.header || [],
+                                                selectedId: docTemplateSelection.header,
+                                                busy: docTemplatesSaving,
+                                                onSelect: function (id) { handleSelectDocTemplate('header', id); },
+                                                onCreate: handleOpenCreateDocTemplate,
+                                                onDuplicate: handleOpenDuplicateDocTemplate,
+                                                onEdit: handleOpenEditDocTemplate,
+                                                onSetDefault: handleSetDefaultDocTemplate,
+                                                onDelete: handleDeleteDocTemplate,
+                                            }),
+                                            h(TemplateSectionPicker, {
+                                                section: 'parental_authorization',
+                                                templates: docTemplates.parental_authorization || [],
+                                                selectedId: docTemplateSelection.parental_authorization,
+                                                busy: docTemplatesSaving,
+                                                onSelect: function (id) { handleSelectDocTemplate('parental_authorization', id); },
+                                                onCreate: handleOpenCreateDocTemplate,
+                                                onDuplicate: handleOpenDuplicateDocTemplate,
+                                                onEdit: handleOpenEditDocTemplate,
+                                                onSetDefault: handleSetDefaultDocTemplate,
+                                                onDelete: handleDeleteDocTemplate,
+                                            }),
+                                            h(TemplateSectionPicker, {
+                                                section: 'attendance_attestation',
+                                                templates: docTemplates.attendance_attestation || [],
+                                                selectedId: docTemplateSelection.attendance_attestation,
+                                                busy: docTemplatesSaving,
+                                                onSelect: function (id) { handleSelectDocTemplate('attendance_attestation', id); },
+                                                onCreate: handleOpenCreateDocTemplate,
+                                                onDuplicate: handleOpenDuplicateDocTemplate,
+                                                onEdit: handleOpenEditDocTemplate,
+                                                onSetDefault: handleSetDefaultDocTemplate,
+                                                onDelete: handleDeleteDocTemplate,
+                                            }),
+                                            h(TemplateSectionPicker, {
+                                                section: 'signature_guardian',
+                                                templates: docTemplates.signature_guardian || [],
+                                                selectedId: docTemplateSelection.signature_guardian,
+                                                busy: docTemplatesSaving,
+                                                onSelect: function (id) { handleSelectDocTemplate('signature_guardian', id); },
+                                                onCreate: handleOpenCreateDocTemplate,
+                                                onDuplicate: handleOpenDuplicateDocTemplate,
+                                                onEdit: handleOpenEditDocTemplate,
+                                                onSetDefault: handleSetDefaultDocTemplate,
+                                                onDelete: handleDeleteDocTemplate,
+                                            }),
+                                            h(TemplateSectionPicker, {
+                                                section: 'signature_autonomous',
+                                                templates: docTemplates.signature_autonomous || [],
+                                                selectedId: docTemplateSelection.signature_autonomous,
+                                                busy: docTemplatesSaving,
+                                                onSelect: function (id) { handleSelectDocTemplate('signature_autonomous', id); },
+                                                onCreate: handleOpenCreateDocTemplate,
+                                                onDuplicate: handleOpenDuplicateDocTemplate,
+                                                onEdit: handleOpenEditDocTemplate,
+                                                onSetDefault: handleSetDefaultDocTemplate,
+                                                onDelete: handleDeleteDocTemplate,
+                                            }),
+                                            h(TemplateSectionPicker, {
+                                                section: 'footer',
+                                                templates: docTemplates.footer || [],
+                                                selectedId: docTemplateSelection.footer,
+                                                busy: docTemplatesSaving,
+                                                onSelect: function (id) { handleSelectDocTemplate('footer', id); },
+                                                onCreate: handleOpenCreateDocTemplate,
+                                                onDuplicate: handleOpenDuplicateDocTemplate,
+                                                onEdit: handleOpenEditDocTemplate,
+                                                onSetDefault: handleSetDefaultDocTemplate,
+                                                onDelete: handleDeleteDocTemplate,
+                                            }),
                                         ]),
-                                        // Éditeur du document
+                                        TemplateEditModal && h(TemplateEditModal, {
+                                            isOpen: docTemplateEditState.isOpen,
+                                            title: docTemplateEditState.mode === 'edit'
+                                                ? (getString(strings, 'docTplEditTitlePrefix', 'Modifier le modèle') + ' — ' + (DocTpl ? DocTpl.sectionLabel(docTemplateEditState.section) : ''))
+                                                : (getString(strings, 'docTplNewTitlePrefix', 'Nouveau modèle') + ' — ' + (DocTpl ? DocTpl.sectionLabel(docTemplateEditState.section) : '')),
+                                            initialName: docTemplateEditState.name,
+                                            initialContent: docTemplateEditState.content,
+                                            saving: docTemplateEditState.saving,
+                                            error: docTemplateEditState.error,
+                                            onSave: handleSaveDocTemplateModal,
+                                            onClose: handleCloseDocTemplateModal,
+                                        }),
+                                        // Description de l'activité (seule section propre à l'événement, assistée par IA)
                                         h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
-                                            h('label', { class: 'mj-regmgr-form-label', htmlFor: regDocFieldId }, getString(strings, 'regDocLabel', 'Contenu du document d\'inscription')),
+                                            h('label', { class: 'mj-regmgr-form-label', htmlFor: regDocFieldId }, getString(strings, 'regDocLabel', "Description de l'activité")),
                                             h(DescriptionEditorField, {
                                                 id: regDocFieldId,
                                                 className: 'mj-regmgr-richtext',
                                                 rows: 12,
                                                 value: regDocState.draft,
                                                 onChange: handleRegDocChange,
-                                                placeholder: getString(strings, 'regDocPlaceholder', 'Rédigez le document d\'inscription avec les informations à transmettre aux participants...'),
+                                                placeholder: getString(strings, 'regDocPlaceholder', "Rédigez la description de l'activité : objectifs, programme, horaires, matériel, consignes de sécurité..."),
+                                                variableGroups: REGDOC_VARIABLE_GROUPS,
+                                                contentFontSize: '11px',
                                             }),
                                         ]),
                                         // Actions
@@ -6106,7 +6407,7 @@
                                                 onClick: function () { handleGenerateAiRegDoc(); },
                                             }, aiRegDocGenerating
                                                 ? getString(strings, 'aiGenerating', 'Génération en cours...')
-                                                : getString(strings, 'aiGenerateRegDoc', '✨ Générer avec l\'IA')),
+                                                : getString(strings, 'aiGenerateRegDoc', "✨ Générer la description de l'activité")),
                                             h('button', {
                                                 type: 'button',
                                                 class: 'mj-btn mj-btn--primary',
@@ -6124,8 +6425,13 @@
                                             regDocState.draft && h('button', {
                                                 type: 'button',
                                                 class: 'mj-btn mj-btn--secondary',
-                                                onClick: function () { handlePrintRegDocBlank(); },
-                                            }, getString(strings, 'regDocPrintBlankButton', 'Imprimer le document vierge')),
+                                                onClick: function () { handlePrintRegDocBlank(false); },
+                                            }, getString(strings, 'regDocPrintBlankGuardianButton', 'Autorisation parentale')),
+                                            regDocState.draft && h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--secondary',
+                                                onClick: function () { handlePrintRegDocBlank(true); },
+                                            }, getString(strings, 'regDocPrintBlankAutonomousButton', 'Attestation de présence')),
                                             regDocState.draft && h('button', {
                                                 type: 'button',
                                                 class: 'mj-btn mj-btn--danger-outline',

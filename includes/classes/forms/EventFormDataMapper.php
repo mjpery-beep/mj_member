@@ -3,6 +3,7 @@
 namespace Mj\Member\Classes\Forms;
 
 use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\Crud\MjDocumentTemplates;
 use function array_key_exists;
 use function json_decode;
 use function sanitize_text_field;
@@ -105,6 +106,9 @@ final class EventFormDataMapper
             'event_price' => isset($values['prix']) ? (float) $values['prix'] : 0.0,
             'event_description' => isset($values['description']) ? (string) $values['description'] : '',
             'event_registration_document' => isset($values['registration_document']) ? (string) $values['registration_document'] : '',
+            'event_registration_document_templates' => isset($values['registration_document_templates']) && $values['registration_document_templates'] !== ''
+                ? (is_array($values['registration_document_templates']) ? $values['registration_document_templates'] : json_decode((string) $values['registration_document_templates'], true))
+                : array(),
             'event_occurrences_payload' => $occurrence_payload_json,
             'event_location_links' => isset($values['location_links']) && is_array($values['location_links']) ? $values['location_links'] : array(),
         );
@@ -193,6 +197,19 @@ final class EventFormDataMapper
         $values['prix'] = isset($formData['event_price']) ? (float) $formData['event_price'] : $values['prix'];
         $values['description'] = isset($formData['event_description']) ? (string) $formData['event_description'] : $values['description'];
         $values['registration_document'] = array_key_exists('event_registration_document', $formData) ? (string) $formData['event_registration_document'] : (isset($values['registration_document']) ? $values['registration_document'] : '');
+        if (array_key_exists('event_registration_document_templates', $formData)) {
+            $raw_map = $formData['event_registration_document_templates'];
+            $decoded_map = is_array($raw_map) ? $raw_map : json_decode((string) $raw_map, true);
+            $sanitized_map = array();
+            if (is_array($decoded_map)) {
+                foreach (MjDocumentTemplates::known_sections() as $section) {
+                    if (array_key_exists($section, $decoded_map) && (int) $decoded_map[$section] > 0) {
+                        $sanitized_map[$section] = (int) $decoded_map[$section];
+                    }
+                }
+            }
+            $values['registration_document_templates'] = wp_json_encode($sanitized_map);
+        }
 
         // Location links mapping
         if (array_key_exists('event_location_links', $formData) && is_array($formData['event_location_links'])) {

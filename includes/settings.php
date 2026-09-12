@@ -176,6 +176,17 @@ function mj_settings_page() {
         ));
     }
 
+    $doctpl_admin_script_file = dirname(__DIR__) . '/js/admin-document-templates.js';
+    if (is_readable($doctpl_admin_script_file)) {
+        wp_enqueue_script(
+            'mj-member-admin-document-templates',
+            plugins_url('../js/admin-document-templates.js', __FILE__),
+            array(),
+            (string) filemtime($doctpl_admin_script_file),
+            true
+        );
+    }
+
     // -----------------------------------------------------------------------
     // Handle backup profile CRUD and media backup actions (separate forms)
     // -----------------------------------------------------------------------
@@ -710,11 +721,9 @@ function mj_settings_page() {
         update_option('mj_mileage_disclaimer', $mileage_disclaimer);
         update_option('mj_mileage_default_origin_id', $mileage_default_origin);
 
-        // Document d'inscription header/footer
-        $regdoc_header = isset($_POST['mj_regdoc_header']) ? mj_member_sanitize_pdf_rich_html(wp_unslash($_POST['mj_regdoc_header'])) : '';
-        $regdoc_footer = isset($_POST['mj_regdoc_footer']) ? mj_member_sanitize_pdf_rich_html(wp_unslash($_POST['mj_regdoc_footer'])) : '';
-        update_option('mj_regdoc_header', $regdoc_header);
-        update_option('mj_regdoc_footer', $regdoc_footer);
+        // Document d'inscription: header/footer/autorisation/attestation/signatures now
+        // live in the mj_document_templates library (see MjDocumentTemplates), managed
+        // from the Registration Manager widget's "Contrat" tab — nothing to save here.
 
         // --- Nextcloud settings ---
         $nc_url = isset($_POST['mj_member_nextcloud_url'])

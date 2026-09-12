@@ -153,7 +153,7 @@
             ? getString(strings, 'aiModalDescriptionTitle', 'Generer une description')
             : (type === 'social_description'
                 ? getString(strings, 'aiModalSocialDescriptionTitle', 'Generer une description de partage')
-                : getString(strings, 'aiModalRegDocTitle', "Generer un document d'inscription"));
+                : getString(strings, 'aiModalRegDocTitle', "Generer la description de l'activite"));
 
         var footer = h(Fragment, null, [
             h('button', {
@@ -225,10 +225,10 @@
         } else {
             systemPromptBase = config.aiRegDocPrompt || '';
             if (!systemPromptBase && siteName) {
-                systemPromptBase = 'Tu es un assistant pour une association jeunesse (' + siteName + '). Tu rediges des documents d\'inscription en francais. Le document doit contenir les informations essentielles sur l\'evenement et les instructions pour les participants. Utilise les variables entre crochets (ex : [member_name], [event_name]) pour personnaliser le document. Reponds uniquement avec le contenu du document.';
+                systemPromptBase = 'Tu es un assistant pour une association jeunesse (' + siteName + '). Tu rediges UNIQUEMENT la description de l\'activite proposee : objectifs pedagogiques, programme/deroule, horaires pratiques, materiel a apporter, consignes de securite. N\'inclus aucune clause legale, aucune mention de consentement, d\'autorisation ou de signature : elles sont gerees separement. Reponds uniquement avec le contenu de la description.';
             }
-            systemPromptBase += '\n\nFormat de sortie obligatoire: retourne uniquement du HTML valide (pas de Markdown, pas de triple backticks). Structure le document avec des balises HTML (<h2>, <p>, <ul>, <li>, <strong>) sans code fence.';
-            userPromptPreview = 'Redige un document d\'inscription en HTML pour l\'evenement suivant:\n\n' + contextBlock;
+            systemPromptBase += '\n\nFormat de sortie obligatoire: retourne uniquement du HTML valide (pas de Markdown, pas de triple backticks). Structure la description avec des balises HTML (<h3>, <p>, <ul>, <li>, <strong>) sans code fence. Aucun titre h1 ou h2 : les titres de section doivent toujours etre des h3.';
+            userPromptPreview = 'Redige uniquement la description de l\'activite (en HTML) pour l\'evenement suivant, sans clause legale ni signature:\n\n' + contextBlock;
         }
 
         return h(Modal, {

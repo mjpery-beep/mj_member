@@ -109,6 +109,7 @@ final class Bootstrap
         'includes/core/ajax/admin/hours.php',
         'includes/core/ajax/admin/todos.php',
         'includes/core/ajax/admin/registration-manager.php',
+        'includes/core/ajax/admin/document-templates.php',
         'includes/core/ajax/admin/documents.php',
         'includes/core/ajax/admin/testimonials.php',
         'includes/core/ajax/admin/leave-requests.php',

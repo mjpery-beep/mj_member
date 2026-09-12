@@ -1920,10 +1920,10 @@ if (!defined('ABSPATH')) {
                         </p>
 
                         <p style="margin-bottom:18px;">
-                            <label for="mj-ai-regdoc-prompt"><strong><?php esc_html_e("Prompt – Document d'inscription", "mj-member"); ?></strong></label><br>
+                            <label for="mj-ai-regdoc-prompt"><strong><?php esc_html_e("Prompt – Description de l'activité", "mj-member"); ?></strong></label><br>
                             <textarea name="mj_ai_regdoc_prompt" id="mj-ai-regdoc-prompt" rows="4" class="large-text" placeholder="<?php echo esc_attr__('Laissez vide pour utiliser le prompt par défaut.', 'mj-member'); ?>"><?php echo esc_textarea($ai_regdoc_prompt_option); ?></textarea>
                             <small style="color:#6b7280; display:block; margin-top:4px;">
-                                <?php esc_html_e("Instruction système pour la génération du document d'inscription depuis le gestionnaire.", "mj-member"); ?>
+                                <?php esc_html_e("Instruction système pour la génération de la description de l'activité (onglet Contrat du gestionnaire). Ne concerne plus l'autorisation parentale, l'attestation de présence ni les espaces signature : ces sections sont désormais des modèles fixes, gérés dans la bibliothèque de modèles.", "mj-member"); ?>
                             </small>
                         </p>
 
@@ -1941,127 +1941,79 @@ if (!defined('ABSPATH')) {
                         <div style="background:#f0fdf4; border-left:4px solid #22c55e; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
                             <h2 style="margin:0 0 8px 0;">📋 Document d'inscription</h2>
                             <p style="margin:0; color:#475569;">
-                                <?php esc_html_e('Configurez l\'en-téte et le pied de page par défaut pour les documents d\'inscription générés via le gestionnaire d\'événements.', 'mj-member'); ?><br>
-                                <?php esc_html_e('Ces valeurs servent de base et peuvent être personnalisées par événement.', 'mj-member'); ?>
+                                <?php esc_html_e('Le document d\'inscription est composé de 5 sections : en-tête, autorisation parentale (ou attestation de présence pour un membre autonome), description de l\'activité, espace signature (parentale ou membre autonome), pied de page.', 'mj-member'); ?><br>
+                                <?php esc_html_e('Seule la description de l\'activité reste propre à chaque événement (assistée par IA, onglet Contrat du gestionnaire). Les autres sections sont des modèles réutilisables, gérés dans une bibliothèque.', 'mj-member'); ?><br>
+                                <?php esc_html_e('Créer un nouveau modèle ou en dupliquer un se fait depuis l\'onglet Contrat du widget Gestionnaire ; modifier, supprimer ou changer le modèle par défaut d\'une section peut aussi se faire directement ci-dessous.', 'mj-member'); ?>
                             </p>
                         </div>
 
-                        <div style="margin-bottom:24px;">
-                            <label for="mj-regdoc-header"><strong><?php esc_html_e('En-téte du document', 'mj-member'); ?></strong></label>
-                            <p style="color:#6b7280; font-size:13px; margin:4px 0 8px 0;">
-                                <?php esc_html_e('Contenu affiché en haut de chaque document d\'inscription. Vous pouvez y placer un logo, le nom de l\'association, etc.', 'mj-member'); ?>
-                            </p>
-                            <?php
-                            wp_editor(
-                                get_option('mj_regdoc_header', ''),
-                                'mj_regdoc_header',
-                                array(
-                                    'textarea_name' => 'mj_regdoc_header',
-                                    'textarea_rows' => 8,
-                                    'media_buttons' => true,
-                                    'teeny' => false,
-                                    'quicktags' => true,
-                                    'tinymce' => array(
-                                        'plugins' => 'table,lists,link,image,paste,wordpress,wplink,hr',
-                                        'toolbar1' => 'formatselect,fontsizeselect,lineheightselect,bold,italic,underline,bullist,numlist,blockquote,alignleft,aligncenter,alignright,link,unlink,table,hr,fullscreen,wp_adv',
-                                        'toolbar2' => 'strikethrough,forecolor,backcolor,pastetext,removeformat,charmap,outdent,indent,undo,redo,wp_help',
-                                        'fontsize_formats' => '8px 10px 12px 14px 16px 18px 20px 24px 28px 32px 36px 48px 72px',
-                                    ),
-                                )
-                            );
-                            ?>
-                        </div>
+                        <?php
+                        $mj_doctpl_sections = array(
+                            'header' => __('En-tête', 'mj-member'),
+                            'parental_authorization' => __('Autorisation parentale', 'mj-member'),
+                            'attendance_attestation' => __('Attestation de présence (membre autonome)', 'mj-member'),
+                            'signature_guardian' => __('Espace signature parentale', 'mj-member'),
+                            'signature_autonomous' => __('Espace signature membre autonome', 'mj-member'),
+                            'footer' => __('Pied de page', 'mj-member'),
+                        );
+                        $mj_doctpl_available = class_exists('\\Mj\\Member\\Classes\\Crud\\MjDocumentTemplates');
+                        ?>
 
-                        <div style="margin-bottom:24px;">
-                            <label for="mj-regdoc-footer"><strong><?php esc_html_e('Pied de page du document', 'mj-member'); ?></strong></label>
-                            <p style="color:#6b7280; font-size:13px; margin:4px 0 8px 0;">
-                                <?php esc_html_e('Contenu affiché en bas de chaque document d\'inscription. Idéal pour les mentions légales, les coordonnées, etc.', 'mj-member'); ?>
-                            </p>
-                            <?php
-                            wp_editor(
-                                get_option('mj_regdoc_footer', ''),
-                                'mj_regdoc_footer',
-                                array(
-                                    'textarea_name' => 'mj_regdoc_footer',
-                                    'textarea_rows' => 8,
-                                    'media_buttons' => true,
-                                    'teeny' => false,
-                                    'quicktags' => true,
-                                    'tinymce' => array(
-                                        'plugins' => 'table,lists,link,image,paste,wordpress,wplink,hr',
-                                        'toolbar1' => 'formatselect,fontsizeselect,lineheightselect,bold,italic,underline,bullist,numlist,blockquote,alignleft,aligncenter,alignright,link,unlink,table,hr,fullscreen,wp_adv',
-                                        'toolbar2' => 'strikethrough,forecolor,backcolor,pastetext,removeformat,charmap,outdent,indent,undo,redo,wp_help',
-                                        'fontsize_formats' => '8px 10px 12px 14px 16px 18px 20px 24px 28px 32px 36px 48px 72px',
-                                    ),
-                                )
-                            );
+                        <div id="mj-doctpl-admin"
+                            data-ajax-url="<?php echo esc_url(admin_url('admin-ajax.php')); ?>"
+                            data-nonce="<?php echo esc_attr(wp_create_nonce('mj_document_templates_admin')); ?>">
+                            <?php foreach ($mj_doctpl_sections as $mj_doctpl_section_key => $mj_doctpl_section_label) :
+                                $mj_doctpl_templates = $mj_doctpl_available
+                                    ? \Mj\Member\Classes\Crud\MjDocumentTemplates::get_all(array('section' => $mj_doctpl_section_key))
+                                    : array();
                             ?>
+                                <div class="mj-doctpl-section" style="border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px; background:#fff; margin-bottom:16px;">
+                                    <p style="margin:0 0 10px 0; font-weight:600; font-size:13px; color:#0f172a;"><?php echo esc_html($mj_doctpl_section_label); ?></p>
+
+                                    <?php if (empty($mj_doctpl_templates)) : ?>
+                                        <p style="margin:0; font-size:12px; color:#b91c1c;"><?php esc_html_e('Aucun modèle — à configurer depuis le gestionnaire.', 'mj-member'); ?></p>
+                                    <?php endif; ?>
+
+                                    <?php foreach ($mj_doctpl_templates as $mj_doctpl_tpl) :
+                                        $mj_doctpl_excerpt = wp_trim_words(wp_strip_all_tags((string) $mj_doctpl_tpl['content']), 22, '…');
+                                    ?>
+                                        <div class="mj-doctpl-row" data-template-id="<?php echo esc_attr($mj_doctpl_tpl['id']); ?>" style="padding:10px 0; border-top:1px solid #f1f5f9;">
+                                            <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                                                <strong style="font-size:13px; color:#0f172a;"><?php echo esc_html($mj_doctpl_tpl['name']); ?></strong>
+                                                <?php if (!empty($mj_doctpl_tpl['is_default'])) : ?>
+                                                    <span style="font-size:11px; color:#16a34a; background:#f0fdf4; border-radius:4px; padding:2px 6px;"><?php esc_html_e('défaut', 'mj-member'); ?></span>
+                                                <?php endif; ?>
+                                                <button type="button" class="button button-small mj-doctpl-edit-toggle"><?php esc_html_e('Modifier', 'mj-member'); ?></button>
+                                                <?php if (empty($mj_doctpl_tpl['is_default'])) : ?>
+                                                    <button type="button" class="button button-small mj-doctpl-set-default"><?php esc_html_e('Définir par défaut', 'mj-member'); ?></button>
+                                                <?php endif; ?>
+                                                <button type="button" class="button button-small mj-doctpl-delete" style="color:#b91c1c;"><?php esc_html_e('Supprimer', 'mj-member'); ?></button>
+                                            </div>
+                                            <p style="margin:6px 0 0 0; font-size:12px; color:#64748b;"><?php echo esc_html($mj_doctpl_excerpt !== '' ? $mj_doctpl_excerpt : __('(modèle vide)', 'mj-member')); ?></p>
+
+                                            <div class="mj-doctpl-edit-form" style="display:none; margin-top:10px; padding:10px; background:#f9fafb; border-radius:8px;">
+                                                <p style="margin:0 0 8px 0;">
+                                                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;"><?php esc_html_e('Nom du modèle', 'mj-member'); ?></label>
+                                                    <input type="text" class="regular-text mj-doctpl-edit-name" value="<?php echo esc_attr($mj_doctpl_tpl['name']); ?>">
+                                                </p>
+                                                <p style="margin:0 0 8px 0;">
+                                                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;"><?php esc_html_e('Contenu (HTML)', 'mj-member'); ?></label>
+                                                    <textarea class="large-text mj-doctpl-edit-content" rows="6" style="font-family:monospace; font-size:12px;"><?php echo esc_textarea($mj_doctpl_tpl['content']); ?></textarea>
+                                                </p>
+                                                <button type="button" class="button button-primary mj-doctpl-save"><?php esc_html_e('Enregistrer', 'mj-member'); ?></button>
+                                                <button type="button" class="button mj-doctpl-cancel"><?php esc_html_e('Annuler', 'mj-member'); ?></button>
+                                                <span class="mj-doctpl-error" style="color:#b91c1c; font-size:12px; margin-left:8px;"></span>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
 
                         <div style="margin-top:24px; padding:16px; border:1px dashed #86efac; border-radius:8px; background:#fff; color:#334155;">
                             <p style="margin:0 0 6px 0;"><strong><?php esc_html_e('Variables disponibles', 'mj-member'); ?></strong></p>
-                            <p style="margin:0 0 8px 0; color:#6b7280; font-size:13px;">
-                                <?php esc_html_e('Vous pouvez utiliser ces variables dans l\'en-téte et le pied de page. Elles seront remplacées par les valeurs correspondantes lors de la génération.', 'mj-member'); ?>
-                            </p>
-                            <div style="display:flex; flex-wrap:wrap; gap:24px;">
-                                <div>
-                                    <p style="margin:0 0 6px 0; font-weight:600; font-size:13px;"><?php esc_html_e('événement', 'mj-member'); ?></p>
-                                    <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
-                                        <li>[event_name] → <?php esc_html_e('Nom de l\'événement', 'mj-member'); ?></li>
-                                        <li>[event_type] → <?php esc_html_e('Type d\'événement', 'mj-member'); ?></li>
-                                        <li>[event_status] → <?php esc_html_e('Statut', 'mj-member'); ?></li>
-                                        <li>[event_date_start] → <?php esc_html_e('Date de début', 'mj-member'); ?></li>
-                                        <li>[event_date_end] → <?php esc_html_e('Date de fin', 'mj-member'); ?></li>
-                                        <li>[event_date_deadline] → <?php esc_html_e('Date limite d\'inscription', 'mj-member'); ?></li>
-                                        <li>[event_price] → <?php esc_html_e('Tarif', 'mj-member'); ?></li>
-                                        <li>[event_location] → <?php esc_html_e('Lieu', 'mj-member'); ?></li>
-                                        <li>[event_location_address] → <?php esc_html_e('Adresse du lieu', 'mj-member'); ?></li>
-                                        <li>[event_age_min] → <?php esc_html_e('Âge minimum', 'mj-member'); ?></li>
-                                        <li>[event_age_max] → <?php esc_html_e('Âge maximum', 'mj-member'); ?></li>
-                                        <li>[event_capacity] → <?php esc_html_e('Capacité totale', 'mj-member'); ?></li>
-                                    </ul>
-                                </div>
-                                <div>
-                                    <p style="margin:0 0 6px 0; font-weight:600; font-size:13px;"><?php esc_html_e('Membre', 'mj-member'); ?></p>
-                                    <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
-                                        <li>[member_name] → <?php esc_html_e('Nom complet', 'mj-member'); ?></li>
-                                        <li>[member_first_name] → <?php esc_html_e('Prénom', 'mj-member'); ?></li>
-                                        <li>[member_last_name] → <?php esc_html_e('Nom de famille', 'mj-member'); ?></li>
-                                        <li>[member_email] → <?php esc_html_e('Email', 'mj-member'); ?></li>
-                                        <li>[member_phone] → <?php esc_html_e('Téléphone', 'mj-member'); ?></li>
-                                        <li>[member_birth_date] → <?php esc_html_e('Date de naissance', 'mj-member'); ?></li>
-                                        <li>[member_address] → <?php esc_html_e('Adresse complète', 'mj-member'); ?></li>
-                                        <li>[member_address_line] → <?php esc_html_e('Rue', 'mj-member'); ?></li>
-                                        <li>[member_postal_code] → <?php esc_html_e('Code postal', 'mj-member'); ?></li>
-                                        <li>[member_city] → <?php esc_html_e('Ville', 'mj-member'); ?></li>
-                                    </ul>
-                                </div>
-                                <div>
-                                    <p style="margin:0 0 6px 0; font-weight:600; font-size:13px;"><?php esc_html_e('Tuteur', 'mj-member'); ?></p>
-                                    <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
-                                        <li>[guardian_name] → <?php esc_html_e('Nom complet', 'mj-member'); ?></li>
-                                        <li>[guardian_first_name] → <?php esc_html_e('Prénom', 'mj-member'); ?></li>
-                                        <li>[guardian_last_name] → <?php esc_html_e('Nom de famille', 'mj-member'); ?></li>
-                                        <li>[guardian_email] → <?php esc_html_e('Email', 'mj-member'); ?></li>
-                                        <li>[guardian_phone] → <?php esc_html_e('Téléphone', 'mj-member'); ?></li>
-                                        <li>[guardian_address] → <?php esc_html_e('Adresse complète', 'mj-member'); ?></li>
-                                        <li>[guardian_address_line] → <?php esc_html_e('Rue', 'mj-member'); ?></li>
-                                        <li>[guardian_postal_code] → <?php esc_html_e('Code postal', 'mj-member'); ?></li>
-                                        <li>[guardian_city] → <?php esc_html_e('Ville', 'mj-member'); ?></li>
-                                    </ul>
-                                </div>
-                                <div>
-                                    <p style="margin:0 0 6px 0; font-weight:600; font-size:13px;"><?php esc_html_e('Site', 'mj-member'); ?></p>
-                                    <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
-                                        <li>[site_name] → <?php esc_html_e('Nom du site', 'mj-member'); ?></li>
-                                        <li>[site_url] → <?php esc_html_e('URL du site', 'mj-member'); ?></li>
-                                        <li>[current_date] → <?php esc_html_e('Date actuelle', 'mj-member'); ?></li>
-                                        <li>[current_year] → <?php esc_html_e('Année actuelle', 'mj-member'); ?></li>
-                                    </ul>
-                                </div>
-                            </div>
-                            <p style="margin:12px 0 0 0; color:#6b7280; font-size:12px; font-style:italic;">
-                                <?php esc_html_e('Note : Les variables membre génèrent une page par inscrit lors du téléchargement.', 'mj-member'); ?>
+                            <p style="margin:0; color:#6b7280; font-size:13px;">
+                                <?php esc_html_e('Ces mêmes variables ([event_name], [member_name], [guardian_name], [site_name], [current_date], etc.) peuvent être utilisées dans n\'importe quel modèle de la bibliothèque ; la liste complète et leur aperçu sont disponibles directement dans l\'éditeur de modèle, onglet Contrat du gestionnaire.', 'mj-member'); ?>
                             </p>
                         </div>
                     </div>

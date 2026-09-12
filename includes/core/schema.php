@@ -908,6 +908,11 @@ function mj_member_get_idea_comments_table_name() {
     return $wpdb->prefix . 'mj_idea_comments';
 }
 
+function mj_member_get_document_templates_table_name() {
+    global $wpdb;
+    return $wpdb->prefix . 'mj_document_templates';
+}
+
 function mj_member_get_contact_message_recipients_table_name() {
     global $wpdb;
     return $wpdb->prefix . 'mj_contact_message_recipients';
@@ -2546,6 +2551,8 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_96($wpdb);
     mj_member_upgrade_to_2_97($wpdb);
     mj_member_upgrade_to_2_98($wpdb);
+    mj_member_upgrade_to_2_100($wpdb);
+    mj_member_upgrade_to_2_101($wpdb);
 
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -7483,6 +7490,185 @@ function mj_member_upgrade_to_2_98($wpdb) {
     }
     if (!mj_member_column_exists($todos_table, 'end_time')) {
         $wpdb->query("ALTER TABLE {$todos_table} ADD COLUMN end_time time DEFAULT NULL AFTER start_time");
+    }
+}
+
+/**
+ * Migration 2.100: Document-template library for the Registration Manager
+ * contract (header/footer/parental authorization/attendance/signatures),
+ * plus the per-event template selection column on the events table.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_100($wpdb) {
+    $table = mj_member_get_document_templates_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+    $sql = "CREATE TABLE {$table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        section varchar(40) NOT NULL,
+        name varchar(190) NOT NULL,
+        content longtext NOT NULL,
+        is_default tinyint(1) NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY idx_section (section),
+        KEY idx_section_default (section, is_default)
+    ) {$charset_collate};";
+
+    dbDelta($sql);
+
+    $events_table = mj_member_get_events_table_name();
+    if ($events_table && mj_member_table_exists($events_table)) {
+        if (!mj_member_column_exists($events_table, 'registration_document_templates')) {
+            $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN registration_document_templates longtext DEFAULT NULL AFTER registration_document");
+        }
+    }
+
+    if (mj_member_table_exists($table)) {
+        // Guard against concurrent requests (typical right after a production deploy)
+        // racing this migration at the same time: without a lock, two processes can
+        // both see COUNT(*)===0 before either INSERT commits, seeding the 6 default
+        // templates twice. A MySQL named lock serializes them; the second process
+        // then re-checks COUNT(*) and finds the table already seeded.
+        $lock_acquired = (int) $wpdb->get_var("SELECT GET_LOCK('mj_member_doctpl_seed', 10)");
+        if ($lock_acquired === 1) {
+            $existing = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+            if ($existing === 0) {
+                mj_member_seed_default_document_templates($wpdb, $table);
+            }
+            $wpdb->query("SELECT RELEASE_LOCK('mj_member_doctpl_seed')");
+        }
+    }
+}
+
+/**
+ * Migration 2.101: de-duplicate document templates that a race condition in
+ * 2.100's seeding could have inserted twice (multiple concurrent requests on
+ * a freshly deployed production site, before the GET_LOCK guard existed).
+ * Remaps any event's chosen template id to the kept row before deleting the
+ * duplicates, and leaves exactly one is_default=1 per section.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_101($wpdb) {
+    $table = mj_member_get_document_templates_table_name();
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    $rows = $wpdb->get_results("SELECT id, section, name, content FROM {$table} ORDER BY id ASC", ARRAY_A);
+    if (empty($rows)) {
+        return;
+    }
+
+    $seen = array();
+    $remap = array();
+    foreach ($rows as $row) {
+        $key = $row['section'] . '|' . $row['name'] . '|' . md5((string) $row['content']);
+        if (isset($seen[$key])) {
+            $remap[(int) $row['id']] = $seen[$key];
+        } else {
+            $seen[$key] = (int) $row['id'];
+        }
+    }
+
+    if (!empty($remap)) {
+        $events_table = mj_member_get_events_table_name();
+        if ($events_table && mj_member_table_exists($events_table) && mj_member_column_exists($events_table, 'registration_document_templates')) {
+            $events = $wpdb->get_results(
+                "SELECT id, registration_document_templates FROM {$events_table} WHERE registration_document_templates IS NOT NULL AND registration_document_templates <> ''",
+                ARRAY_A
+            );
+            foreach ($events as $event) {
+                $map = json_decode((string) $event['registration_document_templates'], true);
+                if (!is_array($map) || empty($map)) {
+                    continue;
+                }
+                $changed = false;
+                foreach ($map as $section => $templateId) {
+                    $templateId = (int) $templateId;
+                    if (isset($remap[$templateId])) {
+                        $map[$section] = $remap[$templateId];
+                        $changed = true;
+                    }
+                }
+                if ($changed) {
+                    $wpdb->update(
+                        $events_table,
+                        array('registration_document_templates' => wp_json_encode($map)),
+                        array('id' => (int) $event['id']),
+                        array('%s'),
+                        array('%d')
+                    );
+                }
+            }
+        }
+
+        $duplicate_ids = array_keys($remap);
+        $placeholders = implode(',', array_fill(0, count($duplicate_ids), '%d'));
+        $wpdb->query($wpdb->prepare("DELETE FROM {$table} WHERE id IN ({$placeholders})", $duplicate_ids));
+    }
+
+    // Exactly one is_default=1 per section: keep the earliest row, clear the rest.
+    $sections = $wpdb->get_col("SELECT DISTINCT section FROM {$table}");
+    foreach ($sections as $section) {
+        $default_ids = $wpdb->get_col($wpdb->prepare("SELECT id FROM {$table} WHERE section = %s AND is_default = 1 ORDER BY id ASC", $section));
+        if (count($default_ids) > 1) {
+            array_shift($default_ids);
+            $placeholders2 = implode(',', array_fill(0, count($default_ids), '%d'));
+            $wpdb->query($wpdb->prepare("UPDATE {$table} SET is_default = 0 WHERE id IN ({$placeholders2})", $default_ids));
+        }
+    }
+}
+
+/**
+ * Seed the document-template library on first install/upgrade: migrates the
+ * legacy mj_regdoc_header/mj_regdoc_footer options into "default" rows, and
+ * inserts drafted defaults for the new sections.
+ *
+ * @param wpdb $wpdb
+ * @param string $table
+ */
+function mj_member_seed_default_document_templates($wpdb, $table) {
+    require_once __DIR__ . '/document-templates-defaults.php';
+
+    $now = current_time('mysql');
+
+    $rows = array(
+        array(
+            'section' => 'header',
+            'name' => 'En-tête par défaut',
+            'content' => (string) get_option('mj_regdoc_header', ''),
+        ),
+        array(
+            'section' => 'footer',
+            'name' => 'Pied de page par défaut',
+            'content' => (string) get_option('mj_regdoc_footer', ''),
+        ),
+    );
+
+    foreach (mj_member_get_default_document_template_texts() as $section => $tpl) {
+        $rows[] = array(
+            'section' => $section,
+            'name' => $tpl['name'],
+            'content' => $tpl['content'],
+        );
+    }
+
+    foreach ($rows as $row) {
+        $wpdb->insert(
+            $table,
+            array(
+                'section' => $row['section'],
+                'name' => $row['name'],
+                'content' => $row['content'],
+                'is_default' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ),
+            array('%s', '%s', '%s', '%d', '%s', '%s')
+        );
     }
 }
 

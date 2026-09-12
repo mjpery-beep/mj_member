@@ -521,8 +521,9 @@ $config_json = wp_json_encode(array(
     'hideEventTabs' => $attendance_widget_mode,
     'fitWidgetHeight' => $attendance_widget_mode,
     'hideMemberProfileButton' => $attendance_widget_mode,
-    'regDocHeader' => wpautop(get_option('mj_regdoc_header', '')),
-    'regDocFooter' => wpautop(get_option('mj_regdoc_footer', '')),
+    'documentTemplates' => class_exists('\\Mj\\Member\\Classes\\Crud\\MjDocumentTemplates')
+        ? \Mj\Member\Classes\Crud\MjDocumentTemplates::get_all(array('group_by_section' => true))
+        : array(),
     'socialPublish' => array(
         'n8nEnabled' => $social_n8n_enabled,
         'n8nConfigured' => $social_n8n_enabled && $social_n8n_webhook_url !== '',

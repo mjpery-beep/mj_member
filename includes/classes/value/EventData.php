@@ -27,6 +27,7 @@ if (!defined('ABSPATH')) {
  * @property-read int|null $allow_guardian_registration
  * @property-read string|null $description
  * @property-read string|null $registration_document
+ * @property-read string|null $registration_document_templates
  * @property-read int|null $age_min
  * @property-read int|null $age_max
  * @property-read string|null $date_debut
@@ -69,6 +70,7 @@ final class EventData implements JsonSerializable {
         'free_participation',
         'description',
         'registration_document',
+        'registration_document_templates',
         'age_min',
         'age_max',
         'date_debut',

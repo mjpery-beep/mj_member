@@ -40,6 +40,25 @@
     var RANGE_HARD_CAP = 366;
     var MONTHLY_HARD_CAP = 60;
     var MONTHLY_OPEN_ENDED_LIMIT = 12;
+    var RANGE_RECURRENCE_HARD_CAP = 60;
+    var RANGE_RECURRENCE_OPEN_ENDED_LIMIT = 12;
+
+    var RANGE_RECURRENCE_OPTIONS = [
+        { value: 'every_two_weeks', label: 'Une semaine sur deux' },
+        { value: 'monthly', label: 'Une fois par mois' },
+        { value: 'yearly', label: 'Une fois par an' },
+    ];
+
+    function shiftDateByRecurrence(date, freq, step) {
+        if (freq === 'monthly') {
+            return new Date(date.getFullYear(), date.getMonth() + step, date.getDate());
+        }
+        if (freq === 'yearly') {
+            return new Date(date.getFullYear() + step, date.getMonth(), date.getDate());
+        }
+        // every_two_weeks
+        return addDays(date, step * 14);
+    }
 
     function pad2(n) {
         return n < 10 ? '0' + n : String(n);
@@ -110,12 +129,26 @@
             var rEnd = parseIsoDate(params.rangeEnd) || rStart;
             if (rStart) {
                 if (rEnd < rStart) { var tmp = rStart; rStart = rEnd; rEnd = tmp; }
-                var rCursor = rStart;
-                var rGuard = 0;
-                while (rCursor <= rEnd && rGuard < RANGE_HARD_CAP) {
-                    dates.push(toIsoDate(rCursor));
-                    rCursor = addDays(rCursor, 1);
-                    rGuard += 1;
+                var spanDays = Math.round((rEnd - rStart) / 86400000);
+                var recurrenceUntil = params.recurrenceEnabled ? parseIsoDate(params.recurrenceEnd) : null;
+                var recurrenceFreq = params.recurrenceFreq || 'every_two_weeks';
+                var recurrenceCap = recurrenceUntil ? RANGE_RECURRENCE_HARD_CAP : RANGE_RECURRENCE_OPEN_ENDED_LIMIT;
+                var step = 0;
+
+                while (step < (params.recurrenceEnabled ? recurrenceCap : 1)) {
+                    var blockStart = step === 0 ? rStart : shiftDateByRecurrence(rStart, recurrenceFreq, step);
+                    if (recurrenceUntil && blockStart > recurrenceUntil) break;
+
+                    var rCursor = blockStart;
+                    var blockEnd = addDays(blockStart, spanDays);
+                    var rGuard = 0;
+                    while (rCursor <= blockEnd && rGuard < RANGE_HARD_CAP) {
+                        dates.push(toIsoDate(rCursor));
+                        rCursor = addDays(rCursor, 1);
+                        rGuard += 1;
+                    }
+
+                    step += 1;
                 }
             }
         } else if (mode === 'weekly') {
@@ -169,6 +202,9 @@
             singleDate: '',
             rangeStart: '',
             rangeEnd: '',
+            recurrenceEnabled: false,
+            recurrenceFreq: 'every_two_weeks',
+            recurrenceEnd: '',
             weeklyStart: '',
             weeklyEnd: '',
             weeklyDays: [],
@@ -239,24 +275,54 @@
                 onChange: function (e) { patch({ singleDate: e.target.value }); },
             });
         } else if (mode === 'range') {
-            fields = h('div', { class: cls + '__range' }, [
-                h('label', null, [
-                    strings.rangeFrom || 'Du ',
-                    h('input', {
-                        type: 'date',
-                        class: 'mj-regmgr-form__input',
-                        value: value.rangeStart || '',
-                        onChange: function (e) { patch({ rangeStart: e.target.value }); },
-                    }),
+            fields = h(Fragment, null, [
+                h('div', { class: cls + '__range' }, [
+                    h('label', null, [
+                        strings.rangeFrom || 'Du ',
+                        h('input', {
+                            type: 'date',
+                            class: 'mj-regmgr-form__input',
+                            value: value.rangeStart || '',
+                            onChange: function (e) { patch({ rangeStart: e.target.value }); },
+                        }),
+                    ]),
+                    h('label', null, [
+                        strings.rangeTo || 'au ',
+                        h('input', {
+                            type: 'date',
+                            class: 'mj-regmgr-form__input',
+                            value: value.rangeEnd || '',
+                            onChange: function (e) { patch({ rangeEnd: e.target.value }); },
+                        }),
+                    ]),
                 ]),
-                h('label', null, [
-                    strings.rangeTo || 'au ',
-                    h('input', {
-                        type: 'date',
-                        class: 'mj-regmgr-form__input',
-                        value: value.rangeEnd || '',
-                        onChange: function (e) { patch({ rangeEnd: e.target.value }); },
-                    }),
+                h('div', { class: cls + '__recurrence' }, [
+                    h('label', { class: cls + '__recurrence-toggle' }, [
+                        h('input', {
+                            type: 'checkbox',
+                            checked: value.recurrenceEnabled,
+                            onChange: function (e) { patch({ recurrenceEnabled: e.target.checked }); },
+                        }),
+                        ' ' + (strings.recurrence || 'Récurrence'),
+                    ]),
+                    value.recurrenceEnabled && h('div', { class: cls + '__recurrence-options' }, [
+                        h('select', {
+                            class: 'mj-regmgr-form__input',
+                            value: value.recurrenceFreq,
+                            onChange: function (e) { patch({ recurrenceFreq: e.target.value }); },
+                        }, RANGE_RECURRENCE_OPTIONS.map(function (opt) {
+                            return h('option', { value: opt.value }, strings['recurrence_' + opt.value] || opt.label);
+                        })),
+                        h('label', null, [
+                            strings.recurrenceUntil || 'Jusqu\'au (optionnel) ',
+                            h('input', {
+                                type: 'date',
+                                class: 'mj-regmgr-form__input',
+                                value: value.recurrenceEnd || '',
+                                onChange: function (e) { patch({ recurrenceEnd: e.target.value }); },
+                            }),
+                        ]),
+                    ]),
                 ]),
             ]);
         } else if (mode === 'weekly') {
@@ -385,6 +451,7 @@
         WEEKDAY_KEYS: WEEKDAY_KEYS,
         WEEKDAY_LABELS: WEEKDAY_LABELS,
         MONTHLY_ORDINALS: MONTHLY_ORDINALS,
+        RANGE_RECURRENCE_OPTIONS: RANGE_RECURRENCE_OPTIONS,
     };
 
 })(window);

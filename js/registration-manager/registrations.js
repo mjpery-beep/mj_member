@@ -422,18 +422,33 @@
                             getString(strings, 'paymentQRCode', 'Paiement avec QR code'),
                         ]),
 
-                        // Document d'inscription
+                        // Document d'inscription : deux variantes, selon que le membre est autonome ou non
                         onDownloadDoc && h('button', {
                             type: 'button',
                             class: 'mj-regmgr-dropdown__item',
-                            onClick: function () { handleAction(function () { onDownloadDoc(registration); }); },
+                            title: getString(strings, 'registrationDocGuardianTooltip', "Télécharger le contrat avec l'autorisation parentale et l'espace de signature parentale"),
+                            onClick: function () { handleAction(function () { onDownloadDoc(registration, false); }); },
                         }, [
                             h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                                 h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
                                 h('polyline', { points: '7 10 12 15 17 10' }),
                                 h('line', { x1: 12, y1: 15, x2: 12, y2: 3 }),
                             ]),
-                            getString(strings, 'registrationDoc', 'Voir le contrat'),
+                            getString(strings, 'registrationDocGuardian', 'Autorisation parentale'),
+                        ]),
+
+                        onDownloadDoc && h('button', {
+                            type: 'button',
+                            class: 'mj-regmgr-dropdown__item',
+                            title: getString(strings, 'registrationDocAutonomousTooltip', "Télécharger le contrat avec l'attestation de présence et l'espace de signature membre autonome"),
+                            onClick: function () { handleAction(function () { onDownloadDoc(registration, true); }); },
+                        }, [
+                            h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
+                                h('polyline', { points: '7 10 12 15 17 10' }),
+                                h('line', { x1: 12, y1: 15, x2: 12, y2: 3 }),
+                            ]),
+                            getString(strings, 'registrationDocAutonomous', 'Attestation de présence'),
                         ]),
 
                         onSendContractToYoung && h('button', {

@@ -9,6 +9,7 @@ namespace Mj\Member\Core\Ajax\Admin;
 
 use Mj\Member\Core\Contracts\AjaxHandlerInterface;
 use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\Crud\MjDocumentTemplates;
 use Mj\Member\Classes\Crud\MjEventRegistrations;
 use Mj\Member\Classes\Crud\MjEventAttendance;
 use Mj\Member\Classes\Crud\MjEventOccurrences;
@@ -139,6 +140,11 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_send_registration_contract', [$this, 'sendRegistrationContract']);
         add_action('wp_ajax_mj_regmgr_download_registration_contract_pdf', [$this, 'downloadRegistrationContractPdf']);
         add_action('wp_ajax_mj_regmgr_download_registration_document_blank_pdf', [$this, 'downloadRegistrationDocumentBlankPdf']);
+        add_action('wp_ajax_mj_regmgr_list_document_templates', [$this, 'listDocumentTemplates']);
+        add_action('wp_ajax_mj_regmgr_create_document_template', [$this, 'createDocumentTemplate']);
+        add_action('wp_ajax_mj_regmgr_update_document_template', [$this, 'updateDocumentTemplate']);
+        add_action('wp_ajax_mj_regmgr_delete_document_template', [$this, 'deleteDocumentTemplate']);
+        add_action('wp_ajax_mj_regmgr_set_default_document_template', [$this, 'setDefaultDocumentTemplate']);
         add_action('wp_ajax_mj_regmgr_mark_membership_paid', [$this, 'markMembershipPaid']);
         add_action('wp_ajax_mj_regmgr_create_membership_payment_link', [$this, 'createMembershipPaymentLink']);
         add_action('wp_ajax_mj_regmgr_update_member_idea', [$this, 'updateMemberIdea']);
@@ -2925,6 +2931,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'statusLabel' => isset($status_labels[$event->status]) ? $status_labels[$event->status] : $event->status,
                 'description' => $event->description,
                 'registrationDocument' => isset($event->registration_document) ? $event->registration_document : '',
+                'registrationDocumentTemplates' => $this->decodeJsonField(isset($event->registration_document_templates) ? $event->registration_document_templates : array()),
                 'socialPublishDescription' => isset($registration_payload['social_publish_description']) ? (string) $registration_payload['social_publish_description'] : '',
                 'registrationPayload' => $registration_payload,
                 'dateDebut' => $event->date_debut,
@@ -3418,6 +3425,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'subscriptionStatus' => $subscription_status,
                 'whatsappOptIn' => isset($member->whatsapp_opt_in) ? ((int) $member->whatsapp_opt_in !== 0) : true,
                 'isVolunteer' => !empty($member->is_volunteer),
+                'isAutonomous' => !empty($member->is_autonomous),
                 'guardianPhone' => $guardian_phone,
                 'guardianWhatsappOptIn' => $guardian_whatsapp_opt_in,
             );
@@ -5386,6 +5394,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'requires_validation' => isset($event->requires_validation) ? !empty($event->requires_validation) : true,
                 'description' => isset($event->description) ? (string) $event->description : '',
                 'registration_document' => isset($event->registration_document) ? (string) $event->registration_document : '',
+                'registration_document_templates' => isset($event->registration_document_templates) ? (string) $event->registration_document_templates : '',
                 'age_min' => isset($event->age_min) ? (int) $event->age_min : (int) $form_values['age_min'],
                 'age_max' => isset($event->age_max) ? (int) $event->age_max : (int) $form_values['age_max'],
                 'date_debut' => $this->formatEventDatetime(isset($event->date_debut) ? $event->date_debut : ''),
@@ -6191,6 +6200,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $cover_id = isset($form_values['cover_id']) ? (int) $form_values['cover_id'] : 0;
         $description = isset($form_values['description']) ? $this->sanitizeRichHtmlForPdfTemplates($form_values['description']) : '';
         $registration_document = isset($form_values['registration_document']) ? $this->sanitizeRichHtmlForPdfTemplates($form_values['registration_document']) : '';
+        $registration_document_templates = isset($form_values['registration_document_templates']) ? $this->sanitizeDocumentTemplateMap($form_values['registration_document_templates']) : '{}';
 
         $age_min = isset($form_values['age_min']) ? (int) $form_values['age_min'] : 0;
         $age_max = isset($form_values['age_max']) ? (int) $form_values['age_max'] : 0;
@@ -6396,6 +6406,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'cover_id' => $cover_id,
             'description' => $description,
             'registration_document' => $registration_document,
+            'registration_document_templates' => $registration_document_templates,
             'age_min' => $age_min,
             'age_max' => $age_max,
             'date_fin_inscription' => $date_fin_inscription !== '' ? $date_fin_inscription : null,
@@ -6446,6 +6457,28 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     /**
      * Sanitize rich HTML while preserving table/layout styles needed for PDF templates.
      */
+    /**
+     * Sanitize the per-event {section => template_id} map before storing it in
+     * events.registration_document_templates: only known sections, positive int ids.
+     *
+     * @param mixed $value array or JSON-encoded string
+     * @return string JSON-encoded map, e.g. '{"header":12,"footer":12}'
+     */
+    private function sanitizeDocumentTemplateMap($value): string {
+        $decoded = is_array($value) ? $value : json_decode((string) $value, true);
+        $sanitized = array();
+
+        if (is_array($decoded)) {
+            foreach (MjDocumentTemplates::known_sections() as $section) {
+                if (array_key_exists($section, $decoded) && (int) $decoded[$section] > 0) {
+                    $sanitized[$section] = (int) $decoded[$section];
+                }
+            }
+        }
+
+        return (string) wp_json_encode($sanitized);
+    }
+
     private function sanitizeRichHtmlForPdfTemplates($html): string {
         $raw = is_string($html) ? $html : (string) $html;
         if ($raw === '') {
@@ -8629,17 +8662,13 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         $variables = $this->buildRegistrationDocumentVariables($event, $member, $guardian);
-        $processed_header = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_header', ''), $variables);
-        $processed_content = $this->interpolateRegistrationDocumentTemplate($registration_document, $variables);
-        $processed_footer = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_footer', ''), $variables);
+        $blocks = $this->buildRegistrationDocumentBlocks($event, $member, $registration_document, $variables);
 
         $event_title = isset($event->title) ? (string) $event->title : __('Événement', 'mj-member');
         $member_name_for_contract = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
 
         $pdf_result = $this->buildRegistrationContractPdf(
-            $processed_header,
-            $processed_content,
-            $processed_footer,
+            $blocks,
             $event_title,
             $member_name_for_contract
         );
@@ -8805,18 +8834,16 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $guardian_id = !empty($member->guardian_id) ? (int) $member->guardian_id : (int) ($registration->guardian_id ?? 0);
             $guardian = $guardian_id > 0 ? MjMembers::getById($guardian_id) : null;
 
+            $force_autonomous = isset($_POST['isAutonomous']) ? filter_var($_POST['isAutonomous'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) : null;
+
             $variables = $this->buildRegistrationDocumentVariables($event, $member, $guardian);
-            $processed_header = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_header', ''), $variables);
-            $processed_content = $this->interpolateRegistrationDocumentTemplate($registration_document, $variables);
-            $processed_footer = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_footer', ''), $variables);
+            $blocks = $this->buildRegistrationDocumentBlocks($event, $member, $registration_document, $variables, $force_autonomous);
 
             $event_title = isset($event->title) ? (string) $event->title : __('Événement', 'mj-member');
             $member_name_for_contract = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
 
             $pdf_result = $this->buildRegistrationContractPdf(
-                $processed_header,
-                $processed_content,
-                $processed_footer,
+                $blocks,
                 $event_title,
                 $member_name_for_contract
             );
@@ -8878,6 +8905,128 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     }
 
     /**
+     * List document templates (contract sections: header, footer, parental
+     * authorization, attendance attestation, signature blocks), optionally
+     * filtered by section.
+     */
+    public function listDocumentTemplates() {
+        $auth = $this->verifyRequest();
+        if (!$auth) return;
+
+        $section = isset($_POST['section']) ? sanitize_key((string) $_POST['section']) : '';
+
+        $args = array('group_by_section' => true);
+        if ($section !== '') {
+            $args = array('section' => $section);
+        }
+
+        $templates = MjDocumentTemplates::get_all($args);
+
+        wp_send_json_success(array('templates' => $templates));
+    }
+
+    /**
+     * Create a new document template (either from scratch or as a duplicate
+     * of an existing one — the front sends the source content either way).
+     */
+    public function createDocumentTemplate() {
+        $auth = $this->verifyRequest();
+        if (!$auth) return;
+
+        $section = isset($_POST['section']) ? sanitize_key((string) $_POST['section']) : '';
+        $name = isset($_POST['name']) ? wp_unslash((string) $_POST['name']) : '';
+        $content = isset($_POST['content']) ? wp_unslash((string) $_POST['content']) : '';
+
+        $result = MjDocumentTemplates::create(array(
+            'section' => $section,
+            'name' => $name,
+            'content' => $content,
+        ));
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()), 400);
+            return;
+        }
+
+        wp_send_json_success(array('template' => MjDocumentTemplates::get($result)));
+    }
+
+    /**
+     * Update an existing document template's name/content in place.
+     */
+    public function updateDocumentTemplate() {
+        $auth = $this->verifyRequest();
+        if (!$auth) return;
+
+        $id = isset($_POST['id']) ? absint($_POST['id']) : 0;
+        $data = array();
+        if (isset($_POST['name'])) {
+            $data['name'] = wp_unslash((string) $_POST['name']);
+        }
+        if (isset($_POST['content'])) {
+            $data['content'] = wp_unslash((string) $_POST['content']);
+        }
+
+        $result = MjDocumentTemplates::update($id, $data);
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()), 400);
+            return;
+        }
+
+        wp_send_json_success(array('template' => MjDocumentTemplates::get($id)));
+    }
+
+    /**
+     * Delete a document template. Reserved to coordinateurs, and refused by
+     * the CRUD layer when it's the last/default template of its section.
+     */
+    public function deleteDocumentTemplate() {
+        $auth = $this->verifyRequest();
+        if (!$auth) return;
+
+        if (!$auth['is_coordinateur']) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $id = isset($_POST['id']) ? absint($_POST['id']) : 0;
+        $result = MjDocumentTemplates::delete($id);
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()), 400);
+            return;
+        }
+
+        wp_send_json_success(array('id' => $id));
+    }
+
+    /**
+     * Mark a document template as the default for its section. Reserved to
+     * coordinateurs since it changes the fallback used by every event that
+     * doesn't explicitly pick another template.
+     */
+    public function setDefaultDocumentTemplate() {
+        $auth = $this->verifyRequest();
+        if (!$auth) return;
+
+        if (!$auth['is_coordinateur']) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $id = isset($_POST['id']) ? absint($_POST['id']) : 0;
+        $result = MjDocumentTemplates::set_default($id);
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()), 400);
+            return;
+        }
+
+        wp_send_json_success(array('template' => MjDocumentTemplates::get($id)));
+    }
+
+    /**
      * Generate a blank registration document (no member) as PDF: event/site placeholders
      * stay interpolated, member_/guardian_ placeholders become a dotted line to fill in by hand.
      */
@@ -8909,17 +9058,15 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 return;
             }
 
+            $is_autonomous = isset($_POST['isAutonomous']) ? (bool) filter_var($_POST['isAutonomous'], FILTER_VALIDATE_BOOLEAN) : false;
+
             $variables = $this->buildBlankRegistrationDocumentVariables($event);
-            $processed_header = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_header', ''), $variables);
-            $processed_content = $this->interpolateRegistrationDocumentTemplate($registration_document, $variables);
-            $processed_footer = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_footer', ''), $variables);
+            $blocks = $this->buildRegistrationDocumentBlocks($event, null, $registration_document, $variables, $is_autonomous);
 
             $event_title = isset($event->title) ? (string) $event->title : __('Événement', 'mj-member');
 
             $pdf_result = $this->buildRegistrationContractPdf(
-                $processed_header,
-                $processed_content,
-                $processed_footer,
+                $blocks,
                 $event_title,
                 ''
             );
@@ -8987,14 +9134,34 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     private function buildBlankRegistrationDocumentVariables($event): array {
         $variables = $this->buildRegistrationDocumentVariables($event, null, null);
 
-        $blank_line = str_repeat('.', 30);
-        $blank_line_long = str_repeat('.', 58);
-        $long_fields = array('member_address' => true, 'guardian_address' => true);
+        // Blank-line length per field: a postal code needs far less room to
+        // fill in by hand than a full address or an email.
+        $blank_length_by_suffix = array(
+            'name' => 48,
+            'first_name' => 20,
+            'last_name' => 20,
+            'email' => 30,
+            'phone' => 16,
+            'birth_date' => 14,
+            'address' => 58,
+            'address_line' => 40,
+            'postal_code' => 8,
+            'city' => 22,
+        );
+        $default_blank_length = 30;
 
         foreach ($variables as $key => $value) {
-            if (strpos($key, 'member_') === 0 || strpos($key, 'guardian_') === 0) {
-                $variables[$key] = !empty($long_fields[$key]) ? $blank_line_long : $blank_line;
+            $suffix = null;
+            if (strpos($key, 'member_') === 0) {
+                $suffix = substr($key, strlen('member_'));
+            } elseif (strpos($key, 'guardian_') === 0) {
+                $suffix = substr($key, strlen('guardian_'));
+            } else {
+                continue;
             }
+
+            $length = isset($blank_length_by_suffix[$suffix]) ? $blank_length_by_suffix[$suffix] : $default_blank_length;
+            $variables[$key] = str_repeat('.', $length);
         }
 
         return $variables;
@@ -9081,6 +9248,79 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         return $payload;
+    }
+
+    /**
+     * Resolve the fixed document-template sections (header, footer,
+     * authorization/attestation, signature) for one event, picking the
+     * autonome/non-autonome variant from $member->is_autonomous.
+     *
+     * A null $member with no $forceAutonomous override (blank/print document)
+     * is treated as non-autonome, so the printed blank uses the "Autorisation
+     * Parentale" + "Espace signature Parentale" variant, filled in by hand.
+     *
+     * @param bool|null $forceAutonomous when set, overrides $member->is_autonomous
+     *   (used for the blank document, where there's no real member but the admin
+     *   explicitly asked for the "Attestation de présence" or "Autorisation
+     *   parentale" variant).
+     * @return array{header:string,auth:string,signature:string,footer:string} raw (uninterpolated) HTML
+     */
+    private function resolveDocumentTemplateSections($event, $member = null, ?bool $forceAutonomous = null): array {
+        $map = array();
+        if (isset($event->registration_document_templates) && is_string($event->registration_document_templates) && $event->registration_document_templates !== '') {
+            $decoded = json_decode($event->registration_document_templates, true);
+            if (is_array($decoded)) {
+                $map = $decoded;
+            }
+        }
+
+        $is_autonomous = $forceAutonomous !== null ? $forceAutonomous : ($member && !empty($member->is_autonomous));
+
+        $auth_section = $is_autonomous
+            ? MjDocumentTemplates::SECTION_ATTENDANCE_ATTESTATION
+            : MjDocumentTemplates::SECTION_PARENTAL_AUTHORIZATION;
+        $signature_section = $is_autonomous
+            ? MjDocumentTemplates::SECTION_SIGNATURE_AUTONOMOUS
+            : MjDocumentTemplates::SECTION_SIGNATURE_GUARDIAN;
+
+        return array(
+            'header' => $this->resolveDocumentTemplateContent(MjDocumentTemplates::SECTION_HEADER, $map),
+            'auth' => $this->resolveDocumentTemplateContent($auth_section, $map),
+            'signature' => $this->resolveDocumentTemplateContent($signature_section, $map),
+            'footer' => $this->resolveDocumentTemplateContent(MjDocumentTemplates::SECTION_FOOTER, $map),
+        );
+    }
+
+    /**
+     * @param array<string,mixed> $map section => template_id chosen for this event (or absent/null for the section default)
+     */
+    private function resolveDocumentTemplateContent(string $section, array $map): string {
+        $template_id = isset($map[$section]) ? (int) $map[$section] : 0;
+        $template = $template_id > 0 ? MjDocumentTemplates::get($template_id) : null;
+
+        if (!$template || $template['section'] !== $section) {
+            $template = MjDocumentTemplates::get_default($section);
+        }
+
+        return $template ? (string) $template['content'] : '';
+    }
+
+    /**
+     * Build the ordered PDF block list (header/auth/description/signature/footer)
+     * for one event + optional member, interpolating variables in every block.
+     *
+     * @return array<int,array{class:string,html:string}>
+     */
+    private function buildRegistrationDocumentBlocks($event, $member, string $registration_document, array $variables, ?bool $forceAutonomous = null): array {
+        $sections = $this->resolveDocumentTemplateSections($event, $member, $forceAutonomous);
+
+        return array(
+            array('class' => 'mj-regdoc-header', 'html' => $this->interpolateRegistrationDocumentTemplate($sections['header'], $variables)),
+            array('class' => 'mj-regdoc-auth', 'html' => $this->interpolateRegistrationDocumentTemplate($sections['auth'], $variables)),
+            array('class' => 'mj-regdoc-content', 'html' => $this->interpolateRegistrationDocumentTemplate($registration_document, $variables)),
+            array('class' => 'mj-regdoc-signature', 'html' => $this->interpolateRegistrationDocumentTemplate($sections['signature'], $variables)),
+            array('class' => 'mj-regdoc-footer', 'html' => $this->interpolateRegistrationDocumentTemplate($sections['footer'], $variables)),
+        );
     }
 
     /**
@@ -9200,14 +9440,16 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     }
 
     /**
-     * Build a PDF file content from registration contract HTML fragments.
+     * Build a PDF file content from the ordered registration-document blocks
+     * (header, authorization/attestation, activity description, signature, footer).
      *
+     * @param array<int,array{class:string,html:string}> $blocks
      * @return array<string,string>|\WP_Error
      */
-    private function buildRegistrationContractPdf(string $header_html, string $content_html, string $footer_html, string $event_title, string $member_name) {
+    private function buildRegistrationContractPdf(array $blocks, string $event_title, string $member_name) {
         $render_errors = array();
 
-        $dompdf_result = $this->buildRegistrationContractPdfWithDompdf($header_html, $content_html, $footer_html, $event_title, $member_name);
+        $dompdf_result = $this->buildRegistrationContractPdfWithDompdf($blocks, $event_title, $member_name);
         if (is_array($dompdf_result)) {
             $dompdf_result['renderer'] = 'dompdf';
             return $dompdf_result;
@@ -9220,7 +9462,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         // Prefer mPDF fallback to keep rich HTML when Dompdf is unavailable.
         $allow_mpdf_fallback = (bool) apply_filters('mj_member_regdoc_allow_mpdf_fallback', true);
         if ($allow_mpdf_fallback) {
-            $mpdf_result = $this->buildRegistrationContractPdfWithMpdf($header_html, $content_html, $footer_html, $event_title, $member_name);
+            $mpdf_result = $this->buildRegistrationContractPdfWithMpdf($blocks, $event_title, $member_name);
             if (is_array($mpdf_result)) {
                 $mpdf_result['renderer'] = 'mpdf';
                 return $mpdf_result;
@@ -9254,6 +9496,24 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         if (!class_exists('FPDF')) {
             return new \WP_Error('mj_regmgr_contract_pdf_lib_missing', __('La bibliothèque PDF est introuvable.', 'mj-member'));
         }
+
+        // FPDF has no per-section styling: fold auth/description/signature
+        // into one "content" flow, header/footer stay separate.
+        $header_html = '';
+        $footer_html = '';
+        $content_parts = array();
+        foreach ($blocks as $block) {
+            $class = isset($block['class']) ? (string) $block['class'] : '';
+            $html = isset($block['html']) ? (string) $block['html'] : '';
+            if ($class === 'mj-regdoc-header') {
+                $header_html = $html;
+            } elseif ($class === 'mj-regdoc-footer') {
+                $footer_html = $html;
+            } elseif (trim($html) !== '') {
+                $content_parts[] = $html;
+            }
+        }
+        $content_html = implode('<br/><br/>', $content_parts);
 
         $pdf = new \FPDF('P', 'mm', 'A4');
         $pdf->SetAutoPageBreak(true, 15);
@@ -9310,7 +9570,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
      *
      * @return array{filename:string,content:string}|\WP_Error|null
      */
-    private function buildRegistrationContractPdfWithMpdf(string $header_html, string $content_html, string $footer_html, string $event_title, string $member_name) {
+    private function buildRegistrationContractPdfWithMpdf(array $blocks, string $event_title, string $member_name) {
         if (!$this->ensureMpdfLoaded()) {
             return null;
         }
@@ -9319,11 +9579,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return new \WP_Error('mj_regmgr_contract_pdf_mpdf_missing', __('La bibliothèque mPDF est introuvable.', 'mj-member'));
         }
 
-        $header_html = $this->normalizeHtmlFragmentForPdf($header_html);
-        $body_html = $this->normalizeHtmlFragmentForPdf($content_html);
-        $footer_html = $this->normalizeHtmlFragmentForPdf($footer_html);
-
-        if ($body_html === '') {
+        list($normalized_blocks, $body_present) = $this->normalizeRegistrationDocumentBlocks($blocks);
+        if (!$body_present) {
             return null;
         }
 
@@ -9332,21 +9589,21 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $composed_html = '<!doctype html><html><head><meta charset="utf-8">'
             . '<base href="' . $base_href . '">'
             . '<style>'
-            . '@page{size:A4;margin:14mm 12mm 14mm 12mm;}'
+            . '@page{size:A4;margin:8mm 7mm 8mm 7mm;}'
             . 'body{font-family:dejavusans,Arial,sans-serif;font-size:12px;line-height:1.45;color:#111;margin:0;padding:0;}'
             . '.mj-regdoc{margin:0;padding:0;}'
             . '.mj-regdoc-header{font-size:11px;color:#333;}'
-            . '.mj-regdoc-content{font-size:12px;}'
+            . '.mj-regdoc-auth{font-size:12px;margin:10px 0;}'
+            . '.mj-regdoc-content{font-size:11px;}'
+            . '.mj-regdoc-signature{font-size:12px;margin-top:28px;}'
             . '.mj-regdoc-footer{font-size:10px;color:#444;}'
             . '.mj-regdoc img{max-width:100%;height:auto;}'
             . '.mj-regdoc table{width:100%;border-collapse:collapse;margin:8px 0;}'
-            . '.mj-regdoc th,.mj-regdoc td{border:1px solid #d1d5db;padding:6px;vertical-align:top;text-align:left;}'
+            . '.mj-regdoc th,.mj-regdoc td{vertical-align:top;text-align:left;}'
             . '.mj-regdoc th{background:#f3f4f6;font-weight:700;}'
             . '.mj-regdoc .regdoc-page{page-break-before:auto !important;page-break-after:auto !important;break-before:auto !important;break-after:auto !important;}'
             . '</style></head><body><div class="mj-regdoc">'
-            . '<div class="mj-regdoc-header">' . $header_html . '</div>'
-            . '<div class="mj-regdoc-content">' . $body_html . '</div>'
-            . '<div class="mj-regdoc-footer">' . $footer_html . '</div>'
+            . $this->renderRegistrationDocumentBlocksHtml($normalized_blocks)
             . '</div></body></html>';
 
         try {
@@ -9427,7 +9684,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
      *
      * @return array{filename:string,content:string}|\WP_Error|null
      */
-    private function buildRegistrationContractPdfWithDompdf(string $header_html, string $content_html, string $footer_html, string $event_title, string $member_name) {
+    private function buildRegistrationContractPdfWithDompdf(array $blocks, string $event_title, string $member_name) {
         if (!$this->ensureDompdfLoaded()) {
             return null;
         }
@@ -9443,11 +9700,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             );
         }
 
-        $header_html = $this->normalizeHtmlFragmentForPdf($header_html);
-        $body_html = $this->normalizeHtmlFragmentForPdf($content_html);
-        $footer_html = $this->normalizeHtmlFragmentForPdf($footer_html);
-
-        if ($body_html === '') {
+        list($normalized_blocks, $body_present) = $this->normalizeRegistrationDocumentBlocks($blocks);
+        if (!$body_present) {
             return null;
         }
 
@@ -9456,19 +9710,20 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $composed_html = '<!doctype html><html><head><meta charset="utf-8">'
             . '<base href="' . $base_href . '">'
             . '<style>'
+            . '@page{size:A4;margin:8mm 7mm 8mm 7mm;}'
             . 'body{font-family:DejaVu Sans,Arial,sans-serif;font-size:12px;line-height:1.45;color:#111;margin:0;padding:0;}'
-            . '.mj-regdoc{padding:24px 28px;}'
+            . '.mj-regdoc{margin:0;padding:0;}'
             . '.mj-regdoc-header{font-size:11px;color:#333;}'
-            . '.mj-regdoc-content{font-size:12px;}'
+            . '.mj-regdoc-auth{font-size:12px;margin:10px 0;}'
+            . '.mj-regdoc-content{font-size:11px;}'
+            . '.mj-regdoc-signature{font-size:12px;margin-top:28px;}'
             . '.mj-regdoc-footer{font-size:10px;color:#444;}'
             . '.mj-regdoc img{max-width:100%;height:auto;}'
             . '.mj-regdoc table{width:100%;border-collapse:collapse;margin:8px 0;}'
-            . '.mj-regdoc th,.mj-regdoc td{border:1px solid #d1d5db;padding:6px;vertical-align:top;text-align:left;}'
+            . '.mj-regdoc th,.mj-regdoc td{vertical-align:top;text-align:left;}'
             . '.mj-regdoc th{background:#f3f4f6;font-weight:700;}'
             . '</style></head><body><div class="mj-regdoc">'
-            . '<div class="mj-regdoc-header">' . $header_html . '</div>'
-            . '<div class="mj-regdoc-content">' . $body_html . '</div>'
-            . '<div class="mj-regdoc-footer">' . $footer_html . '</div>'
+            . $this->renderRegistrationDocumentBlocksHtml($normalized_blocks)
             . '</div></body></html>';
 
         try {
@@ -9511,6 +9766,50 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'filename' => $filename_base . '.pdf',
             'content' => $content,
         );
+    }
+
+    /**
+     * Normalize every block's HTML (via normalizeHtmlFragmentForPdf) and report
+     * whether the "mj-regdoc-content" (activity description) block has content —
+     * that's the one required section, everything else can legitimately be empty.
+     *
+     * @param array<int,array{class:string,html:string}> $blocks
+     * @return array{0:array<int,array{class:string,html:string}>,1:bool}
+     */
+    private function normalizeRegistrationDocumentBlocks(array $blocks): array {
+        $normalized = array();
+        $body_present = false;
+
+        foreach ($blocks as $block) {
+            $class = isset($block['class']) ? (string) $block['class'] : '';
+            $html = $this->normalizeHtmlFragmentForPdf(isset($block['html']) ? (string) $block['html'] : '');
+
+            if ($class === 'mj-regdoc-content' && $html !== '') {
+                $body_present = true;
+            }
+
+            $normalized[] = array('class' => $class, 'html' => $html);
+        }
+
+        return array($normalized, $body_present);
+    }
+
+    /**
+     * Render the normalized blocks as concatenated `<div class="...">...</div>`
+     * fragments, skipping empty ones (e.g. no signature template configured).
+     *
+     * @param array<int,array{class:string,html:string}> $blocks
+     */
+    private function renderRegistrationDocumentBlocksHtml(array $blocks): string {
+        $html = '';
+        foreach ($blocks as $block) {
+            if ($block['html'] === '') {
+                continue;
+            }
+            $html .= '<div class="' . esc_attr($block['class']) . '">' . $block['html'] . '</div>';
+        }
+
+        return $html;
     }
 
     /**
@@ -9688,35 +9987,42 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return 'style=' . $quote . $clean . $quote;
         }, $html);
 
-        // Keep semantic HTML but drop attributes that commonly destabilize PDF layout.
+        // Keep semantic HTML but drop attributes that commonly destabilize PDF layout
+        // (position/float/huge explicit sizes are stripped by the huge-height pass
+        // above and by mj_member_sanitize_pdf_rich_html() at save time). `style` and
+        // `class` stay allowed on every tag so inline formatting (font-size,
+        // line-height, margin, color, ...) from the WYSIWYG actually renders.
+        $style_attrs = array('style' => true, 'class' => true);
         $allowed = array(
-            'h1' => array(),
-            'h2' => array(),
-            'h3' => array(),
-            'h4' => array(),
-            'h5' => array(),
-            'h6' => array(),
-            'p' => array(),
+            'h1' => $style_attrs,
+            'h2' => $style_attrs,
+            'h3' => $style_attrs,
+            'h4' => $style_attrs,
+            'h5' => $style_attrs,
+            'h6' => $style_attrs,
+            'p' => $style_attrs,
             'br' => array(),
-            'strong' => array(),
-            'b' => array(),
-            'em' => array(),
-            'i' => array(),
-            'u' => array(),
-            'ul' => array(),
-            'ol' => array(),
-            'li' => array(),
-            'table' => array(),
-            'thead' => array(),
-            'tbody' => array(),
-            'tfoot' => array(),
-            'tr' => array(),
-            'th' => array('colspan' => true, 'rowspan' => true),
-            'td' => array('colspan' => true, 'rowspan' => true),
-            'a' => array('href' => true, 'target' => true),
-            'img' => array('src' => true, 'alt' => true, 'width' => true, 'height' => true),
-            'blockquote' => array(),
-            'hr' => array(),
+            'div' => $style_attrs,
+            'span' => $style_attrs,
+            'strong' => $style_attrs,
+            'b' => $style_attrs,
+            'em' => $style_attrs,
+            'i' => $style_attrs,
+            'u' => $style_attrs,
+            'ul' => $style_attrs,
+            'ol' => $style_attrs,
+            'li' => $style_attrs,
+            'table' => $style_attrs,
+            'thead' => $style_attrs,
+            'tbody' => $style_attrs,
+            'tfoot' => $style_attrs,
+            'tr' => $style_attrs,
+            'th' => array_merge($style_attrs, array('colspan' => true, 'rowspan' => true)),
+            'td' => array_merge($style_attrs, array('colspan' => true, 'rowspan' => true)),
+            'a' => array_merge($style_attrs, array('href' => true, 'target' => true)),
+            'img' => array_merge($style_attrs, array('src' => true, 'alt' => true, 'width' => true, 'height' => true)),
+            'blockquote' => $style_attrs,
+            'hr' => $style_attrs,
         );
         $html = wp_kses($html, $allowed);
 
@@ -16056,16 +16362,16 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $default_regdoc_prompt = (string) get_option('mj_member_ai_regdoc_prompt', get_option('mj_ai_regdoc_prompt', ''));
             if ($default_regdoc_prompt === '') {
                 $default_regdoc_prompt = sprintf(
-                    'Tu es un assistant pour une association jeunesse (%s). Tu rédiges des documents d\'inscription en français. Le document doit contenir les informations essentielles sur l\'événement et les instructions pour les participants. Utilise les variables entre crochets (ex : [member_name], [event_name]) pour personnaliser le document. Réponds uniquement avec le contenu du document.',
+                    'Tu es un assistant pour une association jeunesse (%s). Tu rédiges UNIQUEMENT la description de l\'activité proposée dans le document d\'inscription : objectifs pédagogiques, programme/déroulé, horaires pratiques, matériel à apporter, consignes de sécurité. N\'inclus aucune clause légale, aucune mention de consentement, d\'autorisation parentale ou d\'espace de signature : ces sections sont gérées séparément, via des modèles fixes. Utilise les variables entre crochets (ex : [event_name], [event_date_start]) si utile. Réponds uniquement avec le contenu de la description.',
                     $site_name
                 );
             }
             $system_prompt = apply_filters('mj_member_ai_regdoc_system_prompt', $default_regdoc_prompt);
-            $system_prompt .= "\n\n" . 'Format de sortie obligatoire: retourne uniquement du HTML valide (pas de Markdown, pas de triple backticks). Structure le document avec des balises HTML (<h2>, <p>, <ul>, <li>, <strong>) sans code fence.';
+            $system_prompt .= "\n\n" . 'Format de sortie obligatoire: retourne uniquement du HTML valide (pas de Markdown, pas de triple backticks). Structure la description avec des balises HTML (<h3>, <p>, <ul>, <li>, <strong>) sans code fence. Aucun titre h1 ou h2 : les titres de section doivent toujours etre des h3.';
             $system_prompt .= $priority_rules;
             $system_prompt .= $closure_rules;
             $user_prompt = sprintf(
-                "Rédige un document d'inscription en HTML pour l'événement suivant:\n\n%s%s",
+                "Rédige uniquement la description de l'activité (en HTML) pour l'événement suivant, sans clause légale ni mention de consentement/signature:\n\n%s%s",
                 $event_context,
                 $hint_directive
             );

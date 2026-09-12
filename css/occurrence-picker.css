@@ -25,6 +25,28 @@
     align-items: center;
 }
 
+.mj-occurrence-picker__recurrence {
+    margin-top: 10px;
+}
+
+.mj-occurrence-picker__recurrence-toggle {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-weight: 400 !important;
+    font-size: 13px !important;
+    margin: 0 !important;
+    cursor: pointer;
+}
+
+.mj-occurrence-picker__recurrence-options {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 8px;
+}
+
 .mj-occurrence-picker__monthly-rule {
     display: flex;
     gap: 8px;

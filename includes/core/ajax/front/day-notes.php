@@ -168,7 +168,8 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
     {
         foreach ($notes as &$note) {
             $note['media'] = self::formatMedia((int) ($note['id'] ?? 0));
-            $note['author_avatar'] = self::avatarUrl((int) ($note['author_member_id'] ?? 0));
+            $authorMemberId = (int) ($note['author_member_id'] ?? 0);
+            $note['author_avatar'] = self::avatarUrl($authorMemberId);
             $note['author_name'] = isset($note['author_name']) ? (string) $note['author_name'] : '';
 
             $assignedIds = isset($note['assigned_member_ids']) && is_array($note['assigned_member_ids'])
@@ -176,6 +177,11 @@ final class DayNotesAjaxController implements AjaxHandlerInterface
                 : array();
             $assignedAvatars = array();
             foreach ($assignedIds as $assignedId) {
+                // L'auteur a déjà son avatar affiché séparément ; éviter le doublon
+                // quand la note lui est aussi assignée.
+                if ((int) $assignedId === $authorMemberId) {
+                    continue;
+                }
                 $url = self::avatarUrl((int) $assignedId);
                 if ($url !== '') {
                     $assignedAvatars[] = $url;

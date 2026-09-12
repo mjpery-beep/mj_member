@@ -233,6 +233,45 @@
             },
 
             /**
+             * Liste les modèles de document (bibliothèque de sections fixes du contrat).
+             * @param {string} [section] - Filtre optionnel (header, footer, parental_authorization, ...)
+             */
+            listDocumentTemplates: function (section) {
+                return post('mj_regmgr_list_document_templates', { section: section || '' });
+            },
+
+            /**
+             * Crée un nouveau modèle de document (ou un duplicata, si content vient d'un modèle existant).
+             * @param {string} section
+             * @param {string} name
+             * @param {string} content
+             */
+            createDocumentTemplate: function (section, name, content) {
+                return post('mj_regmgr_create_document_template', { section: section, name: name, content: content });
+            },
+
+            /**
+             * Met à jour le nom/contenu d'un modèle de document existant.
+             */
+            updateDocumentTemplate: function (id, name, content) {
+                return post('mj_regmgr_update_document_template', { id: id, name: name, content: content });
+            },
+
+            /**
+             * Supprime un modèle de document (refusé par le serveur si c'est le dernier/le défaut de sa section).
+             */
+            deleteDocumentTemplate: function (id) {
+                return post('mj_regmgr_delete_document_template', { id: id });
+            },
+
+            /**
+             * Définit un modèle comme défaut de sa section.
+             */
+            setDefaultDocumentTemplate: function (id) {
+                return post('mj_regmgr_set_default_document_template', { id: id });
+            },
+
+            /**
              * Génère un texte via IA (description ou document d'inscription)
              * @param {number} eventId - ID de l'événement
              * @param {string} type - 'description' ou 'regdoc'
@@ -406,12 +445,15 @@
             /**
              * Génère puis retourne le contrat d'inscription d'une inscription en PDF.
              */
-            downloadRegistrationContractPdf: function (registrationId, content) {
+            downloadRegistrationContractPdf: function (registrationId, content, isAutonomous) {
                 var payload = {
                     registrationId: registrationId,
                 };
                 if (typeof content === 'string' && content !== '') {
                     payload.content = content;
+                }
+                if (typeof isAutonomous === 'boolean') {
+                    payload.isAutonomous = isAutonomous ? '1' : '0';
                 }
                 return post('mj_regmgr_download_registration_contract_pdf', payload);
             },
@@ -419,9 +461,10 @@
             /**
              * Génère puis retourne le document d'inscription vierge (sans membre) en PDF.
              */
-            downloadRegistrationDocumentBlankPdf: function (eventId, content) {
+            downloadRegistrationDocumentBlankPdf: function (eventId, content, isAutonomous) {
                 var payload = {
                     eventId: eventId,
+                    isAutonomous: isAutonomous ? '1' : '0',
                 };
                 if (typeof content === 'string' && content !== '') {
                     payload.content = content;
