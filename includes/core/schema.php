@@ -121,6 +121,11 @@ function mj_member_table_exists($table_name) {
         return false;
     }
 
+    static $cache = array();
+    if (array_key_exists($table_name, $cache)) {
+        return $cache[$table_name];
+    }
+
     global $wpdb;
     $result = $wpdb->get_var($wpdb->prepare(
         'SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s',
@@ -128,7 +133,9 @@ function mj_member_table_exists($table_name) {
         $table_name
     ));
 
-    return $result === $table_name;
+    $cache[$table_name] = ($result === $table_name);
+
+    return $cache[$table_name];
 }
 
 function mj_member_convert_table_to_utf8mb4($table_name) {
@@ -2553,6 +2560,8 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_98($wpdb);
     mj_member_upgrade_to_2_100($wpdb);
     mj_member_upgrade_to_2_101($wpdb);
+    mj_member_upgrade_to_2_102($wpdb);
+    mj_member_upgrade_to_2_103($wpdb);
 
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -7619,6 +7628,46 @@ function mj_member_upgrade_to_2_101($wpdb) {
             $placeholders2 = implode(',', array_fill(0, count($default_ids), '%d'));
             $wpdb->query($wpdb->prepare("UPDATE {$table} SET is_default = 0 WHERE id IN ({$placeholders2})", $default_ids));
         }
+    }
+}
+
+/**
+ * Migration 2.102: day notes — persist the occurrence-picker rule (mode +
+ * params: range/weekly/monthly/multiple…) that produced a note's dates,
+ * alongside the resolved dates themselves. Without this, editing a
+ * recurring note could only ever be re-shown as a flat "dates multiples"
+ * list, since only the resolved dates were stored — the original mode
+ * (e.g. "plage de dates" with a weekly recurrence) was lost.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_102($wpdb) {
+    $agenda_notes_table = mj_member_get_agenda_notes_table_name();
+    if (!$agenda_notes_table || !mj_member_table_exists($agenda_notes_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($agenda_notes_table, 'recurrence_rule')) {
+        $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD COLUMN recurrence_rule TEXT DEFAULT NULL AFTER series_id");
+    }
+}
+
+/**
+ * Migration 2.103: day notes — "Visible également pour les personnes
+ * assignées" is now an explicit opt-in (visible_to_assignees) instead of
+ * assignment unconditionally granting visibility. Defaults to 0 so existing
+ * notes keep their current (group-only) visibility until re-saved.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_103($wpdb) {
+    $agenda_notes_table = mj_member_get_agenda_notes_table_name();
+    if (!$agenda_notes_table || !mj_member_table_exists($agenda_notes_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($agenda_notes_table, 'visible_to_assignees')) {
+        $wpdb->query("ALTER TABLE {$agenda_notes_table} ADD COLUMN visible_to_assignees TINYINT(1) unsigned NOT NULL DEFAULT 0 AFTER assigned_member_ids");
     }
 }
 

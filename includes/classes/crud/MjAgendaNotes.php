@@ -140,6 +140,41 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
     }
 
     /**
+     * The occurrence-picker's own state (mode + params: singleDate,
+     * rangeStart/rangeEnd, weeklyDays, monthlyOrdinal…), stored verbatim as
+     * JSON so a recurring note reopens on the same picker mode instead of
+     * always falling back to a flat "dates multiples" list.
+     *
+     * @param mixed $value array (decoded) or JSON string
+     */
+    private static function sanitize_recurrence_rule($value): ?string
+    {
+        if (is_array($value)) {
+            $decoded = $value;
+        } elseif (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode(trim($value), true);
+        } else {
+            return null;
+        }
+
+        if (!is_array($decoded) || empty($decoded['mode'])) {
+            return null;
+        }
+
+        $allowedModes = array('single', 'range', 'weekly', 'monthly', 'multiple');
+        if (!in_array($decoded['mode'], $allowedModes, true)) {
+            return null;
+        }
+
+        $json = wp_json_encode($decoded);
+        if ($json === false || strlen($json) > 20000) {
+            return null;
+        }
+
+        return $json;
+    }
+
+    /**
      * "Personne assignée" as checkboxes: several members can be assigned to
      * one note. Stored as a delimited list (",5,12,19,") so it can be
      * queried with a plain LIKE, no JSON functions required.
@@ -250,11 +285,13 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             $visClauses[] = 'n.author_member_id = %d';
             $params[] = (int) $args['author_member_id'];
         }
-        // A note assigned to a specific member ("Personne assignée") is always
-        // visible to that member, regardless of the visibility token/their role.
+        // A note assigned to a specific member ("Personne assignée") is only
+        // visible to that member outside its normal visibility scope when the
+        // author explicitly opted in via "visible_to_assignees" - assignment
+        // alone is just metadata, not an implicit visibility grant.
         if (!empty($args['assigned_member_id'])) {
             $assignedId = (int) $args['assigned_member_id'];
-            $visClauses[] = '(n.member_id = %d OR n.assigned_member_ids LIKE %s)';
+            $visClauses[] = '(n.visible_to_assignees = 1 AND (n.member_id = %d OR n.assigned_member_ids LIKE %s))';
             $params[] = $assignedId;
             $params[] = '%,' . $assignedId . ',%';
         }
@@ -369,9 +406,11 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             'event_id' => !empty($data['event_id']) ? (int) $data['event_id'] : null,
             'member_id' => !empty($data['member_id']) ? (int) $data['member_id'] : null,
             'assigned_member_ids' => self::sanitize_assigned_member_ids($data['assigned_member_ids'] ?? null),
+            'visible_to_assignees' => !empty($data['visible_to_assignees']) ? 1 : 0,
             'series_id' => self::sanitize_series_id($data['series_id'] ?? null),
+            'recurrence_rule' => self::sanitize_recurrence_rule($data['recurrence_rule'] ?? null),
         );
-        $formats = array('%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s', '%s');
+        $formats = array('%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s', '%d', '%s', '%s');
 
         $result = $wpdb->insert(self::table_name(), $insert, $formats);
         if ($result === false) {
@@ -545,6 +584,18 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             $fields['assigned_member_ids'] = self::sanitize_assigned_member_ids($data['assigned_member_ids']);
             $formats[] = '%s';
         }
+        if (array_key_exists('visible_to_assignees', $data)) {
+            $fields['visible_to_assignees'] = !empty($data['visible_to_assignees']) ? 1 : 0;
+            $formats[] = '%d';
+        }
+        if (array_key_exists('series_id', $data)) {
+            $fields['series_id'] = self::sanitize_series_id($data['series_id']);
+            $formats[] = '%s';
+        }
+        if (array_key_exists('recurrence_rule', $data)) {
+            $fields['recurrence_rule'] = self::sanitize_recurrence_rule($data['recurrence_rule']);
+            $formats[] = '%s';
+        }
 
         if (empty($fields)) {
             return true;
@@ -591,6 +642,12 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
         $lastName = isset($row['author_last_name']) ? sanitize_text_field((string) $row['author_last_name']) : '';
         $authorName = trim($firstName . ' ' . $lastName);
 
+        $recurrenceRule = null;
+        if (!empty($row['recurrence_rule'])) {
+            $decodedRule = json_decode((string) $row['recurrence_rule'], true);
+            $recurrenceRule = is_array($decodedRule) ? $decodedRule : null;
+        }
+
         return array(
             'id' => (int) ($row['id'] ?? 0),
             'author_member_id' => (int) ($row['author_member_id'] ?? 0),
@@ -607,7 +664,9 @@ class MjAgendaNotes extends MjTools implements CrudRepositoryInterface
             'event_id' => isset($row['event_id']) && $row['event_id'] !== null ? (int) $row['event_id'] : 0,
             'member_id' => isset($row['member_id']) && $row['member_id'] !== null ? (int) $row['member_id'] : 0,
             'assigned_member_ids' => self::unpack_assigned_member_ids($row['assigned_member_ids'] ?? ''),
+            'visible_to_assignees' => !empty($row['visible_to_assignees']),
             'series_id' => isset($row['series_id']) && $row['series_id'] !== null ? (string) $row['series_id'] : '',
+            'recurrence_rule' => $recurrenceRule,
             'created_at' => (string) ($row['created_at'] ?? ''),
             'updated_at' => (string) ($row['updated_at'] ?? ''),
             'author_name' => $authorName !== '' ? $authorName : __('Auteur inconnu', 'mj-member'),

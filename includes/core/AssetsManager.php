@@ -29,6 +29,7 @@ final class AssetsManager
         add_action('admin_enqueue_scripts', array(__CLASS__, 'enqueueAdminAssets'));
         add_action('init', array(__CLASS__, 'registerFrontAssets'), 8);
         add_action('wp_enqueue_scripts', array(__CLASS__, 'enqueuePushSubscribe'), 20);
+        self::disableEmojis();
         
         if (defined('ELEMENTOR_PLUGIN_BASE')) {
             add_action('elementor/frontend/after_register_styles', array(__CLASS__, 'ensureElementorFrontendStyleRegistered'), 5);
@@ -37,6 +38,55 @@ final class AssetsManager
         }
 
         self::$booted = true;
+    }
+
+    /**
+     * Désactive la conversion des emojis natifs en images Twemoji par WordPress core.
+     * Cette conversion (wp-emoji-release.min.js) s'exécute après le chargement de la page,
+     * ce qui provoque un changement visible du rendu des emojis quelques secondes après l'affichage.
+     */
+    public static function disableEmojis(): void
+    {
+        remove_action('wp_head', 'print_emoji_detection_script', 7);
+        remove_action('admin_print_scripts', 'print_emoji_detection_script');
+        remove_action('wp_print_styles', 'print_emoji_styles');
+        remove_action('admin_print_styles', 'print_emoji_styles');
+        remove_filter('the_content_feed', 'wp_staticize_emoji');
+        remove_filter('comment_text_rss', 'wp_staticize_emoji');
+        remove_filter('wp_mail', 'wp_staticize_emoji_for_email');
+
+        add_filter('tiny_mce_plugins', array(__CLASS__, 'removeTinymceEmojiPlugin'));
+        add_filter('wp_resource_hints', array(__CLASS__, 'removeEmojiDnsPrefetch'), 10, 2);
+    }
+
+    /**
+     * Retire le plugin TinyMCE qui gère les emojis.
+     *
+     * @param string[] $plugins
+     * @return string[]
+     */
+    public static function removeTinymceEmojiPlugin($plugins): array
+    {
+        return is_array($plugins) ? array_diff($plugins, array('wpemoji')) : array();
+    }
+
+    /**
+     * Retire le prefetch DNS vers s.w.org ajouté pour le CDN d'emojis.
+     *
+     * @param string[] $urls
+     * @param string $relationType
+     * @return string[]
+     */
+    public static function removeEmojiDnsPrefetch($urls, $relationType): array
+    {
+        if ('dns-prefetch' === $relationType) {
+            $emojiSvgUrl = apply_filters('emoji_svg_url', 'https://s.w.org/images/core/emoji/');
+            $urls = array_filter((array) $urls, static function ($url) use ($emojiSvgUrl) {
+                return strpos($url, $emojiSvgUrl) === false;
+            });
+        }
+
+        return $urls;
     }
 
     /**

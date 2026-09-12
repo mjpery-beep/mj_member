@@ -353,12 +353,6 @@
     flex: 1;
 }
 
-.mj-day-note-form__vis-mode {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 8px;
-}
-
 .mj-day-note-form__member-checkboxes {
     display: flex;
     flex-direction: column;
@@ -368,9 +362,54 @@
     border: 1px solid #e5e7eb;
     border-radius: 6px;
     padding: 8px 10px;
+    margin-bottom: 10px;
 }
 
 .mj-day-note-form__member-checkbox {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-weight: 400 !important;
+    font-size: 13px !important;
+    margin: 0 !important;
+    cursor: pointer;
+}
+
+.mj-day-note-form__jeune-search {
+    position: relative;
+    margin-bottom: 10px;
+}
+
+.mj-day-note-form__jeune-results {
+    margin-top: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+.mj-day-note-form__jeune-result {
+    all: revert;
+    box-sizing: border-box !important;
+    display: block !important;
+    width: 100% !important;
+    text-align: left !important;
+    padding: 6px 8px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 4px !important;
+    background: none !important;
+    font-family: inherit !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
+}
+
+.mj-day-note-form__jeune-result:hover {
+    background: #f3f4f6 !important;
+}
+
+.mj-day-note-form__visible-to-assignees {
     display: flex !important;
     align-items: center !important;
     gap: 6px !important;
@@ -506,6 +545,273 @@
     margin-top: 6px;
 }
 
+.mj-day-note-form__type-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.mj-day-note-form__type-header .mj-regmgr-form__label {
+    margin-bottom: 0 !important;
+}
+
+.mj-day-note-form__manage-types {
+    all: revert;
+    box-sizing: border-box !important;
+    border: none !important;
+    background: none !important;
+    color: #3b82f6 !important;
+    font-family: inherit !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    text-decoration: underline !important;
+}
+
+.mj-day-note-form__manage-types:hover {
+    color: #2563eb !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Note types manager - nested modal opened from within the note form,
+   needs a higher z-index than the note form's own 100000 (see above)
+   so it stacks on top of it instead of behind. */
+/* ------------------------------------------------------------------ */
+
+.mj-regmgr-modal:has(.mj-note-types-modal) {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 100001 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 20px !important;
+}
+
+.mj-regmgr-modal:has(.mj-note-types-modal) .mj-regmgr-modal__overlay {
+    position: absolute !important;
+    inset: 0 !important;
+    background: rgba(17, 24, 39, 0.5) !important;
+}
+
+.mj-regmgr-modal:has(.mj-note-types-modal) .mj-regmgr-modal__container {
+    position: relative !important;
+    background: #fff !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+    width: 100% !important;
+    max-width: 560px !important;
+    max-height: calc(100vh - 40px) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    float: none !important;
+}
+
+.mj-regmgr-modal:has(.mj-note-types-modal) .mj-regmgr-modal__body {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    padding: 20px !important;
+    background: #fff !important;
+}
+
+.mj-regmgr-modal:has(.mj-note-types-modal) .mj-regmgr-modal__header {
+    all: revert;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    padding: 16px 20px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    background: #fff !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.mj-regmgr-modal:has(.mj-note-types-modal) .mj-regmgr-modal__title {
+    all: revert;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    color: #111827 !important;
+    line-height: 1.3 !important;
+}
+
+.mj-regmgr-modal:has(.mj-note-types-modal) .mj-regmgr-modal__close {
+    all: revert;
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    padding: 4px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    background: none !important;
+    color: #9ca3af !important;
+    cursor: pointer !important;
+}
+
+.mj-regmgr-modal:has(.mj-note-types-modal) .mj-regmgr-modal__close:hover {
+    background: #f3f4f6 !important;
+    color: #4b5563 !important;
+}
+
+.mj-note-types-modal,
+.mj-note-types-modal * {
+    box-sizing: border-box !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.mj-note-types-modal {
+    color: #1f2937 !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+}
+
+.mj-note-types-modal h4 {
+    all: revert;
+    margin: 16px 0 8px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: #374151 !important;
+}
+
+.mj-note-types-modal input {
+    all: revert;
+    box-sizing: border-box !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 8px 10px !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    background: #fff !important;
+    color: #1f2937 !important;
+    font-family: inherit !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    box-shadow: none !important;
+}
+
+.mj-note-types-modal input:focus {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+}
+
+.mj-note-types-modal button {
+    all: revert;
+    box-sizing: border-box !important;
+    font-family: inherit !important;
+    cursor: pointer !important;
+}
+
+.mj-note-types-modal .mj-regmgr-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    border: 1px solid transparent !important;
+    background: #f3f4f6 !important;
+    color: #1f2937 !important;
+    line-height: 1.4 !important;
+    white-space: nowrap;
+}
+
+.mj-note-types-modal .mj-regmgr-btn--primary {
+    background: #3b82f6 !important;
+    color: #fff !important;
+}
+
+.mj-note-types-modal .mj-regmgr-btn--danger {
+    background: #fff !important;
+    border-color: #fecaca !important;
+    color: #dc2626 !important;
+}
+
+.mj-note-types-modal .mj-regmgr-btn:disabled {
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+}
+
+.mj-note-types-modal .mj-regmgr-form__error {
+    color: #dc2626 !important;
+    font-size: 13px !important;
+    background: #fef2f2 !important;
+    border: 1px solid #fecaca !important;
+    border-radius: 6px !important;
+    padding: 8px 10px !important;
+    margin: 0 0 10px !important;
+}
+
+.mj-note-types-modal .mj-regmgr-form__hint {
+    color: #667085 !important;
+    font-size: 13px !important;
+    margin: 0 0 10px !important;
+}
+
+.mj-note-types-modal__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.mj-note-types-modal .mj-regmgr-emoji-field {
+    position: relative;
+    flex-shrink: 0 !important;
+}
+
+.mj-note-types-modal__row .mj-regmgr-emoji-field__input {
+    width: 2.6em !important;
+    min-width: 2.6em !important;
+    flex: 0 0 2.6em !important;
+    text-align: center;
+}
+
+/* Same fix as .mj-day-note-form: the picker's own popover sizes itself to
+   its (narrow, shrink-to-fit) parent width when placed in a flex row -
+   force a comfortable fixed width so the grid isn't cramped once opened. */
+.mj-note-types-modal .mj-regmgr-emoji-field__picker {
+    width: 320px !important;
+    max-width: 320px !important;
+}
+
+.mj-note-types-modal__label {
+    flex: 1;
+    min-width: 80px;
+}
+
+.mj-note-types-modal__new {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 4px;
+}
+
+@media (max-width: 600px) {
+    .mj-note-types-modal__row {
+        flex-wrap: wrap;
+    }
+
+    .mj-note-types-modal__label {
+        flex: 1 1 100%;
+    }
+}
+
 /* Day cell note preview on the calendar widget - up to 4 notes stacked,
    most recent first, with a pager below when there are more. */
 .mj-member-events-calendar__day-notes {
@@ -574,12 +880,25 @@
     object-fit: cover;
     flex-shrink: 0;
     border: 1px solid #fff;
-    background: #d0d5dd;
+    background: transparent;
     margin-left: -4px;
 }
 
 .mj-member-events-calendar__day-note-avatar:first-child {
     margin-left: 0;
+}
+
+/* +10% on the compact calendar row, +30% then +40% inside the (more spacious)
+   tooltip (compounded from the base 16px: 16 -> 17.6 -> 19.36,
+   16 -> 20.8 -> 27.04 -> 37.856) */
+.mj-member-events-calendar__day-note-avatars .mj-member-events-calendar__day-note-avatar {
+    width: 19.36px;
+    height: 19.36px;
+}
+
+.mj-member-events-calendar__day-note-tooltip-avatars .mj-member-events-calendar__day-note-avatar {
+    width: 37.856px;
+    height: 37.856px;
 }
 
 /* Nav + edit controls: kept on their own full-width row (flex-wrap on the
@@ -674,16 +993,7 @@
     opacity: 1;
 }
 
-.mj-member-events-calendar__day-note-visibility {
-    flex-shrink: 0;
-    margin-left: auto !important;
-    padding-left: 4px;
-    font-size: 11px;
-    line-height: 1;
-    opacity: 0.75;
-}
-
-/* Hover tooltip: description, image, type, visibility */
+/* Hover tooltip: description, image, creator/assignees, type, visibility */
 .mj-member-events-calendar__day-note {
     overflow: visible;
 }
@@ -736,6 +1046,31 @@
     font-size: 12px !important;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.mj-member-events-calendar__day-note-tooltip-avatars {
+    all: revert;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    margin: 0 !important;
+}
+
+.mj-member-events-calendar__day-note-tooltip-avatar-group {
+    all: revert;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* Creator vs. assignees: a visible separator between the two groups makes
+   the position distinction legible, not just their order in the DOM - only
+   drawn when both groups are present (assignees directly follows creator). */
+.mj-member-events-calendar__day-note-tooltip-avatar-group--creator + .mj-member-events-calendar__day-note-tooltip-avatar-group--assignees {
+    padding-left: 8px !important;
+    border-left: 1px solid #e4e7ec !important;
 }
 
 .mj-member-events-calendar__day-note-tooltip-meta {

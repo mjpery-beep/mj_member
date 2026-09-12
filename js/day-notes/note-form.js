@@ -159,6 +159,273 @@
     }
 
     // ============================================
+    // Recurrence prefill helpers
+    // ============================================
+    function buildInitialOccurrence(note) {
+        // The picker's own state (mode + params) is stored verbatim when
+        // available, so editing reopens on the same mode (e.g. "plage de
+        // dates" + récurrence hebdomadaire) instead of a flat date list.
+        if (note && note.recurrence_rule && note.recurrence_rule.mode) {
+            return note.recurrence_rule;
+        }
+        if (note && note.series_id && Array.isArray(note.series_dates) && note.series_dates.length) {
+            return { mode: 'multiple', multipleDates: note.series_dates.slice() };
+        }
+        return { mode: 'single', singleDate: note ? (note.note_date || '') : '' };
+    }
+
+    // ============================================
+    // Note types manager (add/edit/delete, color + emoji)
+    // ============================================
+    function NoteTypeRow(props) {
+        var type = props.type;
+        var busy = props.busy;
+        var onSave = props.onSave;
+        var onDelete = props.onDelete;
+
+        var stateLabel = useState(type.label || '');
+        var label = stateLabel[0], setLabel = stateLabel[1];
+        var stateColor = useState(type.color || '');
+        var color = stateColor[0], setColor = stateColor[1];
+        var stateEmoji = useState(type.emoji || '');
+        var emoji = stateEmoji[0], setEmoji = stateEmoji[1];
+
+        var dirty = label !== (type.label || '') || color !== (type.color || '') || emoji !== (type.emoji || '');
+
+        return h('div', { class: 'mj-note-types-modal__row' }, [
+            EmojiPickerField && h(EmojiPickerField, {
+                value: emoji,
+                onChange: setEmoji,
+                fallbackPlaceholder: '🏷️',
+            }),
+            h('input', {
+                type: 'text',
+                class: 'mj-regmgr-form__input mj-note-types-modal__label',
+                value: label,
+                onChange: function (e) { setLabel(e.target.value); },
+            }),
+            h(ColorInput, { value: color, onChange: setColor }),
+            h('button', {
+                type: 'button',
+                class: 'mj-regmgr-btn mj-regmgr-btn--primary',
+                disabled: busy || !dirty || !label.trim(),
+                onClick: function () { onSave(type.id, { label: label, color: color, emoji: emoji, sort_order: type.sort_order }); },
+            }, 'Enregistrer'),
+            h('button', {
+                type: 'button',
+                class: 'mj-regmgr-btn mj-regmgr-btn--danger',
+                disabled: busy,
+                onClick: function () { onDelete(type.id); },
+            }, 'Supprimer'),
+        ]);
+    }
+
+    function NoteTypesManagerModal(props) {
+        var isOpen = props.isOpen;
+        var onClose = props.onClose;
+        var config = props.config || {};
+        var types = props.types || [];
+        var onChanged = props.onChanged;
+
+        var stateBusy = useState(false);
+        var busy = stateBusy[0], setBusy = stateBusy[1];
+        var stateError = useState('');
+        var error = stateError[0], setError = stateError[1];
+        var stateNewLabel = useState('');
+        var newLabel = stateNewLabel[0], setNewLabel = stateNewLabel[1];
+        var stateNewColor = useState('#3b82f6');
+        var newColor = stateNewColor[0], setNewColor = stateNewColor[1];
+        var stateNewEmoji = useState('');
+        var newEmoji = stateNewEmoji[0], setNewEmoji = stateNewEmoji[1];
+
+        useEffect(function () {
+            if (isOpen) {
+                setError('');
+                setNewLabel('');
+                setNewColor('#3b82f6');
+                setNewEmoji('');
+            }
+        }, [isOpen]);
+
+        var refresh = useCallback(function () {
+            return postAjax(config.ajaxUrl, {
+                action: 'mj_member_note_types_list',
+                nonce: config.nonce || '',
+            }).then(function (data) {
+                var list = Array.isArray(data.types) ? data.types : [];
+                if (typeof onChanged === 'function') onChanged(list);
+                return list;
+            });
+        }, [config, onChanged]);
+
+        var handleSave = useCallback(function (id, data) {
+            setBusy(true);
+            setError('');
+            postAjax(config.ajaxUrl, {
+                action: 'mj_member_note_types_update',
+                nonce: config.nonce || '',
+                id: id,
+                label: data.label,
+                color: data.color || '',
+                emoji: data.emoji || '',
+                sort_order: data.sort_order || 0,
+            }).then(refresh).then(function () { setBusy(false); })
+                .catch(function (err) { setBusy(false); setError(err.message); });
+        }, [config, refresh]);
+
+        var handleDelete = useCallback(function (id) {
+            if (!global.confirm('Supprimer ce type de note ? Les notes existantes seront détachées de ce type.')) return;
+            setBusy(true);
+            setError('');
+            postAjax(config.ajaxUrl, {
+                action: 'mj_member_note_types_delete',
+                nonce: config.nonce || '',
+                id: id,
+            }).then(refresh).then(function () { setBusy(false); })
+                .catch(function (err) { setBusy(false); setError(err.message); });
+        }, [config, refresh]);
+
+        var handleCreate = useCallback(function () {
+            if (!newLabel.trim()) return;
+            setBusy(true);
+            setError('');
+            postAjax(config.ajaxUrl, {
+                action: 'mj_member_note_types_create',
+                nonce: config.nonce || '',
+                label: newLabel,
+                color: newColor || '',
+                emoji: newEmoji || '',
+                sort_order: types.length,
+            }).then(function () {
+                setNewLabel('');
+                setNewColor('#3b82f6');
+                setNewEmoji('');
+                return refresh();
+            }).then(function () { setBusy(false); })
+                .catch(function (err) { setBusy(false); setError(err.message); });
+        }, [config, newLabel, newColor, newEmoji, types, refresh]);
+
+        return h(Modal, {
+            isOpen: isOpen,
+            onClose: onClose,
+            title: 'Gérer les types de note',
+        }, h('div', { class: 'mj-note-types-modal' }, [
+            error && h('p', { class: 'mj-regmgr-form__error' }, error),
+            !types.length && h('p', { class: 'mj-regmgr-form__hint' }, 'Aucun type de note pour le moment.'),
+            types.map(function (t) {
+                return h(NoteTypeRow, { key: t.id, type: t, busy: busy, onSave: handleSave, onDelete: handleDelete });
+            }),
+            h('div', { class: 'mj-note-types-modal__new' }, [
+                h('h4', null, 'Nouveau type'),
+                h('div', { class: 'mj-note-types-modal__row' }, [
+                    EmojiPickerField && h(EmojiPickerField, {
+                        value: newEmoji,
+                        onChange: setNewEmoji,
+                        fallbackPlaceholder: '🏷️',
+                    }),
+                    h('input', {
+                        type: 'text',
+                        class: 'mj-regmgr-form__input mj-note-types-modal__label',
+                        placeholder: 'Libellé du type…',
+                        value: newLabel,
+                        onChange: function (e) { setNewLabel(e.target.value); },
+                    }),
+                    h(ColorInput, { value: newColor, onChange: setNewColor }),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-btn mj-regmgr-btn--primary',
+                        disabled: busy || !newLabel.trim(),
+                        onClick: handleCreate,
+                    }, 'Ajouter'),
+                ]),
+            ]),
+        ]));
+    }
+
+    // ============================================
+    // Assignment: search & pick a "jeune" (staff are a fixed, short list
+    // shown as checkboxes; jeunes can be numerous, so they get a search
+    // field instead - see NoteFormModal's "Assigné à" group).
+    // ============================================
+    function AssignedJeuneSearch(props) {
+        var ajaxUrl = props.ajaxUrl;
+        var nonce = props.nonce;
+        var selected = props.selected || [];
+        var onAdd = props.onAdd;
+        var onRemove = props.onRemove;
+
+        var stateQuery = useState('');
+        var query = stateQuery[0], setQuery = stateQuery[1];
+        var stateResults = useState([]);
+        var results = stateResults[0], setResults = stateResults[1];
+        var stateLoading = useState(false);
+        var loading = stateLoading[0], setLoading = stateLoading[1];
+
+        useEffect(function () {
+            var term = query.trim();
+            if (term.length < 2) {
+                setResults([]);
+                return undefined;
+            }
+            var cancelled = false;
+            setLoading(true);
+            var handle = setTimeout(function () {
+                postAjax(ajaxUrl, {
+                    action: 'mj_member_day_notes_search_jeunes',
+                    nonce: nonce || '',
+                    search: term,
+                }).then(function (data) {
+                    if (cancelled) return;
+                    setResults(Array.isArray(data.members) ? data.members : []);
+                    setLoading(false);
+                }).catch(function () {
+                    if (cancelled) return;
+                    setLoading(false);
+                });
+            }, 300);
+            return function () {
+                cancelled = true;
+                clearTimeout(handle);
+            };
+        }, [query, ajaxUrl, nonce]);
+
+        var selectedIds = selected.map(function (m) { return String(m.id); });
+        var visibleResults = results.filter(function (m) { return selectedIds.indexOf(String(m.id)) === -1; });
+
+        return h('div', { class: 'mj-day-note-form__jeune-search' }, [
+            !!selected.length && h('div', { class: 'mj-day-note-form__chips' }, selected.map(function (m) {
+                return h('span', { key: m.id, class: 'mj-day-note-form__chip' }, [
+                    m.name,
+                    h('button', { type: 'button', onClick: function () { onRemove(m.id); } }, '×'),
+                ]);
+            })),
+            h('input', {
+                type: 'text',
+                class: 'mj-regmgr-form__input',
+                placeholder: 'Rechercher un jeune…',
+                value: query,
+                onChange: function (e) { setQuery(e.target.value); },
+            }),
+            query.trim().length >= 2 && h('div', { class: 'mj-day-note-form__jeune-results' }, [
+                loading && h('p', { class: 'mj-regmgr-form__hint' }, 'Recherche…'),
+                !loading && !visibleResults.length && h('p', { class: 'mj-regmgr-form__hint' }, 'Aucun jeune trouvé.'),
+                !loading && visibleResults.map(function (m) {
+                    return h('button', {
+                        key: m.id,
+                        type: 'button',
+                        class: 'mj-day-note-form__jeune-result',
+                        onClick: function () {
+                            onAdd(m);
+                            setQuery('');
+                            setResults([]);
+                        },
+                    }, m.name);
+                }),
+            ]),
+        ]);
+    }
+
+    // ============================================
     // Main form
     // ============================================
     function NoteFormModal(props) {
@@ -182,15 +449,13 @@
         var stateEmoji = useState(note ? (note.emoji || '') : '');
         var stateColor = useState(note ? (note.color || '') : '');
         var stateNoteTypeId = useState(note && note.note_type_id ? String(note.note_type_id) : '');
-        var stateVisMode = useState(note && note.assigned_member_ids && note.assigned_member_ids.length ? 'member' : 'group');
         var stateMemberIds = useState(note && note.assigned_member_ids ? note.assigned_member_ids.map(String) : []);
+        var stateAssignedJeunes = useState([]);
+        var stateVisibleToAssignees = useState(note ? !!note.visible_to_assignees : false);
         var stateGroup = useState(note && note.visibility ? note.visibility : 'staff');
 
         var stateOccurrence = useState(function () {
-            return OccurrencePickerPkg.defaultOccurrenceValue({
-                mode: 'single',
-                singleDate: note ? note.note_date || '' : '',
-            });
+            return OccurrencePickerPkg.defaultOccurrenceValue(buildInitialOccurrence(note));
         });
         var stateStartTime = useState(note ? (note.start_time || '') : '');
         var stateEndTime = useState(note ? (note.end_time || '') : '');
@@ -199,14 +464,18 @@
         var stateUploading = useState(false);
         var stateSaving = useState(false);
         var stateError = useState('');
+        var stateSeriesLoading = useState(false);
+        var stateTypesList = useState(noteTypes);
+        var stateTypesManagerOpen = useState(false);
 
         var title = stateTitle[0], setTitle = stateTitle[1];
         var content = stateContent[0], setContent = stateContent[1];
         var emoji = stateEmoji[0], setEmoji = stateEmoji[1];
         var color = stateColor[0], setColor = stateColor[1];
         var noteTypeId = stateNoteTypeId[0], setNoteTypeId = stateNoteTypeId[1];
-        var visMode = stateVisMode[0], setVisMode = stateVisMode[1];
         var memberIds = stateMemberIds[0], setMemberIds = stateMemberIds[1];
+        var assignedJeunes = stateAssignedJeunes[0], setAssignedJeunes = stateAssignedJeunes[1];
+        var visibleToAssignees = stateVisibleToAssignees[0], setVisibleToAssignees = stateVisibleToAssignees[1];
         var group = stateGroup[0], setGroup = stateGroup[1];
 
         var occurrence = stateOccurrence[0], setOccurrence = stateOccurrence[1];
@@ -217,25 +486,69 @@
         var uploading = stateUploading[0], setUploading = stateUploading[1];
         var saving = stateSaving[0], setSaving = stateSaving[1];
         var error = stateError[0], setError = stateError[1];
+        var seriesLoading = stateSeriesLoading[0], setSeriesLoading = stateSeriesLoading[1];
+        var typesList = stateTypesList[0], setTypesList = stateTypesList[1];
+        var typesManagerOpen = stateTypesManagerOpen[0], setTypesManagerOpen = stateTypesManagerOpen[1];
 
         useEffect(function () {
             if (!isOpen) return;
+            setTypesList(noteTypes);
             setTitle(note ? (note.title || '') : '');
             setContent(note ? (note.content || '') : '');
             setEmoji(note ? (note.emoji || '') : '');
             setColor(note ? (note.color || '') : '');
             setNoteTypeId(note && note.note_type_id ? String(note.note_type_id) : '');
-            setVisMode(note && note.assigned_member_ids && note.assigned_member_ids.length ? 'member' : 'group');
-            setMemberIds(note && note.assigned_member_ids ? note.assigned_member_ids.map(String) : []);
             setGroup(note && note.visibility ? note.visibility : 'staff');
-            setOccurrence(OccurrencePickerPkg.defaultOccurrenceValue({
-                mode: 'single',
-                singleDate: note ? note.note_date || '' : '',
-            }));
+            setVisibleToAssignees(note ? !!note.visible_to_assignees : false);
             setStartTime(note ? (note.start_time || '') : '');
             setEndTime(note ? (note.end_time || '') : '');
             setMedia((note && note.media) || []);
             setError('');
+
+            var initialAssignedIds = note && note.assigned_member_ids ? note.assigned_member_ids.map(String) : [];
+            setMemberIds(initialAssignedIds);
+            var staffIds = members.map(function (m) { return String(m.id); });
+            var unknownIds = initialAssignedIds.filter(function (id) { return staffIds.indexOf(id) === -1; });
+            if (unknownIds.length && ajaxUrl) {
+                // Ids assigned to the note but absent from the fixed staff list
+                // are jeunes added via search - hydrate their names for the chips.
+                postAjax(ajaxUrl, {
+                    action: 'mj_member_day_notes_search_jeunes',
+                    nonce: nonce || '',
+                    ids: JSON.stringify(unknownIds),
+                }).then(function (data) {
+                    setAssignedJeunes(Array.isArray(data.members) ? data.members : []);
+                }).catch(function () { setAssignedJeunes([]); });
+            } else {
+                setAssignedJeunes([]);
+            }
+
+            var hasUsableRule = !!(note && note.recurrence_rule && note.recurrence_rule.mode);
+            var hasSeriesDates = !!(note && Array.isArray(note.series_dates));
+
+            if (note && note.series_id && !hasUsableRule && !hasSeriesDates) {
+                // Legacy note (no stored recurrence_rule) and the caller only
+                // handed us this one occurrence (e.g. the calendar's per-day
+                // view) — fetch the full series before allowing a save, so
+                // editing never silently drops the other dates it doesn't
+                // know about.
+                setOccurrence(OccurrencePickerPkg.defaultOccurrenceValue({ mode: 'single', singleDate: note.note_date || '' }));
+                setSeriesLoading(true);
+                postAjax(ajaxUrl, {
+                    action: 'mj_member_day_notes_get_series',
+                    nonce: nonce || '',
+                    series_id: note.series_id,
+                }).then(function (data) {
+                    if (data.recurrence_rule && data.recurrence_rule.mode) {
+                        setOccurrence(OccurrencePickerPkg.defaultOccurrenceValue(data.recurrence_rule));
+                    } else if (Array.isArray(data.dates) && data.dates.length) {
+                        setOccurrence(OccurrencePickerPkg.defaultOccurrenceValue({ mode: 'multiple', multipleDates: data.dates }));
+                    }
+                    setSeriesLoading(false);
+                }).catch(function () { setSeriesLoading(false); });
+            } else {
+                setOccurrence(OccurrencePickerPkg.defaultOccurrenceValue(buildInitialOccurrence(note)));
+            }
         }, [isOpen, note]);
 
         var handleUpload = useCallback(function (file) {
@@ -271,6 +584,22 @@
             return OccurrencePickerPkg.resolveOccurrenceDates(occurrence.mode, occurrence);
         }, [occurrence]);
 
+        var handleAddJeune = useCallback(function (member) {
+            var idStr = String(member.id);
+            setAssignedJeunes(function (prev) {
+                return prev.some(function (m) { return String(m.id) === idStr; }) ? prev : prev.concat([member]);
+            });
+            setMemberIds(function (prev) {
+                return prev.indexOf(idStr) >= 0 ? prev : prev.concat([idStr]);
+            });
+        }, []);
+
+        var handleRemoveJeune = useCallback(function (id) {
+            var idStr = String(id);
+            setAssignedJeunes(function (prev) { return prev.filter(function (m) { return String(m.id) !== idStr; }); });
+            setMemberIds(function (prev) { return prev.filter(function (mid) { return mid !== idStr; }); });
+        }, []);
+
         var handleSubmit = useCallback(function (e) {
             if (e && e.preventDefault) e.preventDefault();
             if (!ajaxUrl) return;
@@ -298,17 +627,17 @@
                 start_time: startTime,
                 end_time: endTime,
                 note_type_id: noteTypeId || '',
-                visibility: visMode === 'member' ? 'private' : group,
-                member_ids: JSON.stringify(visMode === 'member' ? memberIds : []),
+                visibility: group,
+                member_ids: JSON.stringify(memberIds),
+                visible_to_assignees: visibleToAssignees ? 1 : 0,
                 attachment_ids: JSON.stringify(media.map(function (m) { return m.id; })),
             };
 
             if (isEdit) {
                 fields.id = note.id;
-                fields.note_date = dates[0];
-            } else {
-                fields.dates = JSON.stringify(dates);
             }
+            fields.dates = JSON.stringify(dates);
+            fields.recurrence_rule = JSON.stringify(occurrence);
 
             postAjax(ajaxUrl, fields, false)
                 .then(function (data) {
@@ -322,18 +651,32 @@
                     setSaving(false);
                     setError(err.message);
                 });
-        }, [ajaxUrl, nonce, title, content, emoji, color, startTime, endTime, noteTypeId, visMode, group, memberIds, media, isEdit, note, resolveDates, onSaved, onClose]);
+        }, [ajaxUrl, nonce, title, content, emoji, color, startTime, endTime, noteTypeId, group, memberIds, visibleToAssignees, media, isEdit, note, occurrence, resolveDates, onSaved, onClose]);
 
         var handleDelete = useCallback(function () {
             if (!isEdit || !ajaxUrl) return;
-            if (!global.confirm(getString(strings, 'deleteConfirm', 'Supprimer cette note ?'))) return;
+            // A series_id alone is enough to know this note has several
+            // occurrences — series_dates (the full date list) isn't always
+            // loaded here (e.g. opened from the calendar's per-day view),
+            // but deleting must still target the whole series, not just the
+            // one occurrence this modal happens to know about.
+            var isSeries = !!note.series_id;
+            var occurrenceCount = Array.isArray(note.series_dates) ? note.series_dates.length : 0;
+            var confirmMsg = isSeries
+                ? getString(strings, 'deleteSeriesConfirm', occurrenceCount
+                    ? 'Supprimer cette note et ses ' + occurrenceCount + ' occurrences ?'
+                    : 'Supprimer cette note et toutes ses occurrences ?')
+                : getString(strings, 'deleteConfirm', 'Supprimer cette note ?');
+            if (!global.confirm(confirmMsg)) return;
 
             setSaving(true);
-            postAjax(ajaxUrl, {
-                action: 'mj_member_day_notes_delete',
-                nonce: nonce || '',
-                id: note.id,
-            })
+            var deleteFields = { action: 'mj_member_day_notes_delete', nonce: nonce || '' };
+            if (isSeries) {
+                deleteFields.series_id = note.series_id;
+            } else {
+                deleteFields.id = note.id;
+            }
+            postAjax(ajaxUrl, deleteFields)
                 .then(function () {
                     setSaving(false);
                     if (typeof onDeleted === 'function') onDeleted(note);
@@ -350,7 +693,7 @@
                 type: 'button',
                 class: 'mj-regmgr-btn mj-regmgr-btn--danger',
                 onClick: handleDelete,
-                disabled: saving,
+                disabled: saving || seriesLoading,
             }, getString(strings, 'delete', 'Supprimer')),
             h('button', {
                 type: 'button',
@@ -362,11 +705,12 @@
                 type: 'button',
                 class: 'mj-regmgr-btn mj-regmgr-btn--primary',
                 onClick: handleSubmit,
-                disabled: saving,
+                disabled: saving || seriesLoading,
             }, saving ? getString(strings, 'saving', 'Enregistrement…') : getString(strings, 'save', 'Enregistrer')),
         ]);
 
-        return h(Modal, {
+        return h(Fragment, null, [
+        h(Modal, {
             isOpen: isOpen,
             onClose: onClose,
             title: getString(strings, 'title', isEdit ? 'Modifier la note' : 'Créer une note'),
@@ -399,24 +743,18 @@
 
             h('div', { class: 'mj-day-note-form__group' }, [
                 h('label', { class: 'mj-regmgr-form__label' }, 'Visibilité'),
-                h('div', { class: 'mj-day-note-form__vis-mode' }, [
-                    h('label', null, [
-                        h('input', { type: 'radio', checked: visMode === 'group', onChange: function () { setVisMode('group'); } }),
-                        ' Groupe',
-                    ]),
-                    h('label', null, [
-                        h('input', { type: 'radio', checked: visMode === 'member', onChange: function () { setVisMode('member'); } }),
-                        ' Personne assignée',
-                    ]),
-                ]),
-                visMode === 'group' && h('select', {
+                h('select', {
                     class: 'mj-regmgr-form__input',
                     value: group,
                     onChange: function (e) { setGroup(e.target.value); },
                 }, groupOptions.map(function (opt) {
                     return h('option', { value: opt.value }, opt.label);
                 })),
-                visMode === 'member' && h('div', { class: 'mj-day-note-form__member-checkboxes' }, members.length ? members.map(function (m) {
+            ]),
+
+            h('div', { class: 'mj-day-note-form__group' }, [
+                h('label', { class: 'mj-regmgr-form__label' }, 'Assigné à'),
+                h('div', { class: 'mj-day-note-form__member-checkboxes' }, members.length ? members.map(function (m) {
                     var idStr = String(m.id);
                     var checked = memberIds.indexOf(idStr) >= 0;
                     return h('label', { key: idStr, class: 'mj-day-note-form__member-checkbox' }, [
@@ -431,16 +769,47 @@
                         }),
                         ' ' + m.name,
                     ]);
-                }) : h('p', { class: 'mj-regmgr-form__hint' }, 'Aucun membre disponible.')),
+                }) : h('p', { class: 'mj-regmgr-form__hint' }, 'Aucun membre du staff disponible.')),
+
+                h(AssignedJeuneSearch, {
+                    ajaxUrl: ajaxUrl,
+                    nonce: nonce,
+                    selected: assignedJeunes,
+                    onAdd: handleAddJeune,
+                    onRemove: handleRemoveJeune,
+                }),
+
+                h('label', { class: 'mj-day-note-form__visible-to-assignees' }, [
+                    h('input', {
+                        type: 'checkbox',
+                        checked: visibleToAssignees,
+                        onChange: function (e) { setVisibleToAssignees(e.target.checked); },
+                    }),
+                    ' ' + getString(strings, 'visibleToAssignees', 'Visible également pour les personnes assignées'),
+                ]),
             ]),
 
             h('div', { class: 'mj-day-note-form__group' }, [
-                h('label', { class: 'mj-regmgr-form__label' }, 'Type de note'),
+                h('div', { class: 'mj-day-note-form__type-header' }, [
+                    h('label', { class: 'mj-regmgr-form__label' }, 'Type de note'),
+                    config.canManageTypes && h('button', {
+                        type: 'button',
+                        class: 'mj-day-note-form__manage-types',
+                        onClick: function () { setTypesManagerOpen(true); },
+                    }, getString(strings, 'manageTypes', 'Gérer les types')),
+                ]),
                 h('select', {
                     class: 'mj-regmgr-form__input',
                     value: noteTypeId,
-                    onChange: function (e) { setNoteTypeId(e.target.value); },
-                }, [h('option', { value: '' }, '—')].concat(noteTypes.map(function (t) {
+                    onChange: function (e) {
+                        var newId = e.target.value;
+                        setNoteTypeId(newId);
+                        var match = typesList.filter(function (t) { return String(t.id) === newId; })[0];
+                        if (match) {
+                            setColor(match.color || '');
+                        }
+                    },
+                }, [h('option', { value: '' }, '—')].concat(typesList.map(function (t) {
                     return h('option', { value: String(t.id) }, (t.emoji ? t.emoji + ' ' : '') + t.label);
                 }))),
             ]),
@@ -455,7 +824,6 @@
                 h(OccurrencePickerPkg.OccurrencePicker, {
                     value: occurrence,
                     onChange: setOccurrence,
-                    disableModeChange: isEdit,
                 }),
             ]),
 
@@ -488,11 +856,20 @@
                 h(MemberAvatar, { member: { firstName: note.author_name, avatarUrl: note.author_avatar_url }, size: 'small' }),
                 h('span', null, 'Créée par ' + note.author_name),
             ]),
-        ]));
+        ])),
+        h(NoteTypesManagerModal, {
+            isOpen: typesManagerOpen,
+            onClose: function () { setTypesManagerOpen(false); },
+            config: { ajaxUrl: ajaxUrl, nonce: nonce },
+            types: typesList,
+            onChanged: setTypesList,
+        }),
+        ]);
     }
 
     global.MjDayNoteForm = {
         NoteFormModal: NoteFormModal,
+        NoteTypesManagerModal: NoteTypesManagerModal,
     };
 
 })(window);

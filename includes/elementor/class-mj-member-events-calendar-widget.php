@@ -809,6 +809,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if (!empty($all_event_ids_for_prefetch)) {
                 self::prefetch_animateurs_for_events($all_event_ids_for_prefetch);
             }
+
+            self::prefetch_cover_attachments($events);
         }
 
         $type_colors_map = method_exists('MjEvents', 'get_type_colors') ? MjEvents::get_type_colors() : array();
@@ -2233,6 +2235,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 }
             }
 
+            $present_note_type_ids = array();
+            $has_untyped_notes = false;
+
             if (!empty($notes_in_range)) {
                 $note_member_ids = array();
                 foreach ($notes_in_range as $note_row) {
@@ -2257,6 +2262,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     $note_day = isset($note_row['note_date']) ? (string) $note_row['note_date'] : '';
                     if ($note_day === '') {
                         continue;
+                    }
+
+                    $note_type_id = (int) $note_row['note_type_id'];
+                    if ($note_type_id > 0 && isset($note_types_map[$note_type_id])) {
+                        $present_note_type_ids[$note_type_id] = true;
+                    } else {
+                        $has_untyped_notes = true;
                     }
 
                     $note_media_rows = class_exists(MjNoteMedia::class)
@@ -2290,6 +2302,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                     $notes_by_day_key[$note_day][] = array(
                         'id' => (int) $note_row['id'],
+                        'series_id' => (string) $note_row['series_id'],
                         'title' => (string) $note_row['title'],
                         'content' => (string) $note_row['content'],
                         'emoji' => (string) $note_row['emoji'],
@@ -2298,11 +2311,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'visibility' => (string) $note_row['visibility'],
                         'member_id' => $note_assigned_id,
                         'assigned_member_ids' => $note_assigned_ids,
+                        'visible_to_assignees' => !empty($note_row['visible_to_assignees']),
                         'note_date' => $note_day,
                         'author_name' => (string) $note_row['author_name'],
                         'author_avatar' => isset($note_avatar_urls[$note_author_id]) ? $note_avatar_urls[$note_author_id] : '',
                         'assigned_avatars' => $assigned_avatars,
                         'note_type_label' => isset($note_types_map[(int) $note_row['note_type_id']]) ? (string) $note_types_map[(int) $note_row['note_type_id']]['label'] : '',
+                        'note_type_emoji' => isset($note_types_map[(int) $note_row['note_type_id']]) ? (string) $note_types_map[(int) $note_row['note_type_id']]['emoji'] : '',
                         'media' => $note_media,
                         'created_at' => (string) $note_row['created_at'],
                         'can_edit' => $note_author_id === $viewer_member_id,
@@ -2333,6 +2348,23 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $available_type_filters['note'] = array(
                 'label' => __('Notes', 'mj-member'),
                 'color' => '#F59E0B',
+            );
+        }
+
+        // Sub-filters by note type, shown only while the "Notes" filter is active.
+        // Preserves MjNoteTypes' own sort_order/label ordering.
+        $note_type_filters = array();
+        if (!empty($present_note_type_ids)) {
+            foreach ($note_types_map as $note_type_id => $note_type_row) {
+                if (isset($present_note_type_ids[$note_type_id])) {
+                    $note_type_filters[$note_type_id] = $note_type_row;
+                }
+            }
+        }
+        if ($has_untyped_notes) {
+            $note_type_filters[0] = array(
+                'label' => __('Sans type', 'mj-member'),
+                'color' => '#94A3B8',
             );
         }
 
@@ -2432,6 +2464,20 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         echo '</label>';
                     }
                     echo '</div>';
+
+                    if (!empty($note_type_filters)) {
+                        echo '<div class="mj-member-events-calendar__note-type-filters" data-calendar-note-type-filters role="group" aria-label="' . esc_attr__('Filtrer par type de note', 'mj-member') . '">';
+                        foreach ($note_type_filters as $note_type_id => $note_type_row) {
+                            $note_type_label = isset($note_type_row['label']) && $note_type_row['label'] !== '' ? (string) $note_type_row['label'] : __('Sans type', 'mj-member');
+                            $note_type_color = isset($note_type_row['color']) ? self::normalize_hex_color_value($note_type_row['color']) : '';
+                            $note_type_style = $note_type_color !== '' ? ' style="--mj-calendar-filter-color:' . esc_attr($note_type_color) . ';"' : '';
+                            echo '<label class="mj-member-events-calendar__filter mj-member-events-calendar__filter--note-type"' . $note_type_style . '>';
+                            echo '<input type="checkbox" value="' . esc_attr($note_type_id) . '" data-calendar-note-type-filter checked />';
+                            echo '<span>' . esc_html($note_type_label) . '</span>';
+                            echo '</label>';
+                        }
+                        echo '</div>';
+                    }
                 }
                 if ($show_print_button) {
                     echo '<button type="button" class="mj-member-events-calendar__print-button" data-calendar-action="open-print">' . esc_html__('Imprimer', 'mj-member') . '</button>';
@@ -3765,6 +3811,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if (class_exists(MjAgendaNotes::class)) {
                 $instance_config['noteNonce'] = wp_create_nonce('mj-member-day-notes');
                 $instance_config['noteAjaxUrl'] = admin_url('admin-ajax.php');
+                $instance_config['noteCanManageTypes'] = current_user_can(Config::capability());
 
                 $note_types = array();
                 if (class_exists(MjNoteTypes::class)) {
@@ -4205,6 +4252,29 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         );
 
         return $cache[$member_id];
+    }
+
+    /**
+     * Prime the WP post cache for every event cover attachment in one query instead of one
+     * get_post() round-trip per wp_get_attachment_image_src() call in build_cover_sources()
+     * (desktop/tablet/mobile/thumbnail sizes each trigger a lookup for the same attachment ID).
+     *
+     * @param array $events
+     */
+    private static function prefetch_cover_attachments(array $events): void {
+        $cover_ids = array();
+        foreach ($events as $event) {
+            $cover_id = isset($event['cover_id']) ? (int) $event['cover_id'] : 0;
+            if ($cover_id > 0) {
+                $cover_ids[$cover_id] = $cover_id;
+            }
+        }
+
+        if (empty($cover_ids) || !function_exists('_prime_post_caches')) {
+            return;
+        }
+
+        _prime_post_caches(array_values($cover_ids), true, true);
     }
 
     /**
@@ -4840,10 +4910,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             ? $note['title']
             : wp_html_excerpt(wp_strip_all_tags($note['content']), 40, '…');
         $visibility_label = self::note_visibility_label($note['visibility'] ?? '');
+        $visibility_icon = self::note_visibility_icon($note['visibility'] ?? '');
+        $row_style = $note['color'] !== '' ? ' style="background-color:' . esc_attr($note['color']) . ';"' : '';
 
-        echo '<div class="mj-member-events-calendar__day-note" data-note-id="' . esc_attr($note['id']) . '" data-calendar-type-item="1" data-calendar-type="note" data-calendar-type-known="1" data-calendar-count-exclude="1">';
+        echo '<div class="mj-member-events-calendar__day-note" data-note-id="' . esc_attr($note['id']) . '" data-calendar-type-item="1" data-calendar-type="note" data-calendar-type-known="1" data-calendar-count-exclude="1" data-note-type-id="' . esc_attr((int) ($note['note_type_id'] ?? 0)) . '"' . $row_style . '>';
 
-        // Hover tooltip: description, image, type, visibility.
+        // Hover tooltip: description, image, creator/assignees, type, visibility.
         echo '<div class="mj-member-events-calendar__day-note-tooltip" role="tooltip">';
         if (!empty($note['media'][0]['url'])) {
             echo '<img class="mj-member-events-calendar__day-note-tooltip-image" src="' . esc_url($note['media'][0]['url']) . '" alt="" />';
@@ -4851,18 +4923,29 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         if ($note['content'] !== '') {
             echo '<p class="mj-member-events-calendar__day-note-tooltip-desc">' . esc_html($note['content']) . '</p>';
         }
+        echo '<div class="mj-member-events-calendar__day-note-tooltip-avatars">';
+        if (!empty($note['author_avatar'])) {
+            echo '<span class="mj-member-events-calendar__day-note-tooltip-avatar-group mj-member-events-calendar__day-note-tooltip-avatar-group--creator">';
+            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($note['author_avatar']) . '" alt="" title="' . esc_attr($note['author_name']) . '" />';
+            echo '</span>';
+        }
+        if (!empty($note['assigned_avatars'])) {
+            echo '<span class="mj-member-events-calendar__day-note-tooltip-avatar-group mj-member-events-calendar__day-note-tooltip-avatar-group--assignees">';
+            foreach ((array) $note['assigned_avatars'] as $assigned_avatar_url) {
+                echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($assigned_avatar_url) . '" alt="" />';
+            }
+            echo '</span>';
+        }
+        echo '</div>';
         echo '<div class="mj-member-events-calendar__day-note-tooltip-meta">';
         if (!empty($note['note_type_label'])) {
-            echo '<span class="mj-member-events-calendar__day-note-tooltip-tag">' . esc_html($note['note_type_label']) . '</span>';
+            echo '<span class="mj-member-events-calendar__day-note-tooltip-tag">' . esc_html(trim(($note['note_type_emoji'] ?? '') . ' ' . $note['note_type_label'])) . '</span>';
         }
-        echo '<span class="mj-member-events-calendar__day-note-tooltip-tag">' . esc_html($visibility_label) . '</span>';
+        echo '<span class="mj-member-events-calendar__day-note-tooltip-tag">' . esc_html(trim($visibility_icon . ' ' . $visibility_label)) . '</span>';
         echo '</div>';
         echo '</div>';
 
         echo '<span class="mj-member-events-calendar__day-note-avatars">';
-        if (!empty($note['author_avatar'])) {
-            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($note['author_avatar']) . '" alt="" title="' . esc_attr($note['author_name']) . '" />';
-        }
         foreach (array_slice((array) ($note['assigned_avatars'] ?? array()), 0, 3) as $assigned_avatar_url) {
             echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($assigned_avatar_url) . '" alt="" />';
         }
@@ -4870,14 +4953,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         if ($note['emoji'] !== '') {
             echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($note['emoji']) . '</span>';
         }
-        echo '<span class="mj-member-events-calendar__day-note-title"' . ($note['color'] !== '' ? ' style="border-left:3px solid ' . esc_attr($note['color']) . ';padding-left:4px;"' : '') . '>' . esc_html($note_label) . '</span>';
+        echo '<span class="mj-member-events-calendar__day-note-title">' . esc_html($note_label) . '</span>';
         if (!empty($note['media'][0]['thumbUrl'])) {
             echo '<img class="mj-member-events-calendar__day-note-thumb" src="' . esc_url($note['media'][0]['thumbUrl']) . '" alt="" />';
         }
         if (!empty($note['can_edit'])) {
             echo '<button type="button" class="mj-member-events-calendar__day-note-edit" data-note-edit aria-label="' . esc_attr__('Modifier la note', 'mj-member') . '" title="' . esc_attr__('Modifier la note', 'mj-member') . '">✎</button>';
         }
-        echo '<span class="mj-member-events-calendar__day-note-visibility" aria-hidden="true" title="' . esc_attr($visibility_label) . '">' . self::note_visibility_icon($note['visibility'] ?? '') . '</span>';
         echo '</div>';
     }
 

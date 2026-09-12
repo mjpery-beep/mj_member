@@ -20,38 +20,63 @@
     min-width: 180px;
 }
 
-.mj-day-notes-widget__types {
-    background: #f9fafb;
-    border: 1px solid #eaecf0;
-    border-radius: 8px;
-    padding: 14px;
-    margin-bottom: 16px;
+.mj-day-notes-widget__type-filter {
+    min-width: 160px;
 }
 
-.mj-day-notes-widget__types-list {
-    list-style: none;
-    margin: 8px 0;
-    padding: 0;
+/*
+ * Surcharge du thème WordPress : .mj-regmgr-btn / --primary ne sont
+ * définies (registration-manager.css) que dans le contexte du widget
+ * gestionnaire, absent ici. Sans ce bloc, le thème impose ses propres
+ * styles de bouton (fond, bordure, radius) sur "+ Nouvelle note".
+ */
+.mj-day-notes-widget button.mj-regmgr-btn {
+    all: revert;
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 8px 16px !important;
+    border-radius: 6px !important;
+    font-family: inherit !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border: 1px solid transparent !important;
+    background: #f3f4f6 !important;
+    color: #1f2937 !important;
+    line-height: 1.4 !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
 }
 
-.mj-day-notes-widget__types-list li {
+.mj-day-notes-widget button.mj-regmgr-btn--primary {
+    background: #3b82f6 !important;
+    color: #fff !important;
+}
+
+.mj-day-notes-widget button.mj-regmgr-btn--secondary {
+    background: #fff !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+.mj-day-notes-widget button.mj-regmgr-btn:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+}
+
+.mj-day-notes-widget__pagination {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 4px 0;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 16px;
 }
 
-.mj-day-notes-widget__types-list li button {
-    background: none;
-    border: none;
-    color: #ef4444;
-    cursor: pointer;
-    font-size: 12px;
-}
-
-.mj-day-notes-widget__types-add {
-    display: flex;
-    gap: 8px;
+.mj-day-notes-widget__pagination-status {
+    font-size: 13px;
+    color: #667085;
 }
 
 .mj-day-notes-widget__list {

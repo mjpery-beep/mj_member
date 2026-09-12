@@ -4261,6 +4261,30 @@
                 });
         }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
 
+        var handleRemoveMemberAvatarBackground = useCallback(function (memberId, sourceType) {
+            var targetId = parseInt(memberId, 10);
+            if (!targetId || targetId <= 0) {
+                return Promise.resolve();
+            }
+            return api.removeMemberAvatarBackground(targetId, sourceType)
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'memberAvatarUpdated', 'Photo de profil mise à jour.');
+                    showSuccess(successMessage);
+                    loadMemberDetails(targetId);
+                    loadMembers(membersPagination.page);
+                    return result;
+                })
+                .catch(function (err) {
+                    var message = err && err.message
+                        ? err.message
+                        : getString(strings, 'memberAvatarUpdateError', 'Impossible de mettre à jour la photo de profil.');
+                    showError(message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
+
         var handleDeleteMemberRegistration = useCallback(function (registration) {
             if (!registration || !registration.id) {
                 return;
@@ -6793,6 +6817,7 @@
                             onCaptureAvatar: handleCaptureMemberAvatar,
                             onUpdateAvatar: handleUpdateMemberAvatar,
                             onRemoveAvatar: handleRemoveMemberAvatar,
+                            onRemoveAvatarBackground: handleRemoveMemberAvatarBackground,
                             onDeleteRegistration: handleDeleteMemberRegistration,
                             onUpdateRegistrationOccurrences: handleUpdateRegistrationOccurrences,
                             onOpenMember: handleViewMemberFromRegistration,

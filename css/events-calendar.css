@@ -77,6 +77,10 @@
     background: var(--mj-events-calendar-surface);
 }
 
+.mj-member-events-calendar__filters-toggle {
+    display: none;
+}
+
 /* ==========================================================================
    Navigation Group
    ========================================================================== */
@@ -230,6 +234,26 @@ button.mj-member-events-calendar__today-button:disabled {
 
 .mj-member-events-calendar__filter input {
     display: none;
+}
+
+.mj-member-events-calendar__note-type-filters {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    flex-basis: 100%;
+    margin-top: 2px;
+    padding-left: 14px;
+    border-left: 2px solid rgba(245, 158, 11, 0.4);
+}
+
+.mj-member-events-calendar__note-type-filters[hidden] {
+    display: none;
+}
+
+.mj-member-events-calendar__filter--note-type {
+    padding: 3px 8px;
+    font-size: 0.68rem;
 }
 
 /* ==========================================================================

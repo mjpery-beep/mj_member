@@ -1,6 +1,6 @@
 /**
- * Day Notes - Management widget (list, filter, create/edit via the shared
- * NoteFormModal, and a small note-types manager for coordinators/staff).
+ * Day Notes - Management widget (list, filter, paginate, create/edit via
+ * the shared NoteFormModal).
  */
 (function (global) {
     'use strict';
@@ -20,6 +20,8 @@
     var useEffect = hooks.useEffect;
     var useCallback = hooks.useCallback;
     var useMemo = hooks.useMemo;
+
+    var PAGE_SIZE = 10;
 
     function pad2(n) { return n < 10 ? '0' + n : String(n); }
     function toIsoDate(date) { return date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate()); }
@@ -51,70 +53,12 @@
         });
     }
 
-    function NoteTypesManager(props) {
-        var config = props.config;
-        var types = props.types;
-        var onChange = props.onChange;
-
-        var stateNewLabel = useState('');
-        var newLabel = stateNewLabel[0], setNewLabel = stateNewLabel[1];
-        var stateBusy = useState(false);
-        var busy = stateBusy[0], setBusy = stateBusy[1];
-
-        var handleAdd = useCallback(function () {
-            if (!newLabel.trim()) return;
-            setBusy(true);
-            postAjax(config.ajaxUrl, {
-                action: 'mj_member_note_types_create',
-                nonce: config.nonce,
-                label: newLabel,
-            }).then(function () {
-                setNewLabel('');
-                setBusy(false);
-                onChange();
-            }).catch(function () { setBusy(false); });
-        }, [newLabel, config, onChange]);
-
-        var handleDelete = useCallback(function (id) {
-            if (!global.confirm('Supprimer ce type de note ?')) return;
-            postAjax(config.ajaxUrl, {
-                action: 'mj_member_note_types_delete',
-                nonce: config.nonce,
-                id: id,
-            }).then(onChange).catch(function () {});
-        }, [config, onChange]);
-
-        return h('div', { class: 'mj-day-notes-widget__types' }, [
-            h('h3', null, 'Types de notes'),
-            h('ul', { class: 'mj-day-notes-widget__types-list' }, types.map(function (t) {
-                return h('li', { key: t.id }, [
-                    h('span', null, (t.emoji ? t.emoji + ' ' : '') + t.label),
-                    h('button', { type: 'button', onClick: function () { handleDelete(t.id); } }, 'Supprimer'),
-                ]);
-            })),
-            h('div', { class: 'mj-day-notes-widget__types-add' }, [
-                h('input', {
-                    type: 'text',
-                    class: 'mj-regmgr-form__input',
-                    placeholder: 'Nouveau type…',
-                    value: newLabel,
-                    onChange: function (e) { setNewLabel(e.target.value); },
-                }),
-                h('button', {
-                    type: 'button',
-                    class: 'mj-regmgr-btn mj-regmgr-btn--secondary',
-                    disabled: busy,
-                    onClick: handleAdd,
-                }, 'Ajouter'),
-            ]),
-        ]);
-    }
-
     function NoteRow(props) {
         var note = props.note;
         var onEdit = props.onEdit;
         var onDelete = props.onDelete;
         var onOpenNextcloud = props.onOpenNextcloud;
+        var occurrenceCount = Array.isArray(note.series_dates) ? note.series_dates.length : 0;
 
         return h('div', { class: 'mj-day-notes-widget__row', style: note.color ? 'border-left-color:' + note.color : '' }, [
             h('span', { class: 'mj-day-notes-widget__row-emoji' }, note.emoji || '📝'),
@@ -122,6 +66,7 @@
                 h('div', { class: 'mj-day-notes-widget__row-title' }, note.title || (note.content || '').slice(0, 60)),
                 h('div', { class: 'mj-day-notes-widget__row-meta' }, [
                     note.note_date,
+                    occurrenceCount > 1 ? ' · 🔁 ' + occurrenceCount + ' dates' : '',
                     note.author_name ? ' · ' + note.author_name : '',
                 ]),
             ]),
@@ -144,12 +89,13 @@
         var modalOpen = stateModalOpen[0], setModalOpen = stateModalOpen[1];
         var stateEditingNote = useState(null);
         var editingNote = stateEditingNote[0], setEditingNote = stateEditingNote[1];
-        var stateTypesOpen = useState(false);
-        var typesOpen = stateTypesOpen[0], setTypesOpen = stateTypesOpen[1];
-        var stateNoteTypes = useState(config.noteTypes || []);
-        var noteTypes = stateNoteTypes[0], setNoteTypes = stateNoteTypes[1];
+        var noteTypes = config.noteTypes || [];
         var stateSearch = useState('');
         var search = stateSearch[0], setSearch = stateSearch[1];
+        var stateFilterType = useState('');
+        var filterType = stateFilterType[0], setFilterType = stateFilterType[1];
+        var statePage = useState(0);
+        var page = statePage[0], setPage = statePage[1];
         var stateNextcloudNote = useState(null);
         var nextcloudNote = stateNextcloudNote[0], setNextcloudNote = stateNextcloudNote[1];
         var nextcloudPanel = window.MjRegMgrNextcloudFiles && window.MjRegMgrNextcloudFiles.NextcloudFilesPanel;
@@ -168,37 +114,51 @@
                 nonce: config.nonce,
                 date_from: toIsoDate(from),
                 date_to: toIsoDate(to),
+                collapse_series: 1,
             }).then(function (data) {
                 setNotes(Array.isArray(data.notes) ? data.notes : []);
                 setLoading(false);
             }).catch(function () { setLoading(false); });
         }, [config]);
 
-        var refreshTypes = useCallback(function () {
-            postAjax(config.ajaxUrl, { action: 'mj_member_note_types_list', nonce: config.nonce })
-                .then(function (data) { setNoteTypes(Array.isArray(data.types) ? data.types : []); })
-                .catch(function () {});
-        }, [config]);
-
         useEffect(function () { refresh(); }, [refresh]);
 
         var handleDelete = useCallback(function (note) {
-            if (!global.confirm('Supprimer cette note ?')) return;
-            postAjax(config.ajaxUrl, {
-                action: 'mj_member_day_notes_delete',
-                nonce: config.nonce,
-                id: note.id,
-            }).then(refresh).catch(function () {});
+            var isSeries = !!note.series_id;
+            var occurrenceCount = Array.isArray(note.series_dates) ? note.series_dates.length : 0;
+            var confirmMsg = isSeries
+                ? (occurrenceCount ? 'Supprimer cette note et ses ' + occurrenceCount + ' occurrences ?' : 'Supprimer cette note et toutes ses occurrences ?')
+                : 'Supprimer cette note ?';
+            if (!global.confirm(confirmMsg)) return;
+            var fields = { action: 'mj_member_day_notes_delete', nonce: config.nonce };
+            if (isSeries) {
+                fields.series_id = note.series_id;
+            } else {
+                fields.id = note.id;
+            }
+            postAjax(config.ajaxUrl, fields).then(refresh).catch(function () {});
         }, [config, refresh]);
 
         var filteredNotes = useMemo(function () {
-            if (!search.trim()) return notes;
             var needle = search.trim().toLowerCase();
             return notes.filter(function (n) {
-                return (n.title || '').toLowerCase().indexOf(needle) >= 0
-                    || (n.content || '').toLowerCase().indexOf(needle) >= 0;
+                if (needle) {
+                    var matchesSearch = (n.title || '').toLowerCase().indexOf(needle) >= 0
+                        || (n.content || '').toLowerCase().indexOf(needle) >= 0;
+                    if (!matchesSearch) return false;
+                }
+                if (filterType && String(n.note_type_id || '') !== filterType) return false;
+                return true;
             });
-        }, [notes, search]);
+        }, [notes, search, filterType]);
+
+        useEffect(function () { setPage(0); }, [search, filterType]);
+
+        var pageCount = Math.max(1, Math.ceil(filteredNotes.length / PAGE_SIZE));
+        var currentPage = Math.min(page, pageCount - 1);
+        var pagedNotes = useMemo(function () {
+            return filteredNotes.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+        }, [filteredNotes, currentPage]);
 
         var noteFormConfig = useMemo(function () {
             return {
@@ -207,6 +167,7 @@
                 noteTypes: noteTypes,
                 groupOptions: config.groupOptions,
                 members: config.members,
+                canManageTypes: config.canManageTypes,
             };
         }, [config, noteTypes]);
 
@@ -219,27 +180,23 @@
                     value: search,
                     onChange: function (e) { setSearch(e.target.value); },
                 }),
+                h('select', {
+                    class: 'mj-regmgr-form__input mj-day-notes-widget__type-filter',
+                    value: filterType,
+                    onChange: function (e) { setFilterType(e.target.value); },
+                }, [h('option', { value: '' }, 'Tous les types')].concat(noteTypes.map(function (t) {
+                    return h('option', { value: String(t.id) }, (t.emoji ? t.emoji + ' ' : '') + t.label);
+                }))),
                 h('button', {
                     type: 'button',
                     class: 'mj-regmgr-btn mj-regmgr-btn--primary',
                     onClick: function () { setEditingNote(null); setModalOpen(true); },
                 }, '+ ' + (config.i18n.newNote || 'Nouvelle note')),
-                config.canManageTypes && h('button', {
-                    type: 'button',
-                    class: 'mj-regmgr-btn mj-regmgr-btn--secondary',
-                    onClick: function () { setTypesOpen(!typesOpen); },
-                }, config.i18n.manageTypes || 'Gérer les types'),
             ]),
-
-            typesOpen && h(NoteTypesManager, {
-                config: config,
-                types: noteTypes,
-                onChange: refreshTypes,
-            }),
 
             loading && h('p', null, 'Chargement…'),
             !loading && !filteredNotes.length && h('p', null, config.i18n.empty || 'Aucune note.'),
-            !loading && h('div', { class: 'mj-day-notes-widget__list' }, filteredNotes.map(function (note) {
+            !loading && h('div', { class: 'mj-day-notes-widget__list' }, pagedNotes.map(function (note) {
                 return h(NoteRow, {
                     key: note.id,
                     note: note,
@@ -248,6 +205,22 @@
                     onOpenNextcloud: nextcloudPanel && nextcloudApi ? function (n) { setNextcloudNote(n); } : null,
                 });
             })),
+
+            !loading && filteredNotes.length > PAGE_SIZE && h('div', { class: 'mj-day-notes-widget__pagination' }, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-regmgr-btn mj-regmgr-btn--secondary',
+                    disabled: currentPage <= 0,
+                    onClick: function () { setPage(currentPage - 1); },
+                }, '← Précédent'),
+                h('span', { class: 'mj-day-notes-widget__pagination-status' }, 'Page ' + (currentPage + 1) + ' / ' + pageCount),
+                h('button', {
+                    type: 'button',
+                    class: 'mj-regmgr-btn mj-regmgr-btn--secondary',
+                    disabled: currentPage >= pageCount - 1,
+                    onClick: function () { setPage(currentPage + 1); },
+                }, 'Suivant →'),
+            ]),
 
             h(DayNoteForm.NoteFormModal, {
                 isOpen: modalOpen,

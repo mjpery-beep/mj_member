@@ -522,6 +522,7 @@
                 noteTypes: Array.isArray(config.noteTypes) ? config.noteTypes : [],
                 groupOptions: Array.isArray(config.noteGroupOptions) ? config.noteGroupOptions : undefined,
                 members: Array.isArray(config.noteAssignableMembers) ? config.noteAssignableMembers : [],
+                canManageTypes: !!config.noteCanManageTypes,
             };
 
             var noteForEdit = noteModalCurrent && noteModalCurrent.id ? noteModalCurrent
@@ -562,11 +563,42 @@
             });
             var typeKey = item.getAttribute('data-calendar-type') || '';
             var isKnown = item.getAttribute('data-calendar-type-known') === '1';
-            if (!hasChecked || !isKnown || Object.prototype.hasOwnProperty.call(activeMap, typeKey)) {
+            var passesType = !hasChecked || !isKnown || Object.prototype.hasOwnProperty.call(activeMap, typeKey);
+            if (passesType && passesNoteTypeFilter(item)) {
                 item.classList.remove('is-filtered-out');
             } else {
                 item.classList.add('is-filtered-out');
             }
+        }
+
+        // Sub-filter by note type (only meaningful for [data-calendar-type="note"]
+        // items; relies on noteTypeFilterInputsRef, set once the sub-filter
+        // checkboxes are queried further down).
+        function getActiveNoteTypeMap() {
+            if (typeof noteTypeFilterInputsRef === 'undefined' || !noteTypeFilterInputsRef || !noteTypeFilterInputsRef.length) {
+                return null;
+            }
+            var map = {};
+            var hasChecked = false;
+            for (var i = 0; i < noteTypeFilterInputsRef.length; i++) {
+                if (noteTypeFilterInputsRef[i].checked) {
+                    map[noteTypeFilterInputsRef[i].value] = true;
+                    hasChecked = true;
+                }
+            }
+            return hasChecked ? map : {};
+        }
+
+        function passesNoteTypeFilter(item) {
+            if (item.getAttribute('data-calendar-type') !== 'note') {
+                return true;
+            }
+            var noteTypeMap = getActiveNoteTypeMap();
+            if (noteTypeMap === null) {
+                return true;
+            }
+            var typeId = item.getAttribute('data-note-type-id') || '0';
+            return Object.prototype.hasOwnProperty.call(noteTypeMap, typeId);
         }
 
         var NOTE_ROLE_LABELS = { animateur: 'Animateur', coordinateur: 'Coordinateur', benevole: 'Bénévole', jeune: 'Jeune', tuteur: 'Tuteur' };
@@ -598,6 +630,10 @@
             row.setAttribute('data-calendar-type', 'note');
             row.setAttribute('data-calendar-type-known', '1');
             row.setAttribute('data-calendar-count-exclude', '1');
+            row.setAttribute('data-note-type-id', String(note.note_type_id || 0));
+            if (note.color) {
+                row.style.backgroundColor = note.color;
+            }
 
             var tooltipEl = document.createElement('div');
             tooltipEl.className = 'mj-member-events-calendar__day-note-tooltip';
@@ -616,31 +652,51 @@
                 tooltipDesc.textContent = note.content;
                 tooltipEl.appendChild(tooltipDesc);
             }
+
+            var tooltipAvatarsEl = document.createElement('div');
+            tooltipAvatarsEl.className = 'mj-member-events-calendar__day-note-tooltip-avatars';
+            if (note.author_avatar) {
+                var creatorGroupEl = document.createElement('span');
+                creatorGroupEl.className = 'mj-member-events-calendar__day-note-tooltip-avatar-group mj-member-events-calendar__day-note-tooltip-avatar-group--creator';
+                var tooltipAuthorImg = document.createElement('img');
+                tooltipAuthorImg.className = 'mj-member-events-calendar__day-note-avatar';
+                tooltipAuthorImg.src = note.author_avatar;
+                tooltipAuthorImg.alt = '';
+                if (note.author_name) tooltipAuthorImg.title = note.author_name;
+                creatorGroupEl.appendChild(tooltipAuthorImg);
+                tooltipAvatarsEl.appendChild(creatorGroupEl);
+            }
+            if (note.assigned_avatars && note.assigned_avatars.length) {
+                var assigneesGroupEl = document.createElement('span');
+                assigneesGroupEl.className = 'mj-member-events-calendar__day-note-tooltip-avatar-group mj-member-events-calendar__day-note-tooltip-avatar-group--assignees';
+                note.assigned_avatars.forEach(function (url) {
+                    var img = document.createElement('img');
+                    img.className = 'mj-member-events-calendar__day-note-avatar';
+                    img.src = url;
+                    img.alt = '';
+                    assigneesGroupEl.appendChild(img);
+                });
+                tooltipAvatarsEl.appendChild(assigneesGroupEl);
+            }
+            tooltipEl.appendChild(tooltipAvatarsEl);
+
             var tooltipMeta = document.createElement('div');
             tooltipMeta.className = 'mj-member-events-calendar__day-note-tooltip-meta';
             if (note.note_type_label) {
                 var typeTag = document.createElement('span');
                 typeTag.className = 'mj-member-events-calendar__day-note-tooltip-tag';
-                typeTag.textContent = note.note_type_label;
+                typeTag.textContent = ((note.note_type_emoji || '') + ' ' + note.note_type_label).trim();
                 tooltipMeta.appendChild(typeTag);
             }
             var visTag = document.createElement('span');
             visTag.className = 'mj-member-events-calendar__day-note-tooltip-tag';
-            visTag.textContent = noteVisibilityLabel(note.visibility);
+            visTag.textContent = (noteVisibilityIcon(note.visibility) + ' ' + noteVisibilityLabel(note.visibility)).trim();
             tooltipMeta.appendChild(visTag);
             tooltipEl.appendChild(tooltipMeta);
             row.appendChild(tooltipEl);
 
             var avatarsEl = document.createElement('span');
             avatarsEl.className = 'mj-member-events-calendar__day-note-avatars';
-            if (note.author_avatar) {
-                var authorImg = document.createElement('img');
-                authorImg.className = 'mj-member-events-calendar__day-note-avatar';
-                authorImg.src = note.author_avatar;
-                authorImg.alt = '';
-                if (note.author_name) authorImg.title = note.author_name;
-                avatarsEl.appendChild(authorImg);
-            }
             (note.assigned_avatars || []).slice(0, 3).forEach(function (url) {
                 var img = document.createElement('img');
                 img.className = 'mj-member-events-calendar__day-note-avatar';
@@ -660,10 +716,6 @@
 
             var titleEl = document.createElement('span');
             titleEl.className = 'mj-member-events-calendar__day-note-title';
-            if (note.color) {
-                titleEl.style.borderLeft = '3px solid ' + note.color;
-                titleEl.style.paddingLeft = '4px';
-            }
             titleEl.textContent = note.title || (note.content || '').slice(0, 40);
             row.appendChild(titleEl);
 
@@ -693,13 +745,6 @@
                 editBtn.textContent = '✎';
                 row.appendChild(editBtn);
             }
-
-            var visibilityEl = document.createElement('span');
-            visibilityEl.className = 'mj-member-events-calendar__day-note-visibility';
-            visibilityEl.setAttribute('aria-hidden', 'true');
-            visibilityEl.setAttribute('title', noteVisibilityLabel(note.visibility));
-            visibilityEl.textContent = noteVisibilityIcon(note.visibility);
-            row.appendChild(visibilityEl);
 
             applyCurrentFilterToItem(row);
             return row;
@@ -1447,15 +1492,14 @@
                 var clone = document.importNode(tpl.content, true);
                 // Apply active filters to cloned content
                 var filterMap = getActiveFilterMap();
-                if (filterMap) {
-                    toArray(clone.querySelectorAll('[data-calendar-type-item]')).forEach(function(item) {
-                        var typeKey = item.getAttribute('data-calendar-type') || '';
-                        var isKnown = item.getAttribute('data-calendar-type-known') === '1';
-                        if (isKnown && !Object.prototype.hasOwnProperty.call(filterMap, typeKey)) {
-                            item.classList.add('is-filtered-out');
-                        }
-                    });
-                }
+                toArray(clone.querySelectorAll('[data-calendar-type-item]')).forEach(function(item) {
+                    var typeKey = item.getAttribute('data-calendar-type') || '';
+                    var isKnown = item.getAttribute('data-calendar-type-known') === '1';
+                    var filteredByType = !!filterMap && isKnown && !Object.prototype.hasOwnProperty.call(filterMap, typeKey);
+                    if (filteredByType || !passesNoteTypeFilter(item)) {
+                        item.classList.add('is-filtered-out');
+                    }
+                });
                 mobileModalBody.appendChild(clone);
             } else {
                 mobileModalBody.innerHTML = '<p class="mj-cal-mobile__modal-empty">Aucun \u00e9v\u00e9nement</p>';
@@ -1539,6 +1583,8 @@
 
         // Lazy ref to filterInputs (set after var declarations below)
         var filterInputsRef = null;
+        // Lazy ref to the note-type sub-filter checkboxes (set after var declarations below)
+        var noteTypeFilterInputsRef = null;
 
         function removeMobileChipForEvent(eventId, startTs) {
             // Find and remove the chip in the mobile grid that corresponds to the deleted event
@@ -1615,6 +1661,24 @@
 
         var filterInputs = toArray(root.querySelectorAll('[data-calendar-filter]'));
         filterInputsRef = filterInputs;
+        var noteTypeFilterInputs = toArray(root.querySelectorAll('[data-calendar-note-type-filter]'));
+        noteTypeFilterInputsRef = noteTypeFilterInputs;
+        var noteTypeFiltersWrap = root.querySelector('[data-calendar-note-type-filters]');
+        var noteMainFilterInput = null;
+        filterInputs.forEach(function (input) {
+            if (input.value === 'note') {
+                noteMainFilterInput = input;
+            }
+        });
+
+        function syncNoteTypeFiltersVisibility() {
+            if (!noteTypeFiltersWrap) {
+                return;
+            }
+            noteTypeFiltersWrap.hidden = !(noteMainFilterInput && noteMainFilterInput.checked);
+        }
+        syncNoteTypeFiltersVisibility();
+
         var typeItems = toArray(root.querySelectorAll('[data-calendar-type-item]'));
         var dayNodes = toArray(root.querySelectorAll('[data-calendar-day]'));
         var countSingular = root.getAttribute('data-calendar-count-singular') || '%d';
@@ -1848,7 +1912,8 @@
             typeItems.forEach(function(item) {
                 var typeKey = item.getAttribute('data-calendar-type') || '';
                 var isKnown = item.getAttribute('data-calendar-type-known') === '1';
-                if (!hasChecked || !isKnown || Object.prototype.hasOwnProperty.call(activeMap, typeKey)) {
+                var passesType = !hasChecked || !isKnown || Object.prototype.hasOwnProperty.call(activeMap, typeKey);
+                if (passesType && passesNoteTypeFilter(item)) {
                     item.classList.remove('is-filtered-out');
                 } else {
                     item.classList.add('is-filtered-out');
@@ -4459,6 +4524,15 @@
 
         if (filterInputs.length) {
             filterInputs.forEach(function(input) {
+                input.addEventListener('change', function() {
+                    syncNoteTypeFiltersVisibility();
+                    applyFilters();
+                });
+            });
+        }
+
+        if (noteTypeFilterInputs.length) {
+            noteTypeFilterInputs.forEach(function(input) {
                 input.addEventListener('change', function() {
                     applyFilters();
                 });
