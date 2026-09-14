@@ -4797,6 +4797,13 @@
             });
         }
 
+        if (printBadgesInput) {
+            printBadgesInput.addEventListener('change', function() {
+                refreshPrintPreview();
+                queueSavePrintPrefs();
+            });
+        }
+
         if (printHeaderImageInput) {
             printHeaderImageInput.addEventListener('change', function() {
                 refreshPrintPreview();

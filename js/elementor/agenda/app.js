@@ -185,6 +185,9 @@
             row('Description', p.description);
         } else if (entry.layer === 'internal_notes') {
             row('Titre', p.title);
+            if (p.start_time) {
+                row('Heure', p.start_time + (p.end_time && p.end_time !== p.start_time ? ' – ' + p.end_time : ''));
+            }
             row('Visibilité', p.visibility);
             row('Auteur', p.author_name);
             rows.push(h('div', { class: 'mj-agenda-preview__body' }, p.content || ''));
