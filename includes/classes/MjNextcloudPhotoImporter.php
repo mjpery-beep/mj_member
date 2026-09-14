@@ -313,6 +313,10 @@ final class MjNextcloudPhotoImporter
 
         $allowedFileIds = isset($selectors['ids']) && is_array($selectors['ids']) ? $selectors['ids'] : array();
         $allowedFilePaths = isset($selectors['paths']) && is_array($selectors['paths']) ? $selectors['paths'] : array();
+        // Metadata (name/mimeType/size/modifiedTime) the tag API returned alongside a match,
+        // keyed by normalized path. Used to build import candidates that live outside the
+        // scanned source folder (e.g. a groupfolder), without depending on listImageFilesRecursively().
+        $allowedFileObjects = isset($selectors['objects']) && is_array($selectors['objects']) ? $selectors['objects'] : array();
         self::debugLog('photo-import file selectors ids=' . count($allowedFileIds) . ' paths=' . count($allowedFilePaths));
         self::runtimePush(
             $runId,
@@ -344,6 +348,7 @@ final class MjNextcloudPhotoImporter
             if (!is_wp_error($davSelectors)) {
                 $allowedFileIds = isset($davSelectors['ids']) && is_array($davSelectors['ids']) ? $davSelectors['ids'] : array();
                 $allowedFilePaths = isset($davSelectors['paths']) && is_array($davSelectors['paths']) ? $davSelectors['paths'] : array();
+                $allowedFileObjects = isset($davSelectors['objects']) && is_array($davSelectors['objects']) ? $davSelectors['objects'] : array();
                 self::runtimePush(
                     $runId,
                     'Fallback DAV tags: ids=' . count($allowedFileIds) . ' paths=' . count($allowedFilePaths),
@@ -465,6 +470,56 @@ final class MjNextcloudPhotoImporter
             if (count($matchedPreview) < 5 && $filePath !== '') {
                 $matchedPreview[] = $filePath;
             }
+        }
+
+        // The tag API can legitimately return matches for files that live outside the
+        // scanned source folder (e.g. a Nextcloud groupfolder). Those were previously
+        // dropped because they were never found while walking $files above; build them
+        // directly from the tag API metadata instead of requiring folder-scan membership.
+        $unmatchedFromApi = 0;
+        foreach ($allowedFilePaths as $allowedPath => $flag) {
+            if ($flag !== true || !is_string($allowedPath)) {
+                continue;
+            }
+
+            $normalizedAllowedPath = self::normalizeSourcePath($allowedPath);
+            if ($normalizedAllowedPath === '') {
+                continue;
+            }
+
+            $candidateKey = 'path:' . $normalizedAllowedPath;
+            if (isset($seenCandidates[$candidateKey])) {
+                continue;
+            }
+
+            $descriptor = isset($allowedFileObjects[$normalizedAllowedPath]) && is_array($allowedFileObjects[$normalizedAllowedPath])
+                ? $allowedFileObjects[$normalizedAllowedPath]
+                : array();
+            $descriptor['path'] = trim(str_replace('\\', '/', $allowedPath), '/');
+            if (empty($descriptor['name'])) {
+                $descriptor['name'] = basename($descriptor['path']);
+            }
+
+            if (!self::descriptorIsLikelyImage($descriptor)) {
+                continue;
+            }
+
+            $seenCandidates[$candidateKey] = true;
+            $candidateFiles[] = $descriptor;
+            $matched++;
+            $unmatchedFromApi++;
+            if (count($matchedPreview) < 5) {
+                $matchedPreview[] = $descriptor['path'];
+            }
+        }
+
+        if ($unmatchedFromApi > 0) {
+            self::debugLog('photo-import candidates matched via tag API outside source folder=' . $unmatchedFromApi);
+            self::runtimePush(
+                $runId,
+                'Fichiers taggés hors du dossier source: ' . $unmatchedFromApi,
+                array('step' => 'matching')
+            );
         }
 
         $totalToImport = count($candidateFiles);
@@ -942,6 +997,24 @@ final class MjNextcloudPhotoImporter
         return file_exists($path) && is_file($path) && (int) @filesize($path) > 0;
     }
 
+    /**
+     * Best-effort image check for a candidate built from tag-API metadata alone
+     * (i.e. not backed by a listImageFilesRecursively() entry, which is already
+     * mime-filtered). Falls back to the file extension when no mimeType is known.
+     */
+    private static function descriptorIsLikelyImage(array $file): bool
+    {
+        $mimeType = isset($file['mimeType']) ? (string) $file['mimeType'] : '';
+        if ($mimeType !== '') {
+            return strpos($mimeType, 'image/') === 0;
+        }
+
+        $path = isset($file['path']) ? (string) $file['path'] : '';
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        return in_array($ext, array('jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tif', 'tiff', 'avif'), true);
+    }
+
     public static function getRuntimeState(string $runId): array
     {
         $state = get_option(self::OPTION_RUNTIME_STATE, array());
@@ -1063,6 +1136,7 @@ final class MjNextcloudPhotoImporter
     {
         $ids = array();
         $paths = array();
+        $objects = array();
 
         foreach ($tagIds as $tagId) {
             $encodedTagId = rawurlencode((string) $tagId);
@@ -1079,6 +1153,7 @@ final class MjNextcloudPhotoImporter
 
             $tagIdsFound = array();
             $tagPathsFound = array();
+            $tagObjectsFound = array();
 
             foreach ($preferredPayloads as $payload) {
                 if (!is_array($payload)) {
@@ -1102,12 +1177,13 @@ final class MjNextcloudPhotoImporter
                     self::debugLog('photo-import tag ' . $tagId . ' meta status=' . $metaStatus . ' message=' . $metaMessage);
                 }
 
-                self::collectSelectorsFromNode($filesNode, $tagIdsFound, $tagPathsFound);
+                self::collectSelectorsFromNode($filesNode, $tagIdsFound, $tagPathsFound, $tagObjectsFound);
             }
 
             if (!empty($tagIdsFound) || !empty($tagPathsFound)) {
                 $ids = array_merge($ids, $tagIdsFound);
                 $paths = array_merge($paths, $tagPathsFound);
+                $objects = array_merge($objects, $tagObjectsFound);
                 self::debugLog('photo-import selectors for tag ' . $tagId . ' => ids=' . count($ids) . ' paths=' . count($paths) . ' (source=mj_patch)');
                 continue;
             }
@@ -1154,7 +1230,7 @@ final class MjNextcloudPhotoImporter
                     self::debugLog('photo-import tag ' . $tagId . ' meta status=' . $metaStatus . ' message=' . $metaMessage);
                 }
 
-                self::collectSelectorsFromNode($filesNode, $ids, $paths);
+                self::collectSelectorsFromNode($filesNode, $ids, $paths, $objects);
             }
 
             self::debugLog('photo-import selectors for tag ' . $tagId . ' => ids=' . count($ids) . ' paths=' . count($paths));
@@ -1163,10 +1239,11 @@ final class MjNextcloudPhotoImporter
         return array(
             'ids' => $ids,
             'paths' => $paths,
+            'objects' => $objects,
         );
     }
 
-    private static function collectSelectorsFromNode($node, array &$ids, array &$paths): void
+    private static function collectSelectorsFromNode($node, array &$ids, array &$paths, array &$objects): void
     {
         if (is_int($node) || is_float($node)) {
             $candidateId = trim((string) $node);
@@ -1212,6 +1289,16 @@ final class MjNextcloudPhotoImporter
             return;
         }
 
+        // Track the fields of this node so that, when it looks like a single file
+        // descriptor (id + path found together), we can keep its metadata as-is
+        // instead of only recording flat id/path presence.
+        $entryId = '';
+        $entryPath = '';
+        $entryName = '';
+        $entryMime = '';
+        $entrySize = 0;
+        $entryModified = '';
+
         foreach ($node as $key => $value) {
             $lowerKey = is_string($key) ? strtolower($key) : '';
 
@@ -1223,6 +1310,9 @@ final class MjNextcloudPhotoImporter
                 $candidateId = trim((string) $value);
                 if ($candidateId !== '') {
                     $ids[$candidateId] = true;
+                    if ($entryId === '') {
+                        $entryId = $candidateId;
+                    }
                 }
             }
 
@@ -1230,10 +1320,45 @@ final class MjNextcloudPhotoImporter
                 $candidatePath = trim(str_replace('\\', '/', $value), '/');
                 if ($candidatePath !== '' && strpos($candidatePath, '/') !== false) {
                     $paths[$candidatePath] = true;
+                    if ($entryPath === '') {
+                        $entryPath = $candidatePath;
+                    }
                 }
             }
 
-            self::collectSelectorsFromNode($value, $ids, $paths);
+            if ($entryName === '' && in_array($lowerKey, array('name', 'basename', 'displayname', 'display-name'), true) && is_string($value)) {
+                $entryName = trim($value);
+            }
+
+            if ($entryMime === '' && in_array($lowerKey, array('mimetype', 'mime_type', 'contenttype', 'content-type'), true) && is_string($value)) {
+                $entryMime = trim($value);
+            }
+
+            if ($entrySize === 0 && in_array($lowerKey, array('size', 'filesize'), true) && (is_string($value) || is_int($value))) {
+                $entrySize = (int) $value;
+            }
+
+            if ($entryModified === '' && in_array($lowerKey, array('mtime', 'modifiedtime', 'lastmodified', 'getlastmodified'), true) && (is_string($value) || is_int($value))) {
+                $entryModified = (string) $value;
+            }
+
+            self::collectSelectorsFromNode($value, $ids, $paths, $objects);
+        }
+
+        if ($entryPath !== '') {
+            $normalizedKey = self::normalizeSourcePath($entryPath);
+            if ($normalizedKey !== '' && !isset($objects[$normalizedKey])) {
+                $objects[$normalizedKey] = array_filter(array(
+                    'id' => $entryId,
+                    'path' => $entryPath,
+                    'name' => $entryName !== '' ? $entryName : basename($entryPath),
+                    'mimeType' => $entryMime,
+                    'size' => $entrySize,
+                    'modifiedTime' => $entryModified,
+                ), static function ($value): bool {
+                    return $value !== '' && $value !== 0;
+                });
+            }
         }
     }
 
@@ -1368,6 +1493,7 @@ final class MjNextcloudPhotoImporter
 
         $ids = array();
         $paths = array();
+        $objects = array();
         $selectedTagIds = array_values(array_unique(array_filter(array_map(static function ($value): string {
             return trim((string) $value);
         }, $selectedTagIds))));
@@ -1380,7 +1506,7 @@ final class MjNextcloudPhotoImporter
 
             foreach ($davPaths as $davPath) {
                 $url = rtrim($baseUrl, '/') . $davPath;
-                $body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/><d:href/></d:prop></d:propfind>';
+                $body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/><d:href/><d:displayname/><d:getcontenttype/><d:getcontentlength/><d:getlastmodified/></d:prop></d:propfind>';
 
                 $response = wp_remote_request($url, array(
                     'method' => 'PROPFIND',
@@ -1425,6 +1551,7 @@ final class MjNextcloudPhotoImporter
                 foreach ($responses as $responseNode) {
                     $hrefNode = $xpath->query('.//*[local-name()="href"]', $responseNode);
                     $href = ($hrefNode && $hrefNode->length > 0) ? trim((string) $hrefNode->item(0)->textContent) : '';
+                    $candidatePath = '';
                     if ($href !== '') {
                         $candidatePath = self::extractSourcePathFromDavHref($href);
                         if ($candidatePath !== '') {
@@ -1437,11 +1564,40 @@ final class MjNextcloudPhotoImporter
                         }
                     }
 
+                    $candidateFileId = '';
                     $fileIdNode = $xpath->query('.//*[local-name()="fileid"]', $responseNode);
                     if ($fileIdNode && $fileIdNode->length > 0) {
                         $candidateFileId = trim((string) $fileIdNode->item(0)->textContent);
                         if ($candidateFileId !== '' && preg_match('/^\d+$/', $candidateFileId)) {
                             $ids[$candidateFileId] = true;
+                        } else {
+                            $candidateFileId = '';
+                        }
+                    }
+
+                    // The tag DAV listing already carries name/mimetype/size/mtime for each
+                    // matched file; keep them so a match outside the scanned source folder
+                    // (e.g. a groupfolder) can still be imported without a second lookup.
+                    if ($candidatePath !== '') {
+                        $normalizedKey = self::normalizeSourcePath($candidatePath);
+                        if ($normalizedKey !== '' && !isset($objects[$normalizedKey])) {
+                            $displayNameNode = $xpath->query('.//*[local-name()="displayname"]', $responseNode);
+                            $mimeNode = $xpath->query('.//*[local-name()="getcontenttype"]', $responseNode);
+                            $sizeNode = $xpath->query('.//*[local-name()="getcontentlength"]', $responseNode);
+                            $modifiedNode = $xpath->query('.//*[local-name()="getlastmodified"]', $responseNode);
+
+                            $objects[$normalizedKey] = array_filter(array(
+                                'id' => $candidateFileId,
+                                'path' => $candidatePath,
+                                'name' => ($displayNameNode && $displayNameNode->length > 0)
+                                    ? trim((string) $displayNameNode->item(0)->textContent)
+                                    : basename($candidatePath),
+                                'mimeType' => ($mimeNode && $mimeNode->length > 0) ? trim((string) $mimeNode->item(0)->textContent) : '',
+                                'size' => ($sizeNode && $sizeNode->length > 0) ? (int) trim((string) $sizeNode->item(0)->textContent) : 0,
+                                'modifiedTime' => ($modifiedNode && $modifiedNode->length > 0) ? trim((string) $modifiedNode->item(0)->textContent) : '',
+                            ), static function ($value): bool {
+                                return $value !== '' && $value !== 0;
+                            });
                         }
                     }
                 }
@@ -1453,6 +1609,7 @@ final class MjNextcloudPhotoImporter
         return array(
             'ids' => $ids,
             'paths' => $paths,
+            'objects' => $objects,
         );
     }
 

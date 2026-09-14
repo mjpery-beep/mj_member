@@ -977,20 +977,38 @@
     padding: 0 !important;
     margin: 0 !important;
     border: none !important;
-    border-radius: 4px !important;
-    background: none !important;
-    color: #98a2b3 !important;
+    border-radius: 999px !important;
+    background: rgba(15, 23, 42, 0.05) !important;
+    color: #64748b !important;
     font-family: inherit !important;
     font-size: 11px !important;
     line-height: 1 !important;
     cursor: pointer !important;
-    opacity: 0.6;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.mj-member-events-calendar__day-note-edit:hover {
-    background: #e4e7ec !important;
-    color: #475467 !important;
+.mj-member-events-calendar__day-note-edit:hover,
+.mj-member-events-calendar__day-note-edit:focus-visible {
+    background: var(--mj-events-calendar-accent, #6366f1) !important;
+    color: #ffffff !important;
     opacity: 1;
+}
+
+.mj-member-events-calendar__day-note:hover .mj-member-events-calendar__day-note-edit,
+.mj-member-events-calendar__day-note:focus-within .mj-member-events-calendar__day-note-edit {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Interface tactile (pas de survol fiable, pointeur imprécis type doigt) :
+   on garde le bouton visible en permanence plutôt qu'au survol. */
+@media (hover: none), (pointer: coarse) {
+    .mj-member-events-calendar__day-note-edit {
+        opacity: 1;
+        pointer-events: auto;
+    }
 }
 
 /* Hover tooltip: description, image, creator/assignees, type, visibility */

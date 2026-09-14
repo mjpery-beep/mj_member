@@ -28,6 +28,7 @@ final class Bootstrap
     private const MODULES = array(
         // Core infrastructure
         'includes/security.php',
+        'includes/gone_urls.php',
         'includes/data_retention.php',
         'includes/backup.php',
         'includes/github_updater.php',

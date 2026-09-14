@@ -314,6 +314,21 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'print_default_badges',
+            array(
+                'label' => __('Impression: afficher les badges par défaut', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'condition' => array(
+                    'show_print_button' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
             'print_default_mode',
             array(
                 'label' => __('Impression: période par défaut', 'mj-member'),
@@ -724,6 +739,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $print_default_event_color = isset($settings['print_default_event_color'])
             ? $settings['print_default_event_color'] === 'yes'
             : $legacy_print_default_event_style;
+        $print_default_badges = !isset($settings['print_default_badges']) || $settings['print_default_badges'] === 'yes';
         $print_default_page_break = !isset($settings['print_default_page_break']) || $settings['print_default_page_break'] === 'yes';
         $print_default_hide_empty_days = isset($settings['print_default_hide_empty_days']) && $settings['print_default_hide_empty_days'] === 'yes';
         $print_default_span = isset($settings['print_default_span']) ? (int) $settings['print_default_span'] : 1;
@@ -2192,6 +2208,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         // the whole displayed range, keyed by day, most recent first — the day
         // cell only shows the latest note plus arrows to cycle the others.
         $notes_by_day_key = array();
+        $present_note_type_ids = array();
+        $has_untyped_notes = false;
         if (!$is_elementor_preview && class_exists(MjAgendaNotes::class)) {
             $viewer_member_id = 0;
             $viewer_role = MjRoles::JEUNE;
@@ -2234,9 +2252,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     }
                 }
             }
-
-            $present_note_type_ids = array();
-            $has_untyped_notes = false;
 
             if (!empty($notes_in_range)) {
                 $note_member_ids = array();
@@ -2306,6 +2321,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'title' => (string) $note_row['title'],
                         'content' => (string) $note_row['content'],
                         'emoji' => (string) $note_row['emoji'],
+                        'start_time' => isset($note_row['start_time']) ? $note_row['start_time'] : null,
+                        'end_time' => isset($note_row['end_time']) ? $note_row['end_time'] : null,
                         'color' => (string) $note_row['color'],
                         'note_type_id' => (int) $note_row['note_type_id'],
                         'visibility' => (string) $note_row['visibility'],
@@ -2448,9 +2465,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     echo '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>';
                     echo '</button>';
                 }
+                if ($show_print_button) {
+                    echo '<button type="button" class="mj-member-events-calendar__print-button" data-calendar-action="open-print">🖨️ ' . esc_html__('Imprimer', 'mj-member') . '</button>';
+                }
                 echo '</div>';
             }
-            if ($show_toolbar_actions || $show_print_button) {
+            if ($show_toolbar_actions) {
                 echo '<div class="mj-member-events-calendar__toolbar-actions">';
                 if ($show_toolbar_actions && !empty($sorted_filters)) {
                     echo '<div id="' . esc_attr($instance_id) . '-filters" class="mj-member-events-calendar__filters" role="group" aria-label="' . esc_attr__('Filtrer par type d’événement', 'mj-member') . '">';
@@ -2478,9 +2498,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         }
                         echo '</div>';
                     }
-                }
-                if ($show_print_button) {
-                    echo '<button type="button" class="mj-member-events-calendar__print-button" data-calendar-action="open-print">' . esc_html__('Imprimer', 'mj-member') . '</button>';
                 }
                 echo '</div>';
             }
@@ -2747,6 +2764,26 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     echo '<div class="' . esc_attr(implode(' ', $day_classes)) . '"' . $day_data_attr . '>';
                     echo '<div class="mj-member-events-calendar__day-header">';
                     echo '<span class="mj-member-events-calendar__day-number">' . esc_html($cell_entry['day_number']) . '</span>';
+                    if ($can_edit_events) {
+                        echo '<div class="mj-cal-mobile__day-actions">';
+                        echo '<button type="button" class="mj-cal-mobile__day-menu-toggle" aria-label="' . esc_attr__('Actions du jour', 'mj-member') . '" aria-expanded="false" aria-haspopup="menu">';
+                        echo '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>';
+                        echo '</button>';
+                        echo '<div class="mj-cal-mobile__day-menu" role="menu" hidden>';
+                        echo '<button type="button" class="mj-cal-mobile__day-menu-action" role="menuitem" data-calendar-create-day="' . esc_attr($day_key) . '"><span class="mj-cal-mobile__day-menu-icon" aria-hidden="true">+</span><span>' . esc_html__('Créer un event', 'mj-member') . '</span></button>';
+                        echo '<button type="button" class="mj-cal-mobile__day-menu-action" role="menuitem" data-calendar-create-occurrence-day="' . esc_attr($day_key) . '"><span class="mj-cal-mobile__day-menu-icon" aria-hidden="true">↻</span><span>' . esc_html__('Créer une occurrence', 'mj-member') . '</span></button>';
+                        if (class_exists(MjTodos::class)) {
+                            echo '<button type="button" class="mj-cal-mobile__day-menu-action" role="menuitem" data-calendar-create-task-day="' . esc_attr($day_key) . '"><span class="mj-cal-mobile__day-menu-icon" aria-hidden="true">✓</span><span>' . esc_html__('Créer une tâche', 'mj-member') . '</span></button>';
+                        }
+                        if (class_exists(MjLeaveTypes::class)) {
+                            echo '<button type="button" class="mj-cal-mobile__day-menu-action mj-cal-mobile__day-menu-action--leave" role="menuitem" data-calendar-create-leave-day="' . esc_attr($day_key) . '"><span class="mj-cal-mobile__day-menu-icon" aria-hidden="true">🏖️</span><span>' . esc_html__('Créer un congé', 'mj-member') . '</span></button>';
+                        }
+                        if (class_exists(MjAgendaNotes::class)) {
+                            echo '<button type="button" class="mj-cal-mobile__day-menu-action mj-cal-mobile__day-menu-action--note" role="menuitem" data-calendar-create-note-day="' . esc_attr($day_key) . '"><span class="mj-cal-mobile__day-menu-icon" aria-hidden="true">📝</span><span>' . esc_html__('Créer une note', 'mj-member') . '</span></button>';
+                        }
+                        echo '</div>';
+                        echo '</div>';
+                    }
                     echo '</div>';
 
                     // Notes render first, ahead of events/tasks/leaves. Up to
@@ -2842,7 +2879,10 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 $meta_label = (string) $event_entry['time'];
                             }
                             if ($meta_label !== '') {
-                                echo '<span class="mj-member-events-calendar__event-meta">' . esc_html($meta_label) . '</span>';
+                                echo '<span class="mj-member-events-calendar__event-meta" data-meta-text="' . esc_attr($meta_label) . '">';
+                                echo '<span class="mj-member-events-calendar__event-meta-icon" aria-hidden="true">🕐</span>';
+                                echo '<span class="mj-member-events-calendar__event-meta-text">' . self::build_meta_label_markup($meta_label) . '</span>';
+                                echo '</span>';
                             }
                             if (!empty($event_entry['is_cancelled'])) {
                                 $cancellation_reason = isset($event_entry['cancellation_reason']) ? trim((string) $event_entry['cancellation_reason']) : '';
@@ -3244,34 +3284,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         echo '</ul>';
                     }
 
-                    if ($can_edit_events) {
-                        echo '<button type="button" class="mj-member-events-calendar__day-add" data-calendar-create-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Ajouter un événement ce jour', 'mj-member') . '" title="' . esc_attr__('Ajouter un événement ce jour', 'mj-member') . '">';
-                        echo '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
-                        echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer un event', 'mj-member') . '</span>';
-                        echo '</button>';
-                        echo '<button type="button" class="mj-member-events-calendar__day-add mj-member-events-calendar__day-add--occurrence" data-calendar-create-occurrence-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Créer une occurrence pour un événement existant', 'mj-member') . '" title="' . esc_attr__('Créer une occurrence pour un événement existant', 'mj-member') . '">';
-                        echo '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8m4-4H8"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>';
-                        echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer une occurrence', 'mj-member') . '</span>';
-                        echo '</button>';
-                        if (class_exists(MjTodos::class)) {
-                            echo '<button type="button" class="mj-member-events-calendar__day-add mj-member-events-calendar__day-add--task" data-calendar-create-task-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Créer une tâche ce jour', 'mj-member') . '" title="' . esc_attr__('Créer une tâche ce jour', 'mj-member') . '">';
-                            echo '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
-                            echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer une tâche', 'mj-member') . '</span>';
-                            echo '</button>';
-                        }
-                        if (class_exists(MjLeaveTypes::class)) {
-                            echo '<button type="button" class="mj-member-events-calendar__day-add mj-member-events-calendar__day-add--leave" data-calendar-create-leave-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Créer une demande de congé ce jour', 'mj-member') . '" title="' . esc_attr__('Créer une demande de congé ce jour', 'mj-member') . '">';
-                            echo '<span class="mj-member-events-calendar__day-add-emoji" aria-hidden="true">🏖️</span>';
-                            echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer un congé', 'mj-member') . '</span>';
-                            echo '</button>';
-                        }
-                        if (class_exists(MjAgendaNotes::class)) {
-                            echo '<button type="button" class="mj-member-events-calendar__day-add mj-member-events-calendar__day-add--note" data-calendar-create-note-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Créer une note ce jour', 'mj-member') . '" title="' . esc_attr__('Créer une note ce jour', 'mj-member') . '">';
-                            echo '<span class="mj-member-events-calendar__day-add-emoji" aria-hidden="true">📝</span>';
-                            echo '<span class="mj-member-events-calendar__day-add-label">' . esc_html__('Créer une note', 'mj-member') . '</span>';
-                            echo '</button>';
-                        }
-                    }
 
                     echo '</div>';
                     echo '</div>';
@@ -3471,7 +3483,10 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     }
                     $mobile_badges_markup = self::build_event_badges_markup($mobile_event, 'mobile', $show_badge_details);
                     if ($mobile_meta !== '') {
-                        echo '<span class="mj-member-events-calendar__mobile-meta">' . esc_html($mobile_meta) . '</span>';
+                        echo '<span class="mj-member-events-calendar__mobile-meta" data-meta-text="' . esc_attr($mobile_meta) . '">';
+                        echo '<span class="mj-member-events-calendar__mobile-meta-icon" aria-hidden="true">🕐</span>';
+                        echo '<span class="mj-member-events-calendar__mobile-meta-text">' . self::build_meta_label_markup($mobile_meta) . '</span>';
+                        echo '</span>';
                     }
                     if ($mobile_badges_markup !== '') {
                         echo $mobile_badges_markup;
@@ -3603,6 +3618,10 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<label class="mj-cal-print__option">';
             echo '<input type="checkbox" data-print-option="event-color"' . ($print_default_event_color ? ' checked' : '') . ' />';
             echo '<span>' . esc_html__('Afficher la couleur des événements', 'mj-member') . '</span>';
+            echo '</label>';
+            echo '<label class="mj-cal-print__option">';
+            echo '<input type="checkbox" data-print-option="badges"' . ($print_default_badges ? ' checked' : '') . ' />';
+            echo '<span>' . esc_html__('Afficher les badges', 'mj-member') . '</span>';
             echo '</label>';
             echo '<label class="mj-cal-print__option">';
             echo '<input type="checkbox" data-print-option="header-image"' . ($print_default_header_image ? ' checked' : '') . ' />';
@@ -3751,6 +3770,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'defaultTimeRange' => $print_default_time_range,
                 'defaultEventEmoji' => $print_default_event_emoji,
                 'defaultEventColor' => $print_default_event_color,
+                'defaultBadges' => $print_default_badges,
                 'defaultHeaderImage' => $print_default_header_image,
                 'defaultFooterImage' => $print_default_footer_image,
                 'headerImageUrl' => $print_header_image_url,
@@ -3867,6 +3887,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             'print_default_event_style' => 'yes',
             'print_default_event_emoji' => 'yes',
             'print_default_event_color' => 'yes',
+            'print_default_badges' => 'yes',
             'print_default_mode' => 'month',
             'print_default_theme' => 'light',
             'print_default_span' => 1,
@@ -4605,7 +4626,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                 $time_range = '';
                 if ($start_formatted !== '' && $end_formatted !== '' && $start_formatted !== $end_formatted) {
-                    $time_range = $start_formatted . ' → ' . $end_formatted;
+                    $time_range = $start_formatted . ' – ' . $end_formatted;
                 } elseif ($start_formatted !== '') {
                     $time_range = sprintf(__('À partir de %s', 'mj-member'), $start_formatted);
                 } elseif ($end_formatted !== '') {
@@ -4676,7 +4697,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
             $time_range = '';
             if ($start_formatted !== '' && $end_formatted !== '' && $start_formatted !== $end_formatted) {
-                $time_range = $start_formatted . ' → ' . $end_formatted;
+                $time_range = $start_formatted . ' – ' . $end_formatted;
             } elseif ($start_formatted !== '') {
                 $time_range = sprintf(__('À partir de %s', 'mj-member'), $start_formatted);
             } elseif ($end_formatted !== '') {
@@ -4775,7 +4796,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         if ($end instanceof \DateTimeImmutable) {
             $end_label = self::normalize_time_label(wp_date($time_format, $end->getTimestamp(), $timezone));
             if ($end_label !== '' && $end_label !== $start_label) {
-                return $start_label . ' → ' . $end_label;
+                return $start_label . ' – ' . $end_label;
             }
         }
 
@@ -5164,7 +5185,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $rules[] = sprintf('#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}', $normalized_id, $desktop);
         $rules[] = sprintf('#%1$s .mj-member-events-calendar__event-thumb img{width:100%%;height:100%%;object-fit:cover;}', $normalized_id);
         $rules[] = sprintf('@media (max-width: 900px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $tablet);
-        $rules[] = sprintf('@media (max-width: 1100px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $mobile);
+        $rules[] = sprintf('@media (max-width: 767px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $mobile);
 
         return implode('', $rules);
     }
@@ -5249,6 +5270,33 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
 
         return $sources;
+    }
+
+    /**
+     * Render a schedule meta label, replacing the "start – end" separator
+     * with a small inline SVG arrow (colored via --mj-event-range-border)
+     * instead of a plain text character.
+     *
+     * @param string $label
+     * @return string Escaped/safe HTML.
+     */
+    private static function build_meta_label_markup($label) {
+        $label = (string) $label;
+        if ($label === '') {
+            return '';
+        }
+
+        $parts = explode(' – ', $label, 2);
+        if (count($parts) !== 2 || trim($parts[0]) === '' || trim($parts[1]) === '') {
+            return esc_html($label);
+        }
+
+        $separator_svg = '<span class="mj-member-events-calendar__meta-sep" aria-hidden="true">'
+            . '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">'
+            . '<line x1="3" y1="12" x2="18" y2="12"></line><polyline points="12 6 18 12 12 18"></polyline>'
+            . '</svg></span>';
+
+        return esc_html($parts[0]) . $separator_svg . esc_html($parts[1]);
     }
 
     /**

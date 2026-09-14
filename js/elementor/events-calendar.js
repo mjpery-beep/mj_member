@@ -1721,6 +1721,7 @@
         var printTimeRangeInput = root.querySelector('[data-print-option="time-range"]');
         var printEventEmojiInput = root.querySelector('[data-print-option="event-emoji"]');
         var printEventColorInput = root.querySelector('[data-print-option="event-color"]');
+        var printBadgesInput = root.querySelector('[data-print-option="badges"]');
         var printHeaderImageInput = root.querySelector('[data-print-option="header-image"]');
         var printFooterImageInput = root.querySelector('[data-print-option="footer-image"]');
         var printHeaderImageSource = root.querySelector('[data-print-image-source="header"]');
@@ -2445,6 +2446,13 @@
             return typeof printConfig.defaultEventStyle === 'undefined' ? true : !!printConfig.defaultEventStyle;
         }
 
+        function isBadgesEnabled() {
+            if (printBadgesInput) {
+                return !!printBadgesInput.checked;
+            }
+            return !printConfig || typeof printConfig.defaultBadges === 'undefined' ? true : !!printConfig.defaultBadges;
+        }
+
         function isHeaderImageEnabled() {
             if (printHeaderImageInput) {
                 return !!printHeaderImageInput.checked;
@@ -2708,6 +2716,9 @@
             if (printEventColorInput && typeof prefs.eventColor !== 'undefined') {
                 printEventColorInput.checked = !!prefs.eventColor;
             }
+            if (printBadgesInput && typeof prefs.badges !== 'undefined') {
+                printBadgesInput.checked = !!prefs.badges;
+            }
             if (printHeaderImageInput && typeof prefs.headerImage !== 'undefined') {
                 printHeaderImageInput.checked = !!prefs.headerImage;
             }
@@ -2793,6 +2804,7 @@
                 timeRange: isTimeRangeEnabled(),
                 eventEmoji: isEventEmojiEnabled(),
                 eventColor: isEventColorEnabled(),
+                badges: isBadgesEnabled(),
                 headerImage: isHeaderImageEnabled(),
                 footerImage: isFooterImageEnabled(),
                 headerImageUrl: getPrintImageUrl('header'),
@@ -3006,7 +3018,7 @@
 
                 var entry = {
                     title: title,
-                    meta: metaNode ? (metaNode.textContent || '').trim() : '',
+                    meta: metaNode ? (metaNode.getAttribute('data-meta-text') || metaNode.textContent || '').trim() : '',
                     type: typeNode ? (typeNode.textContent || '').trim() : '',
                     details: withDetails && detailsNode ? (detailsNode.textContent || '').trim() : '',
                     cover: withCover && coverNode ? (coverNode.getAttribute('src') || '').trim() : '',
@@ -3323,7 +3335,7 @@
                                 if (options.timeRange && eventItem.meta) {
                                     periodHtml.push('<div class="mj-print-event-meta">' + escapeHtml(eventItem.meta) + '</div>');
                                 }
-                                if (eventItem.type) {
+                                if (options.badges && eventItem.type) {
                                     var compactTypeLabelStyle = '';
                                     if (eventItem.accentColor) {
                                         var compactTypeBg = hexToRgba(eventItem.accentColor, 0.18);
@@ -3377,7 +3389,7 @@
                                     if (options.timeRange && eventItem.meta) {
                                         periodHtml.push('<div class="mj-print-event-meta">' + escapeHtml(eventItem.meta) + '</div>');
                                     }
-                                    if (eventItem.type) {
+                                    if (options.badges && eventItem.type) {
                                         var typeLabelStyle = '';
                                         if (eventItem.accentColor) {
                                             var typeBg = hexToRgba(eventItem.accentColor, 0.18);
@@ -3862,7 +3874,7 @@
                 if (options.timeRange && eventItem.meta) {
                     height += scaledCanvasSize(14);
                 }
-                if (eventItem.type) {
+                if (options.badges && eventItem.type) {
                     height += scaledCanvasSize(18);
                 }
                 if (options.details && eventItem.details) {
@@ -4310,6 +4322,7 @@
             var timeRange = isTimeRangeEnabled();
             var eventEmoji = isEventEmojiEnabled();
             var eventColor = isEventColorEnabled();
+            var badges = isBadgesEnabled();
             var headerImage = isHeaderImageEnabled();
             var footerImage = isFooterImageEnabled();
             var hideEmptyDays = isHideEmptyDaysEnabled();
@@ -4344,6 +4357,7 @@
                 timeRange: timeRange,
                 eventEmoji: eventEmoji,
                 eventColor: eventColor,
+                badges: badges,
                 headerImage: headerImage,
                 footerImage: footerImage,
                 headerImageUrl: getPrintImageUrl('header'),
@@ -4388,14 +4402,8 @@
             document.body.style.overflow = '';
         }
 
-        var multiMonthMediaQuery = window.matchMedia('(min-width: 550px) and (max-width: 1100px)');
-        var threeMonthMediaQuery = window.matchMedia('(min-width: 700px) and (max-width: 1100px)');
-
         function getVisibleMonthCount() {
-            if (threeMonthMediaQuery.matches) {
-                return 3;
-            }
-            return multiMonthMediaQuery.matches ? 2 : 1;
+            return 1;
         }
 
         function updateMobilePanelHeights() {
@@ -4452,6 +4460,26 @@
             });
         }
 
+        var mobileNavMediaQuery = window.matchMedia('(max-width: 767px)');
+
+        function updateMobileNavPosition() {
+            if (!toolbar) {
+                return;
+            }
+            var mobileCalendar = root.querySelector('.mj-member-events-calendar__month.is-active .mj-cal-mobile__calendar');
+            if (!mobileNavMediaQuery.matches || !mobileCalendar) {
+                root.style.removeProperty('--mj-cal-mobile-nav-top');
+                return;
+            }
+            var toolbarRect = toolbar.getBoundingClientRect();
+            var calendarRect = mobileCalendar.getBoundingClientRect();
+            if (!calendarRect.height) {
+                return;
+            }
+            var top = (calendarRect.top - toolbarRect.top) + (calendarRect.height / 2);
+            root.style.setProperty('--mj-cal-mobile-nav-top', top + 'px');
+        }
+
         function sync() {
             var visibleMonthCount = getVisibleMonthCount();
             months.forEach(function(month, idx) {
@@ -4476,6 +4504,7 @@
             applyFilters();
             refreshPrintPreview();
             window.requestAnimationFrame(updateMobilePanelHeights);
+            window.requestAnimationFrame(updateMobileNavPosition);
         }
 
         if (prev) {
@@ -4515,11 +4544,29 @@
             });
         }
 
-        multiMonthMediaQuery.addEventListener('change', sync);
-        threeMonthMediaQuery.addEventListener('change', sync);
+        if (filtersToggle && filtersToggle.parentNode) {
+            var filtersToggleParent = filtersToggle.parentNode;
+            var filtersToggleAnchor = filtersToggle.nextSibling;
+            var filtersToggleMediaQuery = window.matchMedia('(max-width: 767px)');
+            var syncFiltersToggleDom = function() {
+                if (filtersToggleMediaQuery.matches) {
+                    if (!filtersToggle.isConnected) {
+                        filtersToggleParent.insertBefore(filtersToggle, filtersToggleAnchor);
+                    }
+                } else if (filtersToggle.isConnected) {
+                    filtersToggleParent.removeChild(filtersToggle);
+                }
+            };
+            syncFiltersToggleDom();
+            filtersToggleMediaQuery.addEventListener('change', syncFiltersToggleDom);
+        }
+
         window.addEventListener('resize', updateMobilePanelHeights, { passive: true });
+        window.addEventListener('resize', updateMobileNavPosition, { passive: true });
+        mobileNavMediaQuery.addEventListener('change', updateMobileNavPosition);
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', updateMobilePanelHeights, { passive: true });
+            window.visualViewport.addEventListener('resize', updateMobileNavPosition, { passive: true });
         }
 
         if (filterInputs.length) {

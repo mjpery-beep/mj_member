@@ -1832,10 +1832,12 @@ if (!function_exists('mj_member_render_registration_form')) {
                         <p class="mj-inscription-grimlins-avatar__label"><?php esc_html_e('Ton avatar Grimlins sera lié à ton compte après l\'inscription.', 'mj-member'); ?></p>
                     </div>
                 <?php endif; ?>
+                <?php $mj_inscription_account_url = $args['account_url'] ?? home_url('/mon-compte'); ?>
                 <form method="post" class="mj-inscription-form" novalidate
                     data-ajax-url="<?php echo esc_url(admin_url('admin-ajax.php')); ?>"
                     data-ajax-action="mj_member_ajax_register"
-                    data-account-url="<?php echo esc_url($args['account_url'] ?? home_url('/mon-compte')); ?>">
+                    data-account-url="<?php echo esc_url($mj_inscription_account_url); ?>"
+                    data-login-url="<?php echo esc_url(home_url('/mon-compte/inscription/?tab=login')); ?>">
                     <?php wp_nonce_field('mj_frontend_form', 'mj_frontend_nonce'); ?>
                     <?php if ($grimlins_avatar_id > 0) : ?>
                         <input type="hidden" name="grimlins_avatar_id" value="<?php echo esc_attr($grimlins_avatar_id); ?>" />
@@ -3616,7 +3618,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                     }
 
                     // ── Registration success overlay with countdown ────────────────────
-                    function mjShowRegistrationSuccess(accountUrl, didLogin, autoLoginToken) {
+                    function mjShowRegistrationSuccess(accountUrl, didLogin, autoLoginToken, loginUrl) {
                         var DURATION = 5;
                         var radius = 19;
                         var circumference = +(2 * Math.PI * radius).toFixed(2);
@@ -3650,6 +3652,12 @@ if (!function_exists('mj_member_render_registration_form')) {
                         var goBtn      = overlay.querySelector('.mj-reg-success__go-btn');
 
                         function buildRedirect() {
+                            if (!didLogin) {
+                                // No account was auto-logged in (e.g. guardian registering a
+                                // non-autonomous child): sending them to the account area would
+                                // just hit the "members only" wall. Send them to log in instead.
+                                return loginUrl || accountUrl || window.location.href;
+                            }
                             var base = accountUrl || window.location.href;
                             var sep = base.indexOf('?') !== -1 ? '&' : '?';
                             var url = base + sep + 'new_subscription=1';
@@ -3689,6 +3697,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                             var ajaxUrl    = registrationForm.getAttribute('data-ajax-url') || '';
                             var ajaxAction = registrationForm.getAttribute('data-ajax-action') || '';
                             var accountUrl = registrationForm.getAttribute('data-account-url') || '';
+                            var loginUrl   = registrationForm.getAttribute('data-login-url') || '';
 
                             if (!ajaxUrl || !ajaxAction) { registrationForm.submit(); return; }
 
@@ -3720,7 +3729,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                                 if (data && data.success) {
                                     var didLogin = data.data && data.data.did_login ? 1 : 0;
                                     var autoLoginToken = (data.data && data.data.autologin_token) ? data.data.autologin_token : '';
-                                    mjShowRegistrationSuccess(accountUrl, didLogin, autoLoginToken);
+                                    mjShowRegistrationSuccess(accountUrl, didLogin, autoLoginToken, loginUrl);
                                 } else {
                                     var msg = (data && data.data && data.data.message)
                                         ? data.data.message

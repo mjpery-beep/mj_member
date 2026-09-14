@@ -523,7 +523,8 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                 <!-- Contenu texte -->
                                 <div class="mj-carousel-card__content">
                                     <?php if (isset($testimonial->content) && $testimonial->content): ?>
-                                        <?php echo wp_kses_post(wpautop(\Mj\Member\Core\Ajax\Front\TestimonialsController::linkifyMemberMentions(\Mj\Member\Core\Ajax\Front\TestimonialsController::linkifyEventMentions($testimonial->content)))); ?>
+                                        <?php // nl2br (pas wpautop) : le contenu doit rester un flux inline unique pour que -webkit-line-clamp (voir .mj-carousel-card__content) fonctionne, des <p> imbriqués faisant déborder une ligne malgré les "…". ?>
+                                        <?php echo wp_kses_post(nl2br(\Mj\Member\Core\Ajax\Front\TestimonialsController::linkifyMemberMentions(\Mj\Member\Core\Ajax\Front\TestimonialsController::linkifyEventMentions($testimonial->content)))); ?>
                                     <?php endif; ?>
                                 </div>
 
