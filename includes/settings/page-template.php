@@ -2495,6 +2495,10 @@ if (!defined('ABSPATH')) {
                             'mj-member' => __('Widget mj-member', 'mj-member'),
                             'supertool' => __('Widget supertool', 'mj-member'),
                         );
+
+                    $env_switch_enabled_option   = get_option('mj_member_env_switch_enabled', '0') === '1';
+                    $env_switch_local_url_option = get_option('mj_member_env_switch_local_url', 'http://localhost:8080');
+                    $env_switch_prod_url_option  = get_option('mj_member_env_switch_prod_url', 'https://www.mj-pery.be');
                     ?>
                     <div id="mj-tab-debug" class="mj-settings-tabs__panel" data-tab="debug" role="tabpanel" aria-labelledby="mj-tab-button-debug" aria-hidden="true">
                         <div style="background:#fff7ed; border-left:4px solid #f59e0b; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
@@ -2527,6 +2531,32 @@ if (!defined('ABSPATH')) {
                                     <?php endforeach; ?>
                                 </div>
                             </fieldset>
+                        </div>
+
+                        <div style="max-width:760px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:18px 20px; margin-top:20px;">
+                            <h2 style="margin:0 0 8px 0; font-size:16px;">🔀 Switch environnement (local ↔ prod)</h2>
+                            <p style="margin-top:0; color:#334155;">
+                                Ajoute un bouton dans la barre d'admin WordPress pour ouvrir instantanément la page courante sur l'autre environnement (local ou production).
+                            </p>
+
+                            <label style="display:flex; gap:10px; align-items:flex-start; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:16px;">
+                                <input type="checkbox" name="mj_member_env_switch_enabled" value="1" <?php checked($env_switch_enabled_option); ?> style="margin-top:2px;" />
+                                <span>
+                                    <strong>Activer le bouton dans la barre d'admin</strong><br>
+                                    <span style="color:#64748b; font-size:13px;">Décochez pour désactiver l'option sans perdre les URLs enregistrées ci-dessous.</span>
+                                </span>
+                            </label>
+
+                            <div style="display:grid; gap:14px; grid-template-columns:1fr 1fr;">
+                                <label style="display:block;">
+                                    <strong style="display:block; margin-bottom:4px;">URL locale</strong>
+                                    <input type="url" name="mj_member_env_switch_local_url" value="<?php echo esc_attr($env_switch_local_url_option); ?>" placeholder="http://localhost:8080" class="regular-text" style="width:100%;" />
+                                </label>
+                                <label style="display:block;">
+                                    <strong style="display:block; margin-bottom:4px;">URL du site (production)</strong>
+                                    <input type="url" name="mj_member_env_switch_prod_url" value="<?php echo esc_attr($env_switch_prod_url_option); ?>" placeholder="https://www.mj-pery.be" class="regular-text" style="width:100%;" />
+                                </label>
+                            </div>
                         </div>
                     </div>
 

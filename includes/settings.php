@@ -689,6 +689,18 @@ function mj_settings_page() {
             update_user_meta($current_user_id, 'mj_member_debug_widget_zones_adminbar', $debug_widget_zones_adminbar);
         }
 
+        // Switch environnement local/prod (barre d'admin)
+        $env_switch_enabled = isset($_POST['mj_member_env_switch_enabled']) ? '1' : '0';
+        $env_switch_local_url = isset($_POST['mj_member_env_switch_local_url'])
+            ? esc_url_raw(untrailingslashit(trim(wp_unslash($_POST['mj_member_env_switch_local_url']))))
+            : '';
+        $env_switch_prod_url = isset($_POST['mj_member_env_switch_prod_url'])
+            ? esc_url_raw(untrailingslashit(trim(wp_unslash($_POST['mj_member_env_switch_prod_url']))))
+            : '';
+        update_option('mj_member_env_switch_enabled', $env_switch_enabled);
+        update_option('mj_member_env_switch_local_url', $env_switch_local_url !== '' ? $env_switch_local_url : 'http://localhost:8080');
+        update_option('mj_member_env_switch_prod_url', $env_switch_prod_url);
+
         $widget_titles_post = isset($_POST['mj_member_widget_titles']) && is_array($_POST['mj_member_widget_titles'])
             ? $_POST['mj_member_widget_titles']
             : array();

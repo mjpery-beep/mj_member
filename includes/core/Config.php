@@ -35,6 +35,8 @@ final class Config
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_USER', '');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_PASSWORD', '');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_ROOT_FOLDER', '');
+        self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_EVENTS_FOLDER', 'evenements');
+        self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_MEMBERS_FOLDER', 'membres');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_TESTIMONIALS_FOLDER', 'temoignages');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_TESTIMONIALS_SHARE_GROUP', 'membres');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_GROUPS', '');
@@ -284,6 +286,36 @@ final class Config
 
         $option = \get_option('mj_member_nextcloud_root_folder', '');
         return is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
+    }
+
+    public static function nextcloudEventsFolder(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_NEXTCLOUD_EVENTS_FOLDER');
+        if ($defined !== '') {
+            return trim(\sanitize_text_field($defined), '/');
+        }
+
+        $option = \get_option('mj_member_nextcloud_events_folder', 'evenements');
+        if (!is_string($option) || $option === '') {
+            return 'evenements';
+        }
+
+        return trim(\sanitize_text_field($option), '/');
+    }
+
+    public static function nextcloudMembersFolder(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_NEXTCLOUD_MEMBERS_FOLDER');
+        if ($defined !== '') {
+            return trim(\sanitize_text_field($defined), '/');
+        }
+
+        $option = \get_option('mj_member_nextcloud_members_folder', 'membres');
+        if (!is_string($option) || $option === '') {
+            return 'membres';
+        }
+
+        return trim(\sanitize_text_field($option), '/');
     }
 
     public static function nextcloudTestimonialsFolder(): string

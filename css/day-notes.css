@@ -1112,6 +1112,14 @@
     border-left: 1px solid #e4e7ec !important;
 }
 
+.mj-member-events-calendar__day-note-tooltip-creator-emoji {
+    all: revert;
+    display: inline-flex !important;
+    margin-left: 4px !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+}
+
 .mj-member-events-calendar__day-note-tooltip-meta {
     all: revert;
     display: flex !important;

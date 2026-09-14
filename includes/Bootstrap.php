@@ -35,6 +35,7 @@ final class Bootstrap
         'includes/core/capabilities.php',
         'includes/core/assets.php',
         'includes/core/schema.php',
+        'includes/env_switcher.php',
 
         // Front-end rendering, shortcodes, Elementor
         'includes/member_accounts.php',

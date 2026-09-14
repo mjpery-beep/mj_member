@@ -4948,6 +4948,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         if (!empty($note['author_avatar'])) {
             echo '<span class="mj-member-events-calendar__day-note-tooltip-avatar-group mj-member-events-calendar__day-note-tooltip-avatar-group--creator">';
             echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($note['author_avatar']) . '" alt="" title="' . esc_attr($note['author_name']) . '" />';
+            if (!empty($note['note_type_emoji'])) {
+                echo '<span class="mj-member-events-calendar__day-note-tooltip-creator-emoji" aria-hidden="true">' . esc_html($note['note_type_emoji']) . '</span>';
+            }
             echo '</span>';
         }
         if (!empty($note['assigned_avatars'])) {

@@ -664,6 +664,13 @@
                 tooltipAuthorImg.alt = '';
                 if (note.author_name) tooltipAuthorImg.title = note.author_name;
                 creatorGroupEl.appendChild(tooltipAuthorImg);
+                if (note.note_type_emoji) {
+                    var creatorTypeEmojiEl = document.createElement('span');
+                    creatorTypeEmojiEl.className = 'mj-member-events-calendar__day-note-tooltip-creator-emoji';
+                    creatorTypeEmojiEl.setAttribute('aria-hidden', 'true');
+                    creatorTypeEmojiEl.textContent = note.note_type_emoji;
+                    creatorGroupEl.appendChild(creatorTypeEmojiEl);
+                }
                 tooltipAvatarsEl.appendChild(creatorGroupEl);
             }
             if (note.assigned_avatars && note.assigned_avatars.length) {

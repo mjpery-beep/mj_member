@@ -49,6 +49,18 @@
         node.className = 'mj-photo-import-status is-' + (type || 'info');
     }
 
+    function describeAjaxFailure(xhr, ajaxUrl, contextMessage) {
+        if (xhr && xhr.status === 404) {
+            return 'Erreur 404 sur admin-ajax.php. URL utilisée : ' + ajaxUrl;
+        }
+
+        if (xhr && xhr.status === 403) {
+            return 'Session expirée ou action non autorisée (403). Rechargez la page des réglages puis réessayez.';
+        }
+
+        return contextMessage;
+    }
+
     function getSelectedTags() {
         var select = document.getElementById('mj-photo-import-tags');
         if (!select) {
@@ -129,12 +141,7 @@
 
             setStatus('Étiquettes chargées. Sélectionnez une ou plusieurs étiquettes puis lancez l\'import.', 'success');
         }).fail(function (xhr) {
-            if (xhr && xhr.status === 404) {
-                setStatus('Erreur 404 sur admin-ajax.php. URL utilisée : ' + ajaxUrl, 'error');
-                return;
-            }
-
-            setStatus('Erreur de communication avec le serveur.', 'error');
+            setStatus(describeAjaxFailure(xhr, ajaxUrl, 'Erreur de communication avec le serveur.'), 'error');
         });
     }
 
@@ -272,12 +279,13 @@
             var message = response && response.data && response.data.message ? response.data.message : 'Import terminé (fallback direct).';
             setStatus(message, 'success');
             pollProgress();
-        }).fail(function () {
-            setStatus('Erreur de communication pendant le fallback direct.', 'error');
+        }).fail(function (xhr) {
+            var message = describeAjaxFailure(xhr, ajaxUrl, 'Erreur de communication pendant le fallback direct.');
+            setStatus(message, 'error');
             renderLiveState({
                 status: 'error',
                 step: 'direct_fallback_error',
-                events: [{ ts: Math.floor(Date.now() / 1000), message: 'Erreur de communication pendant le fallback direct.' }]
+                events: [{ ts: Math.floor(Date.now() / 1000), message: message }]
             });
         });
     }
@@ -320,13 +328,7 @@
             setStatus(data.message || 'Import démarré.', 'info');
             startProgressPolling(startedRunId);
         }).fail(function (xhr) {
-            if (xhr && xhr.status === 404) {
-                setStatus('Erreur 404 sur admin-ajax.php pendant l\'import. URL utilisée : ' + ajaxUrl, 'error');
-                stopProgressPolling();
-                return;
-            }
-
-            setStatus('Erreur de communication avec le serveur pendant l\'import.', 'error');
+            setStatus(describeAjaxFailure(xhr, ajaxUrl, 'Erreur de communication avec le serveur pendant l\'import.'), 'error');
             stopProgressPolling();
         });
     }
@@ -358,8 +360,8 @@
             var message = response && response.data && response.data.message ? response.data.message : 'Photos supprimées.';
             setStatus(message, 'success');
             renderLiveState(null);
-        }).fail(function () {
-            setStatus('Erreur de communication lors de la suppression.', 'error');
+        }).fail(function (xhr) {
+            setStatus(describeAjaxFailure(xhr, ajaxUrl, 'Erreur de communication lors de la suppression.'), 'error');
         });
     }
 
