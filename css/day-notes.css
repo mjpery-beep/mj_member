@@ -853,10 +853,31 @@
 }
 
 .mj-member-events-calendar__day-note-time {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     flex: 0 0 auto;
-    color: #667085;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    width: fit-content;
+    max-width: 100%;
+    padding: 0px 6px;
+    border-radius: 999px;
+    background: var(--mj-event-range-bg, rgba(71, 85, 105, 0.1));
+    border: 1px solid var(--mj-event-range-border, transparent);
+    line-height: 16px;
+    color: #667085;
+}
+
+.mj-member-events-calendar__day-note-time-icon {
+    font-size: 0.85em;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.mj-member-events-calendar__day-note-time-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .mj-member-events-calendar__day-note-thumb {

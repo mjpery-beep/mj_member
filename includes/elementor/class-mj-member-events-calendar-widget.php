@@ -4975,6 +4975,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<span class="mj-member-events-calendar__day-note-emoji" aria-hidden="true">' . esc_html($note['emoji']) . '</span>';
         }
         echo '<span class="mj-member-events-calendar__day-note-title">' . esc_html($note_label) . '</span>';
+        if (!empty($note['start_time'])) {
+            $note_time_label = $note['start_time'] . (!empty($note['end_time']) ? ' - ' . $note['end_time'] : '');
+            echo '<time class="mj-member-events-calendar__day-note-time" data-meta-text="' . esc_attr($note_time_label) . '">';
+            echo '<span class="mj-member-events-calendar__day-note-time-icon" aria-hidden="true">🕐</span>';
+            echo '<span class="mj-member-events-calendar__day-note-time-text">' . esc_html($note_time_label) . '</span>';
+            echo '</time>';
+        }
         if (!empty($note['media'][0]['thumbUrl'])) {
             echo '<img class="mj-member-events-calendar__day-note-thumb" src="' . esc_url($note['media'][0]['thumbUrl']) . '" alt="" />';
         }

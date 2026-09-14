@@ -720,9 +720,19 @@
             row.appendChild(titleEl);
 
             if (note.start_time) {
+                var timeLabel = note.start_time + (note.end_time ? ' - ' + note.end_time : '');
                 var timeEl = document.createElement('time');
                 timeEl.className = 'mj-member-events-calendar__day-note-time';
-                timeEl.textContent = note.start_time + (note.end_time ? ' - ' + note.end_time : '');
+                timeEl.setAttribute('data-meta-text', timeLabel);
+                var timeIconEl = document.createElement('span');
+                timeIconEl.className = 'mj-member-events-calendar__day-note-time-icon';
+                timeIconEl.setAttribute('aria-hidden', 'true');
+                timeIconEl.textContent = '🕐';
+                timeEl.appendChild(timeIconEl);
+                var timeTextEl = document.createElement('span');
+                timeTextEl.className = 'mj-member-events-calendar__day-note-time-text';
+                timeTextEl.textContent = timeLabel;
+                timeEl.appendChild(timeTextEl);
                 row.appendChild(timeEl);
             }
 
