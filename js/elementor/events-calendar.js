@@ -4238,7 +4238,7 @@
                                     contentY += scaledCanvasSize(14);
                                 }
 
-                                if (eventItem.type) {
+                                if (options.badges && eventItem.type) {
                                     var pillText = String(eventItem.type);
                                     ctx.font = '600 ' + scaledCanvasSize(10) + 'px Arial, sans-serif';
                                     var pillWidth = Math.min(contentWidth, ctx.measureText(pillText).width + 16);
