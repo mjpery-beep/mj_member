@@ -1249,6 +1249,40 @@
                 });
         }, [apiPost, event, onBatchesUpdate]);
 
+        var handleUnarchiveBatch = useCallback(function (batchId) {
+            if (!apiPost || !event || !batchId) { return; }
+            setBatchProcessingId(batchId + ':unarchive');
+            apiPost('mj_regmgr_unarchive_occurrence_batch', { eventId: event.id, batchId: batchId })
+                .then(function (data) {
+                    setBatchProcessingId('');
+                    if (data && Array.isArray(data.occurrenceGenerationBatches)) {
+                        setLocalBatches(data.occurrenceGenerationBatches);
+                        setArchivedBatchIds(function (previousIds) {
+                            var nextIds = Object.assign({}, previousIds);
+                            data.occurrenceGenerationBatches.forEach(function (batch) {
+                                if (!batch) { return; }
+                                var bId = batch.batchId || batch.id || '';
+                                if (!bId) { return; }
+                                if (String(batch.status || '').trim().toLowerCase() === 'archived') {
+                                    nextIds[String(bId)] = true;
+                                } else {
+                                    delete nextIds[String(bId)];
+                                }
+                            });
+                            return nextIds;
+                        });
+                        if (onBatchesUpdate) { onBatchesUpdate(data.occurrenceGenerationBatches); }
+                    }
+                })
+                .catch(function (err) {
+                    setBatchProcessingId('');
+                    if (typeof window !== 'undefined' && window.alert) {
+                        window.alert(err && err.message ? err.message : 'Erreur lors de la sortie d\'archives du lot.');
+                    }
+                    console.warn('[MjRegMgr] unarchiveOccurrenceBatch error', err && err.message ? err.message : err);
+                });
+        }, [apiPost, event, onBatchesUpdate]);
+
         var handleToggleBatchScheduleFlag = useCallback(function (batchId, include) {
             if (!apiPost || !event) { return; }
             var eventId = event.id;
@@ -1803,6 +1837,16 @@
                                             handleArchiveBatch(batchId);
                                         },
                                     }, 'Archiver'),
+                                    apiPost && isArchived && h('button', {
+                                        type: 'button',
+                                        class: 'mj-regmgr-occurrence__batch-card__action mj-regmgr-occurrence__batch-card__action--ghost',
+                                        disabled: isProcessing,
+                                        title: 'Sortir ce lot des archives',
+                                        onClick: function (event) {
+                                            event.stopPropagation();
+                                            handleUnarchiveBatch(batchId);
+                                        },
+                                    }, 'Sortir des archives'),
                                     apiPost && h('button', {
                                         type: 'button',
                                         class: 'mj-regmgr-occurrence__batch-card__action mj-regmgr-occurrence__batch-card__action--danger mj-regmgr-occurrence__batch-card__action--icon',
