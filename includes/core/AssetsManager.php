@@ -451,15 +451,6 @@ final class AssetsManager
         self::registerStyle('mj-member-inventory-manager', 'css/inventory-manager.css', array('mj-member-components'));
         self::registerScript('mj-member-inventory-manager', 'js/elementor/inventory-manager.js', array('mj-member-utils', 'mj-member-preact', 'mj-member-preact-hooks', 'mj-member-regmgr-emoji-picker'));
 
-        // Agenda widget (Schedule-X vendored + Preact shell).
-        // The Schedule-X bundle inlines & injects its own theme CSS — no vendor stylesheet to ship.
-        self::registerScript('mj-schedule-x', 'js/vendor/schedule-x/schedule-x.bundle.js', array());
-        self::registerStyle('mj-member-agenda', 'css/agenda.css', array('mj-member-components'));
-        self::registerScript('mj-member-agenda-services', 'js/elementor/agenda/services.js', array('mj-member-utils'));
-        self::registerScript('mj-member-agenda-acl', 'js/elementor/agenda/acl.js', array());
-        self::registerScript('mj-member-agenda-calendar', 'js/elementor/agenda/calendar.js', array('mj-schedule-x', 'mj-member-agenda-services'));
-        self::registerScript('mj-member-agenda-app', 'js/elementor/agenda/app.js', array('mj-member-preact', 'mj-member-preact-hooks', 'mj-member-utils', 'mj-member-agenda-calendar', 'mj-member-agenda-acl'));
-
         if (function_exists('register_block_type')) {
             self::registerScript(
                 'mj-member-login-block-editor',
@@ -690,17 +681,6 @@ final class AssetsManager
                 // demandes de congé. events-calendar.js gère nativement leur absence.
                 wp_enqueue_style('mj-member-events-calendar');
                 wp_enqueue_script('mj-member-events-calendar');
-                break;
-
-            case 'agenda':
-                wp_enqueue_style('mj-member-agenda');
-                wp_enqueue_script('mj-member-preact');
-                wp_enqueue_script('mj-member-preact-hooks');
-                wp_enqueue_script('mj-schedule-x');
-                wp_enqueue_script('mj-member-agenda-app');
-                if (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\AgendaController')) {
-                    \Mj\Member\Core\Ajax\Front\AgendaController::localize();
-                }
                 break;
 
             case 'animateur-account':
