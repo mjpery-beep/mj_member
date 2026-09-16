@@ -99,6 +99,7 @@
         var stateNextcloudNote = useState(null);
         var nextcloudNote = stateNextcloudNote[0], setNextcloudNote = stateNextcloudNote[1];
         var nextcloudPanel = window.MjRegMgrNextcloudFiles && window.MjRegMgrNextcloudFiles.NextcloudFilesPanel;
+        var Modal = window.MjRegMgrModals && window.MjRegMgrModals.Modal;
         var nextcloudApi = window.MjRegMgrServices && typeof window.MjRegMgrServices.createApiService === 'function'
             ? window.MjRegMgrServices.createApiService({ ajaxUrl: config.ajaxUrl, nonce: config.nextcloudNonce || '' })
             : null;
@@ -230,10 +231,12 @@
                 onSaved: function () { setModalOpen(false); refresh(); },
                 onDeleted: function () { setModalOpen(false); refresh(); },
             }),
-            nextcloudPanel && nextcloudApi && nextcloudNote && h('div', { class: 'mj-day-notes-widget__nextcloud' }, [
-                h('button', { type: 'button', onClick: function () { setNextcloudNote(null); } }, 'Fermer'),
-                h(nextcloudPanel, { context: 'note', contextId: nextcloudNote.id, apiService: nextcloudApi }),
-            ]),
+            nextcloudPanel && nextcloudApi && Modal && h(Modal, {
+                isOpen: !!nextcloudNote,
+                onClose: function () { setNextcloudNote(null); },
+                title: '☁️ Fichiers' + (nextcloudNote && nextcloudNote.title ? ' — ' + nextcloudNote.title : ''),
+                size: 'large',
+            }, nextcloudNote && h(nextcloudPanel, { context: 'note', contextId: nextcloudNote.id, apiService: nextcloudApi })),
         ]);
     }
 
