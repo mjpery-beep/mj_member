@@ -172,8 +172,8 @@
                     + (otherChecked ? '&#9745;' : '&#9744;') + ' ' + Utils.escapeHtml(otherLabel) + '</span>');
             }
 
-            return '<span style="display:block;margin:0.35em 0;"><span style="font-weight:700;display:block;margin-bottom:0.2em;">' + title + '</span>'
-                + '<span style="display:block;">' + rows.join(' ') + '</span></span>';
+            return '<div style="margin:0.35em 0;"><h3 style="margin:0 0 0.2em 0;">' + title + '</h3>'
+                + '<div>' + rows.join(' ') + '</div></div>';
         }
 
         if (type === 'checkbox') {
@@ -302,6 +302,9 @@
         var _variablesOpen = useState(false);
         var variablesOpen = _variablesOpen[0];
         var setVariablesOpen = _variablesOpen[1];
+        var _referenceOpen = useState(false);
+        var referenceOpen = _referenceOpen[0];
+        var setReferenceOpen = _referenceOpen[1];
         var textareaRef = useRef(null);
 
         useEffect(function () {
@@ -309,6 +312,7 @@
                 setName(initialName);
                 setContent(initialContent);
                 setVariablesOpen(false);
+                setReferenceOpen(false);
             }
         }, [isOpen, initialName, initialContent]);
 
@@ -356,6 +360,33 @@
             })),
         ]);
 
+        // Read-only reference panel: the full list of every available
+        // variable (grouped, with its description), for consultation while
+        // typing — unlike variablesButton above, it doesn't insert anything.
+        var referenceButton = variableGroups && variableGroups.length > 0 && h('div', { style: 'margin-bottom:8px;' }, [
+            h('button', {
+                type: 'button',
+                class: 'mj-btn mj-btn--secondary',
+                onClick: function (event) {
+                    event.preventDefault();
+                    setReferenceOpen(function (open) { return !open; });
+                },
+            }, (referenceOpen ? '▾ ' : '▸ ') + 'Liste de toutes les variables disponibles'),
+            referenceOpen && h('div', {
+                style: 'margin-top:6px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;font-size:12px;max-height:260px;overflow-y:auto;',
+            }, variableGroups.map(function (group) {
+                return h('div', { key: group.label, style: 'margin-bottom:10px;' }, [
+                    h('div', { style: 'font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:0.5px;color:#64748b;margin-bottom:4px;' }, group.label),
+                    group.items.map(function (item) {
+                        return h('div', { key: item.token, style: 'padding:2px 0;' }, [
+                            h('code', { style: 'background:#e8f4fc;color:#0369a1;padding:1px 5px;border-radius:3px;font-family:\'SFMono-Regular\',Consolas,\'Liberation Mono\',Menlo,Courier,monospace;font-size:11px;' }, item.token),
+                            h('span', null, ' — ' + item.description),
+                        ]);
+                    }),
+                ]);
+            })),
+        ]);
+
         var footer = h(Fragment, null, [
             h('button', { type: 'button', class: 'mj-btn mj-btn--secondary', onClick: onClose, disabled: saving }, 'Annuler'),
             h('button', {
@@ -377,7 +408,7 @@
                 ]),
                 h('label', { class: 'mj-regmgr-doctpl-edit__label' }, [
                     'Contenu (HTML)',
-                    variablesButton,
+                    h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;' }, [variablesButton, referenceButton]),
                     h('textarea', {
                         ref: textareaRef,
                         class: 'mj-regmgr-doctpl-edit__textarea', rows: 10, value: content,

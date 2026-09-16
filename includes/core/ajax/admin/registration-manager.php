@@ -9061,8 +9061,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                     . ($checked ? '&#9745;' : '&#9744;') . ' ' . esc_html($other_label) . '</span>';
             }
 
-            return '<span style="display:block;margin:0.35em 0;"><span style="font-weight:700;display:block;margin-bottom:0.2em;">' . $title . '</span>'
-                . '<span style="display:block;">' . implode(' ', $rows) . '</span></span>';
+            return '<div style="margin:0.35em 0;"><h3 style="margin:0 0 0.2em 0;">' . $title . '</h3>'
+                . '<div>' . implode(' ', $rows) . '</div></div>';
         }
 
         if ($type === 'checkbox') {
