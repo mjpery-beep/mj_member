@@ -366,6 +366,8 @@ class EventSingleController extends Controller
 
         $coverUrl = $this->extractString($legacy, 'cover_thumb');
 
+        $posterUrl = $this->extractString($legacy, 'poster_url');
+
         $coverAlt = $title !== '' ? $title : $this->extractString($legacy, 'title');
 
 
@@ -553,6 +555,8 @@ class EventSingleController extends Controller
                 'cover_url' => $coverUrl,
 
                 'cover_alt' => $coverAlt,
+
+                'poster_url' => $posterUrl,
 
             ),
 

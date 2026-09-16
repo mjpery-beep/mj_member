@@ -654,6 +654,8 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-create-event-modal');
                 wp_enqueue_style('mj-member-day-notes-form');
                 wp_enqueue_script('mj-member-day-notes-form');
+                wp_enqueue_style('mj-member-regmgr-nextcloud-files');
+                wp_enqueue_script('mj-member-regmgr-nextcloud-files');
                 // Le mini-agenda du header (class-mj-member-header-widget.php) charge
                 // 'events-calendar-readonly' sur (quasi) toutes les pages et peut donc avoir
                 // déjà mis 'mj-member-events-calendar' en file AVANT ce bloc. Un simple

@@ -39,6 +39,7 @@ class MjEvents implements CrudRepositoryInterface {
         'accent_color' => '%s',
         'emoji' => '%s',
         'cover_id' => '%d',
+        'poster_url' => '%s',
         'location_id' => '%d',
         'animateur_id' => '%d',
         'created_by_member_id' => '%d',
@@ -1103,6 +1104,7 @@ class MjEvents implements CrudRepositoryInterface {
             'accent_color' => '',
             'emoji' => '',
             'cover_id' => 0,
+            'poster_url' => '',
             'location_id' => 0,
             'allow_guardian_registration' => 0,
             'requires_validation' => 0,
@@ -1162,7 +1164,7 @@ class MjEvents implements CrudRepositoryInterface {
             }
 
             if ($value === null || $value === '') {
-                if (in_array($column, array('description', 'title', 'registration_document', 'registration_document_templates'), true)) {
+                if (in_array($column, array('description', 'title', 'registration_document', 'registration_document_templates', 'poster_url'), true)) {
                     $prepared[$column] = '';
                     $formats[] = $format;
                 }
@@ -1234,6 +1236,15 @@ class MjEvents implements CrudRepositoryInterface {
                     break;
                 case 'slug':
                     $value = self::sanitize_slug_candidate($value);
+                    if ($value === '') {
+                        continue 2;
+                    }
+                    break;
+                case 'poster_url':
+                    $value = esc_url_raw(trim((string) $value));
+                    if (strlen($value) > 500) {
+                        $value = substr($value, 0, 500);
+                    }
                     if ($value === '') {
                         continue 2;
                     }

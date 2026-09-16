@@ -21,6 +21,7 @@ if (!defined('ABSPATH')) {
  * @property-read string|null $accent_color
  * @property-read string|null $emoji
  * @property-read int|null $cover_id
+ * @property-read string|null $poster_url
  * @property-read int|null $location_id
  * @property-read int|null $animateur_id
  * @property-read int|null $article_id
@@ -62,6 +63,7 @@ final class EventData implements JsonSerializable {
         'accent_color',
         'emoji',
         'cover_id',
+        'poster_url',
         'location_id',
         'animateur_id',
         'article_id',

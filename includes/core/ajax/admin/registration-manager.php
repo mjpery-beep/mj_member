@@ -5390,6 +5390,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'accent_color' => $accent_color,
                 'emoji' => $sanitized_emoji,
                 'cover_id' => isset($event->cover_id) ? (int) $event->cover_id : 0,
+                'poster_url' => isset($event->poster_url) ? (string) $event->poster_url : '',
                 'article_id' => isset($event->article_id) ? (int) $event->article_id : 0,
                 'location_id' => isset($event->location_id) ? (int) $event->location_id : 0,
                 'allow_guardian_registration' => !empty($event->allow_guardian_registration),
@@ -6200,6 +6201,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
         $accent_color = isset($form_values['accent_color']) ? $this->normalizeHexColor($form_values['accent_color']) : '';
         $cover_id = isset($form_values['cover_id']) ? (int) $form_values['cover_id'] : 0;
+        $poster_url = isset($form_values['poster_url']) ? esc_url_raw(trim((string) $form_values['poster_url'])) : '';
         $description = isset($form_values['description']) ? $this->sanitizeRichHtmlForPdfTemplates($form_values['description']) : '';
         $registration_document = isset($form_values['registration_document']) ? $this->sanitizeRichHtmlForPdfTemplates($form_values['registration_document']) : '';
         $registration_document_templates = isset($form_values['registration_document_templates']) ? $this->sanitizeDocumentTemplateMap($form_values['registration_document_templates']) : '{}';
@@ -6406,6 +6408,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'accent_color' => $accent_color,
             'emoji' => isset($form_values['emoji']) ? sanitize_text_field((string) $form_values['emoji']) : '',
             'cover_id' => $cover_id,
+            'poster_url' => $poster_url,
             'description' => $description,
             'registration_document' => $registration_document,
             'registration_document_templates' => $registration_document_templates,
@@ -6593,6 +6596,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'articleId' => isset($event->article_id) ? (int) $event->article_id : 0,
             'coverId' => isset($event->cover_id) ? (int) $event->cover_id : 0,
             'coverUrl' => $this->getEventCoverUrl($event, 'medium'),
+            'posterUrl' => isset($event->poster_url) ? (string) $event->poster_url : '',
             'coverFullUrl' => $this->getEventCoverUrl($event, 'full'),
             'capacityTotal' => isset($event->capacity_total) ? (int) $event->capacity_total : 0,
             'capacityWaitlist' => isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0,
@@ -8876,8 +8880,12 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $guardian = $guardian_id > 0 ? MjMembers::getById($guardian_id) : null;
 
             $force_autonomous = isset($_POST['isAutonomous']) ? filter_var($_POST['isAutonomous'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) : null;
+            $guardian_blank = isset($_POST['guardianBlank']) ? (bool) filter_var($_POST['guardianBlank'], FILTER_VALIDATE_BOOLEAN) : false;
 
             $variables = $this->buildRegistrationDocumentVariables($event, $member, $guardian);
+            if ($guardian_blank) {
+                $variables = $this->blankGuardianContractVariables($variables);
+            }
             $blocks = $this->buildRegistrationDocumentBlocks($event, $member, $registration_document, $variables, $force_autonomous);
 
             $event_title = isset($event->title) ? (string) $event->title : __('Événement', 'mj-member');
@@ -9142,10 +9150,18 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $guardian_id = !empty($member->guardian_id) ? (int) $member->guardian_id : 0;
             $guardian = $guardian_id > 0 ? MjMembers::getById($guardian_id) : null;
 
+            $guardian_blank = isset($_POST['guardianBlank']) ? (bool) filter_var($_POST['guardianBlank'], FILTER_VALIDATE_BOOLEAN) : false;
+            $member_blank = isset($_POST['memberBlank']) ? (bool) filter_var($_POST['memberBlank'], FILTER_VALIDATE_BOOLEAN) : false;
+
             $variables = array_merge(
                 $this->buildMemberContractVariables($member, $guardian),
                 $this->buildMemberContractDynFieldVariables($member_id)
             );
+            if ($member_blank) {
+                $variables = $this->blankMemberAndGuardianContractVariables($variables);
+            } elseif ($guardian_blank) {
+                $variables = $this->blankGuardianContractVariables($variables);
+            }
             $blocks = $this->buildMemberContractBlocks($variables);
 
             $member_name_for_contract = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
@@ -9438,8 +9454,58 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     private function buildBlankRegistrationDocumentVariables($event): array {
         $variables = $this->buildRegistrationDocumentVariables($event, null, null);
 
-        // Blank-line length per field: a postal code needs far less room to
-        // fill in by hand than a full address or an email.
+        return $this->blankMemberAndGuardianContractVariables($variables);
+    }
+
+    /**
+     * Replace every guardian_* entry of a variable map with a dotted line to
+     * fill in by hand — used by the member fiche's "Contrat" tab "Responsable
+     * légal vierge" checkbox, which prints/downloads the member's own data
+     * as-is but blanks out the legal guardian's, mirroring the blank-document
+     * process above (buildBlankRegistrationDocumentVariables) but scoped to
+     * guardian_* only (member_* stays real).
+     */
+    private function blankGuardianContractVariables(array $variables): array {
+        foreach ($variables as $key => $value) {
+            if (strpos($key, 'guardian_') !== 0) {
+                continue;
+            }
+            $suffix = substr($key, strlen('guardian_'));
+            $variables[$key] = $this->blankLineForFieldSuffix($suffix);
+        }
+
+        return $variables;
+    }
+
+    /**
+     * Replace every member_* and guardian_* entry of a variable map with a
+     * dotted line to fill in by hand — used by the member fiche's "Contrat"
+     * tab "Aperçu document vierge" button and by the event's blank-document
+     * download (buildBlankRegistrationDocumentVariables). Other variables
+     * (event_*, site_*, dynfield_*, current_date/year) stay real.
+     */
+    private function blankMemberAndGuardianContractVariables(array $variables): array {
+        foreach ($variables as $key => $value) {
+            $suffix = null;
+            if (strpos($key, 'member_') === 0) {
+                $suffix = substr($key, strlen('member_'));
+            } elseif (strpos($key, 'guardian_') === 0) {
+                $suffix = substr($key, strlen('guardian_'));
+            } else {
+                continue;
+            }
+
+            $variables[$key] = $this->blankLineForFieldSuffix($suffix);
+        }
+
+        return $variables;
+    }
+
+    /**
+     * Dotted-line length for a member_/guardian_ field suffix: a postal code
+     * needs far less room to fill in by hand than a full address or an email.
+     */
+    private function blankLineForFieldSuffix(string $suffix): string {
         $blank_length_by_suffix = array(
             'name' => 48,
             'first_name' => 20,
@@ -9454,21 +9520,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         );
         $default_blank_length = 30;
 
-        foreach ($variables as $key => $value) {
-            $suffix = null;
-            if (strpos($key, 'member_') === 0) {
-                $suffix = substr($key, strlen('member_'));
-            } elseif (strpos($key, 'guardian_') === 0) {
-                $suffix = substr($key, strlen('guardian_'));
-            } else {
-                continue;
-            }
-
-            $length = isset($blank_length_by_suffix[$suffix]) ? $blank_length_by_suffix[$suffix] : $default_blank_length;
-            $variables[$key] = str_repeat('.', $length);
-        }
-
-        return $variables;
+        $length = isset($blank_length_by_suffix[$suffix]) ? $blank_length_by_suffix[$suffix] : $default_blank_length;
+        return str_repeat('.', $length);
     }
 
     /**

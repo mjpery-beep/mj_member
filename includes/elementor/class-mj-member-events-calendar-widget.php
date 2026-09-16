@@ -3928,6 +3928,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if (class_exists(MjAgendaNotes::class)) {
                 $instance_config['noteNonce'] = wp_create_nonce('mj-member-day-notes');
                 $instance_config['noteAjaxUrl'] = admin_url('admin-ajax.php');
+                $instance_config['noteNextcloudNonce'] = wp_create_nonce('mj-registration-manager');
                 $instance_config['noteCanManageTypes'] = current_user_can(Config::capability());
 
                 $note_types = array();
@@ -4561,9 +4562,11 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     /**
      * Pre-fetch registrants for all given event IDs in 2 DB queries (event_id → member_id
      * mappings, then member → name/avatar data) instead of one registrations + member
-     * round-trip per event, and populate $registered_avatars_prefetch_cache (confirmed
-     * registrants only, with name/avatar, for display) and $registered_counts_prefetch_cache
-     * (confirmed + pending total, matching the capacity/remaining-places math used elsewhere).
+     * round-trip per event, and populate $registered_avatars_prefetch_cache (confirmed +
+     * pending registrants, with name/avatar, for display — same set as the count below, so
+     * the tooltip list always matches the "N inscrits" badge) and
+     * $registered_counts_prefetch_cache (confirmed + pending total, matching the
+     * capacity/remaining-places math used elsewhere).
      *
      * @param array $event_ids
      */
@@ -4600,8 +4603,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             return;
         }
 
-        $event_member_map = array(); // event_id → [member_id, ...] confirmed only, in registration order
-        $all_member_ids = array();   // unique confirmed member IDs (only those need a name/avatar)
+        $event_member_map = array(); // event_id → [member_id, ...] confirmed + pending, in registration order
+        $all_member_ids = array();   // unique member IDs needing a name/avatar
         foreach ($reg_rows as $rr) {
             $eid = (int) $rr->event_id;
             $mid = (int) $rr->member_id;
@@ -4611,11 +4614,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
             self::$registered_counts_prefetch_cache[$eid] = (self::$registered_counts_prefetch_cache[$eid] ?? 0) + 1;
 
-            $status = isset($rr->statut) ? (string) $rr->statut : '';
-            if ($status === MjEventRegistrations::STATUS_CONFIRMED) {
-                $event_member_map[$eid][] = $mid;
-                $all_member_ids[$mid] = $mid;
-            }
+            $event_member_map[$eid][] = $mid;
+            $all_member_ids[$mid] = $mid;
         }
 
         if (empty($all_member_ids)) {

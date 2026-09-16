@@ -169,6 +169,7 @@
                 groupOptions: config.groupOptions,
                 members: config.members,
                 canManageTypes: config.canManageTypes,
+                nextcloudNonce: config.nextcloudNonce,
             };
         }, [config, noteTypes]);
 

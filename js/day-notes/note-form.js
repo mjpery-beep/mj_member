@@ -114,51 +114,6 @@
     }
 
     // ============================================
-    // Media gallery (upload multiple + thumbnails)
-    // ============================================
-    function MediaGallery(props) {
-        var media = props.media || [];
-        var onUpload = props.onUpload;
-        var onRemove = props.onRemove;
-        var uploading = props.uploading;
-        var disabled = props.disabled;
-
-        function handleFiles(e) {
-            var files = e.target.files;
-            if (!files || !files.length) return;
-            Array.prototype.forEach.call(files, function (file) {
-                onUpload(file);
-            });
-            e.target.value = '';
-        }
-
-        return h('div', { class: 'mj-day-note-form__media' }, [
-            h('div', { class: 'mj-day-note-form__media-list' }, media.map(function (item) {
-                return h('div', { key: item.id, class: 'mj-day-note-form__media-item' }, [
-                    h('img', { src: item.thumbUrl || item.url, alt: '' }),
-                    h('button', {
-                        type: 'button',
-                        class: 'mj-day-note-form__media-remove',
-                        'aria-label': 'Supprimer l’image',
-                        onClick: function () { onRemove(item.id); },
-                        disabled: disabled,
-                    }, '×'),
-                ]);
-            })),
-            h('label', { class: 'mj-day-note-form__media-upload' }, [
-                h('input', {
-                    type: 'file',
-                    accept: 'image/*',
-                    multiple: true,
-                    onChange: handleFiles,
-                    disabled: disabled || uploading,
-                }),
-                uploading ? 'Envoi en cours…' : '+ Ajouter des images',
-            ]),
-        ]);
-    }
-
-    // ============================================
     // Recurrence prefill helpers
     // ============================================
     function buildInitialOccurrence(note) {
@@ -444,6 +399,13 @@
 
         var isEdit = !!(note && note.id);
 
+        var nextcloudPanel = global.MjRegMgrNextcloudFiles && global.MjRegMgrNextcloudFiles.NextcloudFilesPanel;
+        var nextcloudApi = global.MjRegMgrServices && typeof global.MjRegMgrServices.createApiService === 'function'
+            ? global.MjRegMgrServices.createApiService({ ajaxUrl: ajaxUrl, nonce: config.nextcloudNonce || '' })
+            : null;
+        var stateNextcloudOpen = useState(false);
+        var nextcloudOpen = stateNextcloudOpen[0], setNextcloudOpen = stateNextcloudOpen[1];
+
         var stateTitle = useState(note ? (note.title || '') : '');
         var stateContent = useState(note ? (note.content || '') : '');
         var stateEmoji = useState(note ? (note.emoji || '') : '');
@@ -461,7 +423,6 @@
         var stateEndTime = useState(note ? (note.end_time || '') : '');
 
         var stateMedia = useState((note && note.media) || []);
-        var stateUploading = useState(false);
         var stateSaving = useState(false);
         var stateError = useState('');
         var stateSeriesLoading = useState(false);
@@ -483,7 +444,6 @@
         var endTime = stateEndTime[0], setEndTime = stateEndTime[1];
 
         var media = stateMedia[0], setMedia = stateMedia[1];
-        var uploading = stateUploading[0], setUploading = stateUploading[1];
         var saving = stateSaving[0], setSaving = stateSaving[1];
         var error = stateError[0], setError = stateError[1];
         var seriesLoading = stateSeriesLoading[0], setSeriesLoading = stateSeriesLoading[1];
@@ -503,6 +463,7 @@
             setStartTime(note ? (note.start_time || '') : '');
             setEndTime(note ? (note.end_time || '') : '');
             setMedia((note && note.media) || []);
+            setNextcloudOpen(false);
             setError('');
 
             var initialAssignedIds = note && note.assigned_member_ids ? note.assigned_member_ids.map(String) : [];
@@ -550,35 +511,6 @@
                 setOccurrence(OccurrencePickerPkg.defaultOccurrenceValue(buildInitialOccurrence(note)));
             }
         }, [isOpen, note]);
-
-        var handleUpload = useCallback(function (file) {
-            if (!ajaxUrl) return;
-            setUploading(true);
-            setError('');
-            var form = new FormData();
-            form.append('action', 'mj_member_day_notes_upload_media');
-            form.append('nonce', nonce || '');
-            form.append('file', file);
-
-            postAjax(ajaxUrl, form, true)
-                .then(function (data) {
-                    setMedia(function (prev) { return prev.concat([{ id: data.id, url: data.url, thumbUrl: data.thumbUrl }]); });
-                })
-                .catch(function (err) { setError(err.message); })
-                .then(function () { setUploading(false); });
-        }, [ajaxUrl, nonce]);
-
-        var handleRemoveMedia = useCallback(function (attachmentId) {
-            setMedia(function (prev) { return prev.filter(function (m) { return m.id !== attachmentId; }); });
-            if (isEdit && ajaxUrl) {
-                postAjax(ajaxUrl, {
-                    action: 'mj_member_day_notes_delete_media',
-                    nonce: nonce || '',
-                    note_id: note.id,
-                    attachment_id: attachmentId,
-                }).catch(function () {});
-            }
-        }, [ajaxUrl, nonce, isEdit, note]);
 
         var resolveDates = useCallback(function () {
             return OccurrencePickerPkg.resolveOccurrenceDates(occurrence.mode, occurrence);
@@ -842,14 +774,15 @@
             ]),
 
             h('div', { class: 'mj-day-note-form__group' }, [
-                h('label', { class: 'mj-regmgr-form__label' }, 'Images'),
-                h(MediaGallery, {
-                    media: media,
-                    onUpload: handleUpload,
-                    onRemove: handleRemoveMedia,
-                    uploading: uploading,
-                    disabled: saving,
-                }),
+                h('label', { class: 'mj-regmgr-form__label' }, 'Fichiers'),
+                isEdit
+                    ? h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-btn mj-regmgr-btn--secondary',
+                        onClick: function () { setNextcloudOpen(true); },
+                        disabled: !nextcloudPanel || !nextcloudApi,
+                    }, '☁️ Fichiers')
+                    : h('p', { class: 'mj-regmgr-form__hint' }, getString(strings, 'filesRequireSave', 'Enregistrez d’abord la note pour ajouter des fichiers.')),
             ]),
 
             isEdit && note.author_name && h('div', { class: 'mj-day-note-form__meta' }, [
@@ -864,6 +797,12 @@
             types: typesList,
             onChanged: setTypesList,
         }),
+        nextcloudPanel && nextcloudApi && h('div', { class: 'mj-day-note-form__nextcloud-modal' }, h(Modal, {
+            isOpen: isEdit && nextcloudOpen,
+            onClose: function () { setNextcloudOpen(false); },
+            title: '☁️ Fichiers' + (title ? ' — ' + title : ''),
+            size: 'large',
+        }, isEdit && h(nextcloudPanel, { context: 'note', contextId: note.id, apiService: nextcloudApi }))),
         ]);
     }
 

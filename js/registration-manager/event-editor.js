@@ -60,6 +60,9 @@
         coverEmpty: 'Aucun visuel selectionne.',
         coverPreviewAlt: 'Apercu du visuel de couverture',
         coverModalTitle: 'Choisir un visuel de couverture',
+        posterUrl: 'Lien affiche (Canva, ...)',
+        posterUrlOpen: 'Ouvrir le lien',
+        posterUrlHint: "Lien vers l'affiche (ex. Canva). Affiche un bouton \"Voir l'affiche\" sur la fiche evenement, en plus du visuel ci-dessus.",
         aiVisualModalTitle: 'IA Visual Generator',
         aiVisualPromptLabel: 'Prompt fusionne',
         aiVisualBasePromptLabel: 'Prompt de base',
@@ -5059,6 +5062,18 @@
                                 onChange: function (e) { handleNumberChange('event_cover_id', e.target.value); },
                                 min: '0',
                             }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                            h('label', null, getString(strings, 'posterUrl', 'Lien affiche (Canva, ...)')),
+                            h('input', {
+                                type: 'url',
+                                value: formState.event_poster_url || '',
+                                onChange: function (e) { updateFormValue('event_poster_url', e.target.value); },
+                                placeholder: 'https://www.canva.com/design/xxxx/view',
+                            }),
+                            formState.event_poster_url ? h('p', { class: 'mj-regmgr-field-hint' }, [
+                                h('a', { href: formState.event_poster_url, target: '_blank', rel: 'noopener noreferrer' }, getString(strings, 'posterUrlOpen', 'Ouvrir le lien')),
+                            ]) : h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'posterUrlHint', "Lien vers l'affiche (ex. Canva). Affiche un bouton \"Voir l'affiche\" sur la fiche evenement, en plus du visuel ci-dessus.")),
                         ]),
                     ]),
                 ]),

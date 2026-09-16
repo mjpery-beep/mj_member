@@ -92,6 +92,34 @@
     var TemplateSectionPicker = DocTpl ? DocTpl.TemplateSectionPicker : null;
     var TemplateEditModal = DocTpl ? DocTpl.TemplateEditModal : null;
 
+    // Dotted-line length per guardian_ field suffix for the "Responsable
+    // légal vierge" checkbox on the event registration contract preview —
+    // mirrors GUARDIAN_BLANK_LENGTH_BY_SUFFIX in members.js and
+    // blankLineForFieldSuffix() (PHP).
+    var GUARDIAN_BLANK_LENGTH_BY_SUFFIX = {
+        name: 48,
+        first_name: 20,
+        last_name: 20,
+        email: 30,
+        phone: 16,
+        address: 58,
+        address_line: 40,
+        postal_code: 8,
+        city: 22,
+    };
+    var GUARDIAN_BLANK_DEFAULT_LENGTH = 30;
+
+    function blankGuardianVariables(variables) {
+        var result = Object.assign({}, variables);
+        Object.keys(result).forEach(function (key) {
+            if (key.indexOf('guardian_') !== 0) return;
+            var suffix = key.slice('guardian_'.length);
+            var length = GUARDIAN_BLANK_LENGTH_BY_SUFFIX[suffix] || GUARDIAN_BLANK_DEFAULT_LENGTH;
+            result[key] = new Array(length + 1).join('.');
+        });
+        return result;
+    }
+
     // ============================================
     // EVENT DETAIL PANEL
     // ============================================
@@ -2572,16 +2600,20 @@
             });
         }, [selectedEvent, eventDetails, regDocState, docTemplates, docTemplateSelection, config, strings, showError, setRegDocPreviewState]);
 
-        // Download document for a single member
-        var handleDownloadMemberDoc = useCallback(function (registration, isAutonomousOverride) {
+        // Builds the preview/PDF state for one member's registration contract
+        // (header + autorisation/attestation + description + signature +
+        // footer), optionally blanking [guardian_*] to dotted lines to fill
+        // in by hand ("Responsable légal vierge") — reused by both the
+        // initial download click and the in-modal blank toggle so both stay
+        // in sync.
+        var buildEventContractDoc = useCallback(function (registration, isAutonomous, guardianBlank) {
             if (!selectedEvent || !eventDetails || !registration || !registration.member) {
-                return;
+                return null;
             }
 
             var content = regDocState.draft || eventDetails.registrationDocument || '';
             if (!content) {
-                showError(getString(strings, 'regDocEmpty', 'Aucun contenu de document configuré pour cet événement.'));
-                return;
+                return null;
             }
 
             var member = registration.member;
@@ -2687,8 +2719,11 @@
                 guardian_city: guardianCity,
             };
 
+            if (guardianBlank) {
+                memberVars = blankGuardianVariables(memberVars);
+            }
+
             var allVariables = Object.assign({}, baseVariables, memberVars);
-            var isAutonomous = typeof isAutonomousOverride === 'boolean' ? isAutonomousOverride : !!(member && member.isAutonomous);
 
             // Process content: header + autorisation/attestation (per member
             // autonomy) + description + signature + footer, same order as the
@@ -2716,16 +2751,45 @@
                 (DocTpl ? DocTpl.PREVIEW_STYLE : '.regdoc-content{min-height:150px;}') +
                 '</style></head><body>' + bodyHtml + '</body></html>';
 
-            setRegDocPreviewState({
+            return {
                 isOpen: true,
                 title: getString(strings, 'registrationDocPreviewTitle', "Aperçu du document d'inscription")
-                    + (isAutonomous ? ' — ' + getString(strings, 'docTplVariantAutonomous', 'membre autonome') : ' — ' + getString(strings, 'docTplVariantGuardian', 'autorisation parentale')),
+                    + (isAutonomous ? ' — ' + getString(strings, 'docTplVariantAutonomous', 'membre autonome') : ' — ' + getString(strings, 'docTplVariantGuardian', 'autorisation parentale'))
+                    + (guardianBlank ? ' — ' + getString(strings, 'registrationDocGuardianBlankLabel', 'Responsable légal vierge') : ''),
                 html: htmlDoc,
                 registrationId: registration.id,
                 isAutonomous: isAutonomous,
+                guardianBlank: !!guardianBlank,
                 content: content,
+                registration: registration,
+            };
+        }, [selectedEvent, eventDetails, regDocState, docTemplates, docTemplateSelection, config, strings]);
+
+        // Download document for a single member
+        var handleDownloadMemberDoc = useCallback(function (registration, isAutonomousOverride) {
+            if (!registration || !registration.member) {
+                return;
+            }
+            var isAutonomous = typeof isAutonomousOverride === 'boolean' ? isAutonomousOverride : !!(registration.member && registration.member.isAutonomous);
+            var docState = buildEventContractDoc(registration, isAutonomous, false);
+            if (!docState) {
+                showError(getString(strings, 'regDocEmpty', 'Aucun contenu de document configuré pour cet événement.'));
+                return;
+            }
+            setRegDocPreviewState(docState);
+        }, [buildEventContractDoc, showError, strings, setRegDocPreviewState]);
+
+        // Toggles "Responsable légal vierge" on the currently open registration
+        // contract preview, rebuilding it in place with the same registration/variant.
+        var handleToggleGuardianBlank = useCallback(function (checked) {
+            setRegDocPreviewState(function (prev) {
+                if (!prev || !prev.isOpen || !prev.registration) {
+                    return prev;
+                }
+                var docState = buildEventContractDoc(prev.registration, prev.isAutonomous, !!checked);
+                return docState || prev;
             });
-        }, [selectedEvent, eventDetails, regDocState, docTemplates, docTemplateSelection, config, strings, showError, setRegDocPreviewState]);
+        }, [buildEventContractDoc]);
 
         var handleDownloadRegDocPreviewPdf = useCallback(function () {
             var isBlank = !!(regDocPreviewState && regDocPreviewState.isBlank);
@@ -2759,7 +2823,7 @@
 
             var downloadPromise = isBlank
                 ? api.downloadRegistrationDocumentBlankPdf(eventIdForBlank, content, regDocPreviewState && regDocPreviewState.isAutonomous)
-                : api.downloadRegistrationContractPdf(registrationId, content, regDocPreviewState && regDocPreviewState.isAutonomous);
+                : api.downloadRegistrationContractPdf(registrationId, content, regDocPreviewState && regDocPreviewState.isAutonomous, regDocPreviewState && regDocPreviewState.guardianBlank);
 
             downloadPromise
                 .then(function (data) {
@@ -6991,6 +7055,9 @@
                 htmlContent: regDocPreviewState.html,
                 onDownload: handleDownloadRegDocPreviewPdf,
                 isDownloadLoading: regDocPreviewDownloading,
+                showGuardianBlankOption: !regDocPreviewState.isBlank && !!regDocPreviewState.registration,
+                guardianBlank: !!regDocPreviewState.guardianBlank,
+                onGuardianBlankChange: handleToggleGuardianBlank,
                 strings: strings,
             }),
 

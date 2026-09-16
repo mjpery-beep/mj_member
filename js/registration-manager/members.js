@@ -3484,12 +3484,42 @@
     // MEMBER CONTRACT ("fiche d'inscription") TAB
     // ============================================
 
+    // Dotted-line length per guardian_ field suffix when "Responsable légal
+    // vierge" is checked — mirrors blankLineForFieldSuffix() (PHP): a postal
+    // code needs far less room to fill in by hand than a full address.
+    var GUARDIAN_BLANK_LENGTH_BY_SUFFIX = {
+        name: 48,
+        first_name: 20,
+        last_name: 20,
+        email: 30,
+        phone: 16,
+        address: 58,
+        address_line: 40,
+        postal_code: 8,
+        city: 22,
+    };
+    var GUARDIAN_BLANK_DEFAULT_LENGTH = 30;
+
+    function blankGuardianContractVariables(variables) {
+        var result = Object.assign({}, variables);
+        Object.keys(result).forEach(function (key) {
+            if (key.indexOf('guardian_') !== 0) return;
+            var suffix = key.slice('guardian_'.length);
+            var length = GUARDIAN_BLANK_LENGTH_BY_SUFFIX[suffix] || GUARDIAN_BLANK_DEFAULT_LENGTH;
+            result[key] = new Array(length + 1).join('.');
+        });
+        return result;
+    }
+
     /**
      * Builds the [variable] map for the member contract preview, mirroring
      * buildMemberContractVariables() in registration-manager.php. Uses the
      * `member` prop already loaded for the fiche (no extra AJAX round-trip).
+     *
+     * @param {boolean} [guardianBlank] - "Responsable légal vierge": replace
+     *   every guardian_* value with a dotted line to fill in by hand.
      */
-    function buildMemberContractPreviewVariables(member, config) {
+    function buildMemberContractPreviewVariables(member, config, guardianBlank) {
         var firstName = (member && member.firstName) || '';
         var lastName = (member && member.lastName) || '';
         var memberName = (firstName + ' ' + lastName).trim();
@@ -3537,7 +3567,8 @@
 
         var dynFieldVariables = DocTpl ? DocTpl.buildMemberContractDynFieldVariables(member && member.dynamicFields) : {};
 
-        return Object.assign({}, baseVariables, dynFieldVariables);
+        var allVariables = Object.assign({}, baseVariables, dynFieldVariables);
+        return guardianBlank ? blankGuardianContractVariables(allVariables) : allVariables;
     }
 
     /**
@@ -3655,6 +3686,10 @@
         var previewDownloading = _previewDownloading[0];
         var setPreviewDownloading = _previewDownloading[1];
 
+        var _guardianBlank = useState(false);
+        var guardianBlank = _guardianBlank[0];
+        var setGuardianBlank = _guardianBlank[1];
+
         var refreshTemplates = useCallback(function () {
             if (!apiService) return;
             apiService.listDocumentTemplates()
@@ -3741,7 +3776,7 @@
         var handleOpenPreview = useCallback(function () {
             if (!DocTpl) return;
             var blocks = DocTpl.resolveMemberContractBlocks(templates);
-            var variables = buildMemberContractPreviewVariables(member, config);
+            var variables = buildMemberContractPreviewVariables(member, config, guardianBlank);
             var bodyHtml = DocTpl.buildBlocksHtml(blocks, variables);
 
             var fullName = ((member && member.firstName) || '') + ' ' + ((member && member.lastName) || '');
@@ -3763,7 +3798,7 @@
                 title: getString(strings, 'memberContractPreviewTitle', "Fiche d'inscription") + (fullName.trim() ? ' — ' + fullName.trim() : ''),
                 html: htmlDoc,
             });
-        }, [templates, member, config, strings]);
+        }, [templates, member, config, strings, guardianBlank]);
 
         var handleClosePreview = useCallback(function () {
             setPreview({ isOpen: false, title: '', html: '' });
@@ -3772,7 +3807,7 @@
         var handleDownloadPreviewPdf = useCallback(function () {
             if (!member || !member.id || !apiService) return;
             setPreviewDownloading(true);
-            apiService.downloadMemberContractPdf(member.id)
+            apiService.downloadMemberContractPdf(member.id, guardianBlank)
                 .then(function (data) {
                     var downloadUrl = data && typeof data.downloadUrl === 'string' ? data.downloadUrl : '';
                     if (!downloadUrl) {
@@ -3793,7 +3828,11 @@
                 .finally(function () {
                     setPreviewDownloading(false);
                 });
-        }, [member, apiService, strings]);
+        }, [member, apiService, strings, guardianBlank]);
+
+        var handleGuardianBlankChange = useCallback(function (event) {
+            setGuardianBlank(!!(event && event.target && event.target.checked));
+        }, []);
 
         if (!TemplateSectionPicker || !TemplateEditModal) {
             return null;
@@ -3854,6 +3893,17 @@
                 onClose: handleCloseModal,
             }),
             h('div', { class: 'mj-regmgr-regdoc-actions' }, [
+                h('label', {
+                    class: 'mj-regmgr-checkbox mj-regmgr-regdoc-actions__checkbox',
+                    title: getString(strings, 'memberContractGuardianBlankHint', "Remplace les informations du responsable légal ([guardian_*]) par des pointillés à compléter à la main ; les données du membre restent affichées."),
+                }, [
+                    h('input', {
+                        type: 'checkbox',
+                        checked: guardianBlank,
+                        onChange: handleGuardianBlankChange,
+                    }),
+                    h('span', null, getString(strings, 'memberContractGuardianBlankLabel', 'Responsable légal vierge')),
+                ]),
                 h('button', {
                     type: 'button',
                     class: 'mj-btn mj-btn--primary',

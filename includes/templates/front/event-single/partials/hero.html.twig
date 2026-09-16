@@ -8,6 +8,7 @@
 {% set date_label = hero.date_label|default('') %}
 {% set cover_url = hero.cover_url|default('') %}
 {% set cover_alt = hero.cover_alt|default(title) %}
+{% set poster_url = hero.poster_url|default('') %}
 
 <section class="mj-member-event-single__hero">
     <div class="mj-member-event-single__badges">
@@ -34,5 +35,10 @@
         <div class="mj-member-event-single__hero-cover">
             <img src="{{ cover_url|esc_url }}" alt="{{ cover_alt|esc_attr }}" loading="lazy" />
         </div>
+    {% endif %}
+    {% if poster_url %}
+        <a class="mj-member-event-single__poster-link" href="{{ poster_url|esc_url }}" target="_blank" rel="noopener noreferrer">
+            Voir l'affiche
+        </a>
     {% endif %}
 </section>

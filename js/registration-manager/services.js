@@ -273,9 +273,10 @@
 
             /**
              * Génère puis retourne la fiche d'inscription (contrat) d'un membre en PDF.
+             * @param {boolean} [guardianBlank] - remplace les variables [guardian_*] par des pointillés à compléter à la main.
              */
-            downloadMemberContractPdf: function (memberId) {
-                return post('mj_regmgr_download_member_contract_pdf', { memberId: memberId });
+            downloadMemberContractPdf: function (memberId, guardianBlank) {
+                return post('mj_regmgr_download_member_contract_pdf', { memberId: memberId, guardianBlank: !!guardianBlank });
             },
 
             /**
@@ -451,10 +452,12 @@
 
             /**
              * Génère puis retourne le contrat d'inscription d'une inscription en PDF.
+             * @param {boolean} [guardianBlank] - remplace les variables [guardian_*] par des pointillés à compléter à la main.
              */
-            downloadRegistrationContractPdf: function (registrationId, content, isAutonomous) {
+            downloadRegistrationContractPdf: function (registrationId, content, isAutonomous, guardianBlank) {
                 var payload = {
                     registrationId: registrationId,
+                    guardianBlank: !!guardianBlank,
                 };
                 if (typeof content === 'string' && content !== '') {
                     payload.content = content;

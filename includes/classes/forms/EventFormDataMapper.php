@@ -5,6 +5,7 @@ namespace Mj\Member\Classes\Forms;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjDocumentTemplates;
 use function array_key_exists;
+use function esc_url_raw;
 use function json_decode;
 use function sanitize_text_field;
 use function is_array;
@@ -71,6 +72,7 @@ final class EventFormDataMapper
             'event_article_cat' => isset($values['article_cat']) ? (int) $values['article_cat'] : 0,
             'event_article_id' => isset($values['article_id']) ? (int) $values['article_id'] : 0,
             'event_cover_id' => isset($values['cover_id']) ? (int) $values['cover_id'] : 0,
+            'event_poster_url' => isset($values['poster_url']) ? (string) $values['poster_url'] : '',
             'event_location_id' => isset($values['location_id']) ? (int) $values['location_id'] : 0,
             'event_animateur_ids' => isset($values['animateur_ids']) && is_array($values['animateur_ids']) ? array_map('intval', $values['animateur_ids']) : array(),
             'event_volunteer_ids' => isset($values['volunteer_ids']) && is_array($values['volunteer_ids']) ? array_map('intval', $values['volunteer_ids']) : array(),
@@ -134,6 +136,7 @@ final class EventFormDataMapper
         $values['article_cat'] = isset($formData['event_article_cat']) ? (int) $formData['event_article_cat'] : $values['article_cat'];
         $values['article_id'] = isset($formData['event_article_id']) ? (int) $formData['event_article_id'] : $values['article_id'];
         $values['cover_id'] = isset($formData['event_cover_id']) ? (int) $formData['event_cover_id'] : $values['cover_id'];
+        $values['poster_url'] = array_key_exists('event_poster_url', $formData) ? esc_url_raw(trim((string) $formData['event_poster_url'])) : (isset($values['poster_url']) ? $values['poster_url'] : '');
         $values['location_id'] = isset($formData['event_location_id']) ? (int) $formData['event_location_id'] : $values['location_id'];
         $values['animateur_ids'] = isset($formData['event_animateur_ids']) && is_array($formData['event_animateur_ids']) ? array_map('intval', $formData['event_animateur_ids']) : (isset($values['animateur_ids']) ? $values['animateur_ids'] : array());
         $values['volunteer_ids'] = isset($formData['event_volunteer_ids']) && is_array($formData['event_volunteer_ids']) ? array_map('intval', $formData['event_volunteer_ids']) : (isset($values['volunteer_ids']) ? $values['volunteer_ids'] : array());

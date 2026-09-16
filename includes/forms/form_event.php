@@ -1096,6 +1096,7 @@ if ($event) {
         'accent_color' => $accent_color_value,
         'emoji' => mj_member_admin_sanitize_emoji(isset($event->emoji) ? $event->emoji : ''),
         'cover_id' => (int) $event->cover_id,
+        'poster_url' => isset($event->poster_url) ? (string) $event->poster_url : '',
         'article_id' => isset($event->article_id) ? (int) $event->article_id : 0,
         'location_id' => (int) (isset($event->location_id) ? $event->location_id : 0),
         'allow_guardian_registration' => !empty($event->allow_guardian_registration) ? 1 : 0,
@@ -1261,6 +1262,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     }
 
     $cover_id = isset($_POST['event_cover_id']) ? (int) $_POST['event_cover_id'] : 0;
+    $poster_url = isset($_POST['event_poster_url']) ? esc_url_raw(trim(wp_unslash((string) $_POST['event_poster_url']))) : '';
 
     $age_min = isset($_POST['event_age_min']) ? (int) $_POST['event_age_min'] : (int) $defaults['age_min'];
     $age_max = isset($_POST['event_age_max']) ? (int) $_POST['event_age_max'] : (int) $defaults['age_max'];
@@ -1957,6 +1959,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
         'accent_color' => $accent_color_input,
         'emoji' => $emoji_input,
         'cover_id' => $cover_id,
+        'poster_url' => $poster_url,
         'description' => $description,
         'age_min' => $age_min,
         'age_max' => $age_max,
@@ -2033,6 +2036,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
             'accent_color' => $accent_color_input,
             'emoji' => $emoji_input,
             'cover_id' => $cover_id,
+            'poster_url' => $poster_url,
             'description' => $description,
             'age_min' => $age_min,
             'age_max' => $age_max,
@@ -2085,6 +2089,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                     $form_values['type'] = $event->type;
                     $form_values['accent_color'] = isset($event->accent_color) ? mj_member_admin_normalize_hex_color($event->accent_color) : '';
                     $form_values['cover_id'] = (int) $event->cover_id;
+                    $form_values['poster_url'] = isset($event->poster_url) ? (string) $event->poster_url : '';
                     $form_values['article_id'] = isset($event->article_id) ? (int) $event->article_id : 0;
                     $form_values['location_id'] = (int) (isset($event->location_id) ? $event->location_id : 0);
                     $form_values['accent_color'] = isset($event->accent_color) ? mj_member_admin_normalize_hex_color($event->accent_color) : '';
@@ -2175,6 +2180,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                     $form_values['date_fin'] = mj_member_format_event_datetime($event->date_fin);
                     $form_values['date_fin_inscription'] = mj_member_format_event_datetime($event->date_fin_inscription);
                     $form_values['cover_id'] = (int) $event->cover_id;
+                    $form_values['poster_url'] = isset($event->poster_url) ? (string) $event->poster_url : '';
                     $form_values['article_id'] = isset($event->article_id) ? (int) $event->article_id : 0;
                     $form_values['location_id'] = (int) (isset($event->location_id) ? $event->location_id : 0);
                     $form_values['description'] = $event->description;
@@ -2986,6 +2992,13 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                         <button type="button" class="button" id="mj-event-cover-select">Choisir une image</button>
                         <button type="button" class="button" id="mj-event-cover-remove">Retirer</button>
                     </div>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><label for="mj-event-poster-url">Lien affiche (Canva, ...)</label></th>
+                <td>
+                    <input type="url" id="mj-event-poster-url" name="event_poster_url" class="regular-text" value="<?php echo esc_attr(isset($form_values['poster_url']) ? $form_values['poster_url'] : ''); ?>" placeholder="https://www.canva.com/design/xxxx/view" />
+                    <p class="description mj-event-help-text">Lien vers l'affiche (ex. Canva). Affiche un bouton "Voir l'affiche" sur la fiche événement, en plus du visuel ci-dessus.</p>
                 </td>
             </tr>
             <tr class="mj-event-section-heading">

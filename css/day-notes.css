@@ -1134,3 +1134,14 @@
     height: 14px !important;
     margin-left: 0 !important;
 }
+
+/*
+ * Nested "Fichiers" (Nextcloud) modal opened from within the note edit
+ * modal: both use the shared .mj-regmgr-modal (z-index: 10000), so without
+ * an explicit bump the nested one can end up painted behind the edit modal
+ * depending on stacking context quirks introduced by the calendar widget's
+ * own heavy z-index overrides.
+ */
+.mj-day-note-form__nextcloud-modal .mj-regmgr-modal {
+    z-index: 10001 !important;
+}

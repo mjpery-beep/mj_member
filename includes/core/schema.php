@@ -2563,6 +2563,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_102($wpdb);
     mj_member_upgrade_to_2_103($wpdb);
     mj_member_upgrade_to_2_104($wpdb);
+    mj_member_upgrade_to_2_105($wpdb);
 
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -7732,6 +7733,23 @@ function mj_member_seed_default_document_templates($wpdb, $table) {
  *
  * @param wpdb $wpdb
  */
+/**
+ * Migration 2.105: events — add poster_url to let coordinateurs attach a
+ * link to the event's poster (e.g. a Canva design) alongside the cover image.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_105($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+    if (!$events_table || !mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($events_table, 'poster_url')) {
+        $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN poster_url VARCHAR(500) NOT NULL DEFAULT '' AFTER cover_id");
+    }
+}
+
 function mj_member_upgrade_to_2_104($wpdb) {
     $table = mj_member_get_document_templates_table_name();
     if (!$table || !mj_member_table_exists($table)) {

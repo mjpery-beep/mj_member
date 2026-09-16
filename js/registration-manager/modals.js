@@ -210,6 +210,9 @@
         var htmlContent = typeof props.htmlContent === 'string' ? props.htmlContent : '';
         var title = props.title || 'Apercu du document';
         var strings = props.strings || {};
+        var showGuardianBlankOption = !!props.showGuardianBlankOption;
+        var guardianBlank = !!props.guardianBlank;
+        var onGuardianBlankChange = typeof props.onGuardianBlankChange === 'function' ? props.onGuardianBlankChange : null;
 
         var iframeRef = useRef(null);
 
@@ -236,6 +239,17 @@
         }, [
             h('div', { class: 'mj-regmgr-doc-preview' }, [
                 h('div', { class: 'mj-regmgr-doc-preview__actions' }, [
+                    showGuardianBlankOption && onGuardianBlankChange && h('label', {
+                        class: 'mj-regmgr-checkbox mj-regmgr-doc-preview__checkbox',
+                        title: getString(strings, 'registrationDocGuardianBlankHint', "Remplace les informations du responsable légal ([guardian_*]) par des pointillés à compléter à la main ; les données du membre restent affichées."),
+                    }, [
+                        h('input', {
+                            type: 'checkbox',
+                            checked: guardianBlank,
+                            onChange: function (e) { onGuardianBlankChange(!!(e && e.target && e.target.checked)); },
+                        }),
+                        h('span', null, getString(strings, 'registrationDocGuardianBlankLabel', 'Responsable légal vierge')),
+                    ]),
                     onDownload && h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--secondary mj-btn--small',

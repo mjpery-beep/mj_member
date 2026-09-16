@@ -523,6 +523,7 @@
                 groupOptions: Array.isArray(config.noteGroupOptions) ? config.noteGroupOptions : undefined,
                 members: Array.isArray(config.noteAssignableMembers) ? config.noteAssignableMembers : [],
                 canManageTypes: !!config.noteCanManageTypes,
+                nextcloudNonce: config.noteNextcloudNonce,
             };
 
             var noteForEdit = noteModalCurrent && noteModalCurrent.id ? noteModalCurrent

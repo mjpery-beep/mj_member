@@ -210,6 +210,8 @@ final class EventSingleDefaults
 
             'cover_thumb' => '',
 
+            'poster_url' => '',
+
             'registration_price_label' => '',
 
             'registration_deadline_label' => '',
