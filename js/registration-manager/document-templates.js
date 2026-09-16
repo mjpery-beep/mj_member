@@ -24,6 +24,7 @@
     var Fragment = preact.Fragment;
     var useState = hooks.useState;
     var useEffect = hooks.useEffect;
+    var useRef = hooks.useRef;
     var Modal = Modals.Modal;
     var getString = Utils.getString;
 
@@ -35,6 +36,9 @@
         { key: 'signature_guardian', label: 'Espace signature parentale', variant: 'guardian' },
         { key: 'signature_autonomous', label: 'Espace signature membre autonome', variant: 'autonomous' },
         { key: 'footer', label: 'Pied de page', variant: null },
+        { key: 'member_header', label: 'En-tête (fiche membre)', variant: null },
+        { key: 'member_content', label: "Contenu (fiche d'inscription)", variant: null },
+        { key: 'member_footer', label: 'Pied de page (fiche membre)', variant: null },
     ];
 
     function sectionLabel(sectionKey) {
@@ -93,6 +97,111 @@
             { cssClass: 'mj-regdoc-signature', section: signatureSection, html: resolveTemplateContent(templatesBySection, selectionMap, signatureSection) },
             { cssClass: 'mj-regdoc-footer', section: 'footer', html: resolveTemplateContent(templatesBySection, selectionMap, 'footer') },
         ];
+    }
+
+    /**
+     * Ordered header/content/footer blocks for the member "fiche
+     * d'inscription" contract — always the section defaults, since (unlike
+     * events) there's no per-instance template selection for member contracts.
+     *
+     * @returns {Array<{cssClass:string, section:string, html:string}>}
+     */
+    function resolveMemberContractBlocks(templatesBySection) {
+        return [
+            { cssClass: 'mj-regdoc-header', section: 'member_header', html: resolveTemplateContent(templatesBySection, {}, 'member_header') },
+            { cssClass: 'mj-regdoc-content', section: 'member_content', html: resolveTemplateContent(templatesBySection, {}, 'member_content') },
+            { cssClass: 'mj-regdoc-footer', section: 'member_footer', html: resolveTemplateContent(templatesBySection, {}, 'member_footer') },
+        ];
+    }
+
+    /**
+     * Renders one member dynamic-field's stored value as an HTML fragment,
+     * insertable via [dynfield_<id>] in the member contract — mirrors
+     * buildDynFieldContractHtml() in
+     * includes/core/ajax/admin/registration-manager.php. Choice-type fields
+     * (radio/dropdown/checklist) render as a "QCM" list of every option with
+     * the member's answer(s) pre-checked (☑) instead of a plain value.
+     *
+     * @param {Object} df - one entry of member.dynamicFields
+     * @returns {string} HTML fragment
+     */
+    function buildDynFieldContractHtml(df) {
+        var type = df.type;
+        var title = Utils.escapeHtml(df.title || '');
+        var rawValue = df.value || '';
+
+        if (type === 'radio' || type === 'dropdown' || type === 'checklist') {
+            var options = df.options || [];
+            var selected = [];
+            var otherText = '';
+
+            if (type === 'checklist') {
+                try {
+                    var arr = JSON.parse(rawValue || '[]');
+                    if (Array.isArray(arr)) {
+                        arr.forEach(function (entry) {
+                            if (typeof entry === 'string' && entry.indexOf('__other:') === 0) {
+                                selected.push('__other');
+                                otherText = entry.substring(8);
+                            } else {
+                                selected.push(entry);
+                            }
+                        });
+                    }
+                } catch (e) { /* keep selected empty on parse failure */ }
+            } else if (typeof rawValue === 'string' && rawValue.indexOf('__other:') === 0) {
+                selected.push('__other');
+                otherText = rawValue.substring(8);
+            } else if (rawValue) {
+                selected.push(rawValue);
+            }
+
+            var rows = options.map(function (opt) {
+                var checked = selected.indexOf(opt) !== -1;
+                return '<span style="display:inline-block;margin:0 1.2em 0.3em 0;white-space:nowrap;' + (checked ? 'font-weight:700;' : '') + '">'
+                    + (checked ? '&#9745;' : '&#9744;') + ' ' + Utils.escapeHtml(String(opt)) + '</span>';
+            });
+
+            if (df.allowOther) {
+                var otherChecked = selected.indexOf('__other') !== -1;
+                var otherLabel = df.otherLabel || 'Autre';
+                if (otherChecked && otherText) {
+                    otherLabel += ' : ' + otherText;
+                }
+                rows.push('<span style="display:inline-block;margin:0 1.2em 0.3em 0;white-space:nowrap;' + (otherChecked ? 'font-weight:700;' : '') + '">'
+                    + (otherChecked ? '&#9745;' : '&#9744;') + ' ' + Utils.escapeHtml(otherLabel) + '</span>');
+            }
+
+            return '<span style="display:block;margin:0.35em 0;"><span style="font-weight:700;display:block;margin-bottom:0.2em;">' + title + '</span>'
+                + '<span style="display:block;">' + rows.join(' ') + '</span></span>';
+        }
+
+        if (type === 'checkbox') {
+            var isChecked = rawValue === '1';
+            return '<span style="display:inline-block;' + (isChecked ? 'font-weight:700;' : '') + '">'
+                + (isChecked ? '&#9745;' : '&#9744;') + ' ' + title + '</span>';
+        }
+
+        // text / textarea / fallback: plain value.
+        return Utils.escapeHtml(rawValue);
+    }
+
+    /**
+     * [dynfield_<id>] variables for the member contract preview, mirroring
+     * buildMemberContractDynFieldVariables() (PHP) — one entry per custom
+     * field defined for members ('title' fields are skipped, they carry no
+     * value).
+     *
+     * @param {Array} dynamicFields - member.dynamicFields
+     * @returns {Object} { 'dynfield_<id>': htmlFragment }
+     */
+    function buildMemberContractDynFieldVariables(dynamicFields) {
+        var variables = {};
+        (dynamicFields || []).forEach(function (df) {
+            if (df.type === 'title') return;
+            variables['dynfield_' + df.id] = buildDynFieldContractHtml(df);
+        });
+        return variables;
     }
 
     /**
@@ -167,6 +276,11 @@
 
     /**
      * Simple create/rename/edit modal for one template's name + raw HTML content.
+     *
+     * @param {Array} [props.variableGroups] - optional, same shape as
+     * REGDOC_VARIABLE_GROUPS (js/registration-manager/app.js): shows an
+     * "Insérer une variable" picker above the textarea that inserts
+     * [token] at the cursor position.
      */
     function TemplateEditModal(props) {
         var isOpen = props.isOpen;
@@ -177,6 +291,7 @@
         var onClose = props.onClose;
         var saving = !!props.saving;
         var error = props.error || '';
+        var variableGroups = Array.isArray(props.variableGroups) ? props.variableGroups : null;
 
         var _name = useState(initialName);
         var name = _name[0];
@@ -184,13 +299,62 @@
         var _content = useState(initialContent);
         var content = _content[0];
         var setContent = _content[1];
+        var _variablesOpen = useState(false);
+        var variablesOpen = _variablesOpen[0];
+        var setVariablesOpen = _variablesOpen[1];
+        var textareaRef = useRef(null);
 
         useEffect(function () {
             if (isOpen) {
                 setName(initialName);
                 setContent(initialContent);
+                setVariablesOpen(false);
             }
         }, [isOpen, initialName, initialContent]);
+
+        function insertVariable(token) {
+            var el = textareaRef.current;
+            if (el && typeof el.selectionStart === 'number') {
+                var start = el.selectionStart;
+                var end = el.selectionEnd;
+                var next = content.slice(0, start) + token + content.slice(end);
+                setContent(next);
+                var cursorPos = start + token.length;
+                setTimeout(function () {
+                    el.focus();
+                    if (typeof el.setSelectionRange === 'function') {
+                        el.setSelectionRange(cursorPos, cursorPos);
+                    }
+                }, 0);
+            } else {
+                setContent(content + token);
+            }
+            setVariablesOpen(false);
+        }
+
+        var variablesButton = variableGroups && variableGroups.length > 0 && h('div', { class: 'mj-regmgr-editor-variables' }, [
+            h('button', {
+                type: 'button',
+                class: 'mj-btn mj-btn--secondary mj-regmgr-editor-variables__toggle',
+                onClick: function (event) {
+                    event.preventDefault();
+                    setVariablesOpen(function (open) { return !open; });
+                },
+            }, '{ } Insérer une variable'),
+            variablesOpen && h('div', { class: 'mj-regmgr-editor-variables__menu' }, variableGroups.map(function (group) {
+                return h('div', { class: 'mj-regmgr-editor-variables__group', key: group.label }, [
+                    h('div', { class: 'mj-regmgr-editor-variables__group-label' }, group.label),
+                    group.items.map(function (item) {
+                        return h('button', {
+                            type: 'button',
+                            class: 'mj-regmgr-editor-variables__item',
+                            key: item.token,
+                            onClick: function () { insertVariable(item.token); },
+                        }, [h('code', null, item.token), h('span', null, ' — ' + item.description)]);
+                    }),
+                ]);
+            })),
+        ]);
 
         var footer = h(Fragment, null, [
             h('button', { type: 'button', class: 'mj-btn mj-btn--secondary', onClick: onClose, disabled: saving }, 'Annuler'),
@@ -213,7 +377,9 @@
                 ]),
                 h('label', { class: 'mj-regmgr-doctpl-edit__label' }, [
                     'Contenu (HTML)',
+                    variablesButton,
                     h('textarea', {
+                        ref: textareaRef,
                         class: 'mj-regmgr-doctpl-edit__textarea', rows: 10, value: content,
                         onInput: function (e) { setContent(e.target.value); },
                     }),
@@ -230,7 +396,10 @@
         interpolate: interpolate,
         resolveTemplateContent: resolveTemplateContent,
         resolveDocumentBlocks: resolveDocumentBlocks,
+        resolveMemberContractBlocks: resolveMemberContractBlocks,
         buildBlocksHtml: buildBlocksHtml,
+        buildDynFieldContractHtml: buildDynFieldContractHtml,
+        buildMemberContractDynFieldVariables: buildMemberContractDynFieldVariables,
         TemplateSectionPicker: TemplateSectionPicker,
         TemplateEditModal: TemplateEditModal,
     };

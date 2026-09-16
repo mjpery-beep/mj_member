@@ -146,6 +146,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_update_document_template', [$this, 'updateDocumentTemplate']);
         add_action('wp_ajax_mj_regmgr_delete_document_template', [$this, 'deleteDocumentTemplate']);
         add_action('wp_ajax_mj_regmgr_set_default_document_template', [$this, 'setDefaultDocumentTemplate']);
+        add_action('wp_ajax_mj_regmgr_download_member_contract_pdf', [$this, 'downloadMemberContractPdf']);
         add_action('wp_ajax_mj_regmgr_mark_membership_paid', [$this, 'markMembershipPaid']);
         add_action('wp_ajax_mj_regmgr_create_membership_payment_link', [$this, 'createMembershipPaymentLink']);
         add_action('wp_ajax_mj_regmgr_update_member_idea', [$this, 'updateMemberIdea']);
@@ -8940,6 +8941,269 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             ));
         } catch (\Throwable $e) {
             error_log('[MjRegMgr] downloadRegistrationContractPdf fatal: ' . $e->getMessage());
+            wp_send_json_error(array('message' => __('Erreur interne lors de la génération du PDF.', 'mj-member')), 500);
+        }
+    }
+
+    /**
+     * Build template variables for the member "fiche d'inscription" contract
+     * (Member fiche's "Contrat" tab) — a subset of
+     * buildRegistrationDocumentVariables() with no event fields.
+     */
+    private function buildMemberContractVariables($member, $guardian): array {
+        $member_first_name = isset($member->first_name) ? (string) $member->first_name : '';
+        $member_last_name = isset($member->last_name) ? (string) $member->last_name : '';
+        $member_name = trim($member_first_name . ' ' . $member_last_name);
+        $member_address_line = isset($member->address) ? (string) $member->address : '';
+        $member_postal_code = isset($member->postal_code) ? (string) $member->postal_code : '';
+        $member_city = isset($member->city) ? (string) $member->city : '';
+        $member_address = trim($member_address_line . ($member_postal_code !== '' || $member_city !== '' ? ', ' : '') . trim($member_postal_code . ' ' . $member_city));
+
+        $guardian_first_name = $guardian ? (string) ($guardian->first_name ?? '') : '';
+        $guardian_last_name = $guardian ? (string) ($guardian->last_name ?? '') : '';
+        $guardian_name = trim($guardian_first_name . ' ' . $guardian_last_name);
+        $guardian_address_line = $guardian ? (string) ($guardian->address ?? '') : '';
+        $guardian_postal_code = $guardian ? (string) ($guardian->postal_code ?? '') : '';
+        $guardian_city = $guardian ? (string) ($guardian->city ?? '') : '';
+        $guardian_address = trim($guardian_address_line . ($guardian_postal_code !== '' || $guardian_city !== '' ? ', ' : '') . trim($guardian_postal_code . ' ' . $guardian_city));
+
+        if ($guardian_name === '') {
+            $guardian_first_name = $member_first_name;
+            $guardian_last_name = $member_last_name;
+            $guardian_name = $member_name;
+            $guardian_address_line = $member_address_line;
+            $guardian_postal_code = $member_postal_code;
+            $guardian_city = $member_city;
+            $guardian_address = $member_address;
+        }
+
+        return array(
+            'member_name' => $member_name,
+            'member_first_name' => $member_first_name,
+            'member_last_name' => $member_last_name,
+            'member_email' => isset($member->email) ? (string) $member->email : '',
+            'member_phone' => isset($member->phone) ? (string) $member->phone : '',
+            'member_birth_date' => $this->formatDate(isset($member->birth_date) ? (string) $member->birth_date : '', false),
+            'member_address' => $member_address,
+            'member_address_line' => $member_address_line,
+            'member_postal_code' => $member_postal_code,
+            'member_city' => $member_city,
+            'guardian_name' => $guardian_name,
+            'guardian_first_name' => $guardian_first_name,
+            'guardian_last_name' => $guardian_last_name,
+            'guardian_email' => $guardian ? (string) ($guardian->email ?? '') : (string) ($member->email ?? ''),
+            'guardian_phone' => $guardian ? (string) ($guardian->phone ?? '') : (string) ($member->phone ?? ''),
+            'guardian_address' => $guardian_address,
+            'guardian_address_line' => $guardian_address_line,
+            'guardian_postal_code' => $guardian_postal_code,
+            'guardian_city' => $guardian_city,
+            'site_name' => (string) get_bloginfo('name'),
+            'site_url' => (string) home_url('/'),
+            'current_date' => date_i18n('d/m/Y'),
+            'current_year' => date_i18n('Y'),
+        );
+    }
+
+    /**
+     * Renders one dynamic-field's stored value as an HTML fragment for the
+     * member contract, insertable via [dynfield_<id>] — mirrors
+     * buildDynFieldContractHtml() in
+     * js/registration-manager/document-templates.js. Choice-type fields
+     * (radio/dropdown/checklist) render as a "QCM" list of every option
+     * with the member's answer(s) pre-checked (☑) instead of a plain value.
+     *
+     * @param object $df row from MjDynamicFields::getAll()
+     * @param string $raw_value stored value for this member/field
+     */
+    private function buildDynFieldContractHtml($df, string $raw_value): string {
+        $type = (string) ($df->field_type ?? '');
+        $title = esc_html((string) ($df->title ?? ''));
+
+        if (in_array($type, array('radio', 'dropdown', 'checklist'), true)) {
+            $options = \Mj\Member\Classes\Crud\MjDynamicFields::decodeOptions($df->options_list ?? '');
+            $allow_other = (bool) ($df->allow_other ?? 0);
+
+            $selected = array();
+            $other_text = '';
+            if ($type === 'checklist') {
+                $decoded = json_decode($raw_value !== '' ? $raw_value : '[]', true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $entry) {
+                        if (is_string($entry) && strpos($entry, '__other:') === 0) {
+                            $selected[] = '__other';
+                            $other_text = substr($entry, 8);
+                        } else {
+                            $selected[] = $entry;
+                        }
+                    }
+                }
+            } elseif (strpos($raw_value, '__other:') === 0) {
+                $selected[] = '__other';
+                $other_text = substr($raw_value, 8);
+            } elseif ($raw_value !== '') {
+                $selected[] = $raw_value;
+            }
+
+            $rows = array();
+            foreach ($options as $opt) {
+                $checked = in_array($opt, $selected, true);
+                $rows[] = '<span style="display:inline-block;margin:0 1.2em 0.3em 0;white-space:nowrap;' . ($checked ? 'font-weight:700;' : '') . '">'
+                    . ($checked ? '&#9745;' : '&#9744;') . ' ' . esc_html((string) $opt) . '</span>';
+            }
+            if ($allow_other) {
+                $checked = in_array('__other', $selected, true);
+                $other_label = (string) ($df->other_label ?? '');
+                $other_label = $other_label !== '' ? $other_label : 'Autre';
+                if ($checked && $other_text !== '') {
+                    $other_label .= ' : ' . $other_text;
+                }
+                $rows[] = '<span style="display:inline-block;margin:0 1.2em 0.3em 0;white-space:nowrap;' . ($checked ? 'font-weight:700;' : '') . '">'
+                    . ($checked ? '&#9745;' : '&#9744;') . ' ' . esc_html($other_label) . '</span>';
+            }
+
+            return '<span style="display:block;margin:0.35em 0;"><span style="font-weight:700;display:block;margin-bottom:0.2em;">' . $title . '</span>'
+                . '<span style="display:block;">' . implode(' ', $rows) . '</span></span>';
+        }
+
+        if ($type === 'checkbox') {
+            $checked = $raw_value === '1';
+            return '<span style="display:inline-block;' . ($checked ? 'font-weight:700;' : '') . '">'
+                . ($checked ? '&#9745;' : '&#9744;') . ' ' . $title . '</span>';
+        }
+
+        // text / textarea / fallback: plain value.
+        return nl2br(esc_html($raw_value));
+    }
+
+    /**
+     * [dynfield_<id>] variables for the member contract — one per custom
+     * field configured for members ('title' fields are skipped, they carry
+     * no value), so admins can drop e.g. [dynfield_12] into the
+     * member_content template — mirrors
+     * buildMemberContractDynFieldVariables() (JS).
+     */
+    private function buildMemberContractDynFieldVariables(int $member_id): array {
+        $fields = \Mj\Member\Classes\Crud\MjDynamicFields::getAll();
+        $values = \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($member_id);
+
+        $variables = array();
+        foreach ($fields as $df) {
+            if (($df->field_type ?? '') === 'title') {
+                continue;
+            }
+            $raw_value = isset($values[(int) $df->id]) ? (string) $values[(int) $df->id] : '';
+            $variables['dynfield_' . (int) $df->id] = $this->buildDynFieldContractHtml($df, $raw_value);
+        }
+
+        return $variables;
+    }
+
+    /**
+     * Ordered header/content/footer blocks for the member "fiche
+     * d'inscription" contract, each resolved from its section's default
+     * template (no per-member override) and interpolated.
+     *
+     * @return array<int,array{class:string,html:string}>
+     */
+    private function buildMemberContractBlocks(array $variables): array {
+        $header = $this->resolveDocumentTemplateContent(MjDocumentTemplates::SECTION_MEMBER_HEADER, array());
+        $content = $this->resolveDocumentTemplateContent(MjDocumentTemplates::SECTION_MEMBER_CONTENT, array());
+        $footer = $this->resolveDocumentTemplateContent(MjDocumentTemplates::SECTION_MEMBER_FOOTER, array());
+
+        return array(
+            array('class' => 'mj-regdoc-header', 'html' => $this->interpolateRegistrationDocumentTemplate($header, $variables)),
+            array('class' => 'mj-regdoc-content', 'html' => $this->interpolateRegistrationDocumentTemplate($content, $variables)),
+            array('class' => 'mj-regdoc-footer', 'html' => $this->interpolateRegistrationDocumentTemplate($footer, $variables)),
+        );
+    }
+
+    /**
+     * Generate the member "fiche d'inscription" contract PDF and return it
+     * for direct download — mirrors downloadRegistrationContractPdf() but
+     * for the member fiche's "Contrat" tab (no event involved).
+     */
+    public function downloadMemberContractPdf() {
+        try {
+            $auth = $this->verifyRequest();
+            if (!$auth) return;
+
+            $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
+            if ($member_id <= 0) {
+                wp_send_json_error(array('message' => __('ID membre invalide.', 'mj-member')), 400);
+                return;
+            }
+
+            $member = MjMembers::getById($member_id);
+            if (!$member) {
+                wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')), 404);
+                return;
+            }
+
+            $guardian_id = !empty($member->guardian_id) ? (int) $member->guardian_id : 0;
+            $guardian = $guardian_id > 0 ? MjMembers::getById($guardian_id) : null;
+
+            $variables = array_merge(
+                $this->buildMemberContractVariables($member, $guardian),
+                $this->buildMemberContractDynFieldVariables($member_id)
+            );
+            $blocks = $this->buildMemberContractBlocks($variables);
+
+            $member_name_for_contract = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
+
+            $pdf_result = $this->buildRegistrationContractPdf(
+                $blocks,
+                __("Fiche d'inscription", 'mj-member'),
+                $member_name_for_contract
+            );
+
+            if (is_wp_error($pdf_result)) {
+                error_log('[MjRegMgr] Member contract PDF generation failed for member #' . $member_id . ': ' . $pdf_result->get_error_message());
+                wp_send_json_error(array('message' => $pdf_result->get_error_message()), 500);
+                return;
+            }
+
+            $filename = isset($pdf_result['filename']) ? (string) $pdf_result['filename'] : '';
+            if ($filename === '') {
+                $filename = 'fiche-inscription-' . date_i18n('Ymd') . '.pdf';
+            }
+
+            $content = isset($pdf_result['content']) ? (string) $pdf_result['content'] : '';
+            if ($content === '') {
+                wp_send_json_error(array('message' => __('Impossible de générer le PDF.', 'mj-member')), 500);
+                return;
+            }
+
+            $upload_dir = wp_upload_dir();
+            if (!is_array($upload_dir) || !empty($upload_dir['error'])) {
+                wp_send_json_error(array('message' => __('Impossible de préparer le dossier de téléchargement.', 'mj-member')), 500);
+                return;
+            }
+
+            $subdir = '/mj-member/member-contracts';
+            $target_dir = trailingslashit($upload_dir['basedir']) . ltrim($subdir, '/');
+            if (!wp_mkdir_p($target_dir)) {
+                wp_send_json_error(array('message' => __('Impossible de créer le dossier de téléchargement.', 'mj-member')), 500);
+                return;
+            }
+
+            $stored_name = wp_unique_filename($target_dir, $filename);
+            $stored_path = trailingslashit($target_dir) . $stored_name;
+            $write_result = file_put_contents($stored_path, $content);
+            if ($write_result === false) {
+                wp_send_json_error(array('message' => __('Impossible d\'écrire le fichier PDF.', 'mj-member')), 500);
+                return;
+            }
+
+            $download_url = trailingslashit($upload_dir['baseurl']) . ltrim($subdir, '/') . '/' . rawurlencode($stored_name);
+
+            wp_send_json_success(array(
+                'message' => __('PDF généré.', 'mj-member'),
+                'memberId' => $member_id,
+                'filename' => $stored_name,
+                'downloadUrl' => $download_url,
+            ));
+        } catch (\Throwable $e) {
+            error_log('[MjRegMgr] downloadMemberContractPdf fatal: ' . $e->getMessage());
             wp_send_json_error(array('message' => __('Erreur interne lors de la génération du PDF.', 'mj-member')), 500);
         }
     }

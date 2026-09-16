@@ -30,6 +30,13 @@ class MjDocumentTemplates extends MjTools implements CrudRepositoryInterface
     public const SECTION_SIGNATURE_GUARDIAN = 'signature_guardian';
     public const SECTION_SIGNATURE_AUTONOMOUS = 'signature_autonomous';
     public const SECTION_FOOTER = 'footer';
+
+    // Member "fiche d'inscription" contract (Member fiche's "Contrat" tab):
+    // a separate header/content/footer library, dedicated to member data so
+    // it can evolve independently from the event registration contract above.
+    public const SECTION_MEMBER_HEADER = 'member_header';
+    public const SECTION_MEMBER_CONTENT = 'member_content';
+    public const SECTION_MEMBER_FOOTER = 'member_footer';
     // 'cover' is intentionally absent (Phase 2): `section` stays a free
     // varchar precisely so it can be added later without a schema change.
 
@@ -54,6 +61,9 @@ class MjDocumentTemplates extends MjTools implements CrudRepositoryInterface
             self::SECTION_SIGNATURE_GUARDIAN,
             self::SECTION_SIGNATURE_AUTONOMOUS,
             self::SECTION_FOOTER,
+            self::SECTION_MEMBER_HEADER,
+            self::SECTION_MEMBER_CONTENT,
+            self::SECTION_MEMBER_FOOTER,
         );
     }
 

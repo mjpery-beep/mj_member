@@ -272,6 +272,13 @@
             },
 
             /**
+             * Génère puis retourne la fiche d'inscription (contrat) d'un membre en PDF.
+             */
+            downloadMemberContractPdf: function (memberId) {
+                return post('mj_regmgr_download_member_contract_pdf', { memberId: memberId });
+            },
+
+            /**
              * Génère un texte via IA (description ou document d'inscription)
              * @param {number} eventId - ID de l'événement
              * @param {string} type - 'description' ou 'regdoc'

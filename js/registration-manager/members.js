@@ -11,6 +11,8 @@
     var Utils = global.MjRegMgrUtils;
     var RegComps = global.MjRegMgrRegistrations;
     var TabsModule = global.MjRegMgrTabs;
+    var Modals = global.MjRegMgrModals;
+    var DocTpl = global.MjRegMgrDocumentTemplates;
 
     if (!preact || !hooks || !Utils) {
         console.warn('[MjRegMgr] Dépendances manquantes pour members.js');
@@ -3479,6 +3481,398 @@
     }
 
     // ============================================
+    // MEMBER CONTRACT ("fiche d'inscription") TAB
+    // ============================================
+
+    /**
+     * Builds the [variable] map for the member contract preview, mirroring
+     * buildMemberContractVariables() in registration-manager.php. Uses the
+     * `member` prop already loaded for the fiche (no extra AJAX round-trip).
+     */
+    function buildMemberContractPreviewVariables(member, config) {
+        var firstName = (member && member.firstName) || '';
+        var lastName = (member && member.lastName) || '';
+        var memberName = (firstName + ' ' + lastName).trim();
+        var addressLine = (member && member.addressLine) || '';
+        var postalCode = (member && member.postalCode) || '';
+        var city = (member && member.city) || '';
+        var memberAddress = (addressLine + ((postalCode || city) ? ', ' : '') + (postalCode + ' ' + city).trim()).trim();
+
+        var guardian = member && member.guardian;
+        var guardianFirstName = guardian ? (guardian.firstName || '') : '';
+        var guardianLastName = guardian ? (guardian.lastName || '') : '';
+        var guardianName = (guardianFirstName + ' ' + guardianLastName).trim();
+        var guardianAddress = memberAddress;
+        var guardianEmail = guardian ? (guardian.email || '') : (member && member.email) || '';
+        var guardianPhone = guardian ? (guardian.phone || '') : (member && member.phone) || '';
+
+        if (!guardianName) {
+            guardianFirstName = firstName;
+            guardianLastName = lastName;
+            guardianName = memberName;
+        }
+
+        var baseVariables = {
+            member_name: memberName,
+            member_first_name: firstName,
+            member_last_name: lastName,
+            member_email: (member && member.email) || '',
+            member_phone: (member && member.phone) || '',
+            member_birth_date: (member && member.birthDate) ? formatDate(member.birthDate) : '',
+            member_address: memberAddress,
+            member_address_line: addressLine,
+            member_postal_code: postalCode,
+            member_city: city,
+            guardian_name: guardianName,
+            guardian_first_name: guardianFirstName,
+            guardian_last_name: guardianLastName,
+            guardian_email: guardianEmail,
+            guardian_phone: guardianPhone,
+            guardian_address: guardianAddress,
+            site_name: (config && config.siteName) || '',
+            site_url: (config && config.siteUrl) || '',
+            current_date: new Date().toLocaleDateString('fr-FR'),
+            current_year: new Date().getFullYear().toString(),
+        };
+
+        var dynFieldVariables = DocTpl ? DocTpl.buildMemberContractDynFieldVariables(member && member.dynamicFields) : {};
+
+        return Object.assign({}, baseVariables, dynFieldVariables);
+    }
+
+    /**
+     * "Insérer une variable" groups for the member contract editor: the
+     * standard member/guardian/site tokens (see buildMemberContractPreviewVariables
+     * above) plus one [dynfield_<id>] per custom field configured for members
+     * — choice-type fields (radio/dropdown/checklist) are flagged "(QCM)"
+     * since they render as a pre-checked options list rather than plain text.
+     */
+    function buildMemberContractVariableGroups(member) {
+        var groups = [
+            { label: 'Membre', items: [
+                { token: '[member_name]', description: 'Nom complet' },
+                { token: '[member_first_name]', description: 'Prénom' },
+                { token: '[member_last_name]', description: 'Nom de famille' },
+                { token: '[member_email]', description: 'Email' },
+                { token: '[member_phone]', description: 'Téléphone' },
+                { token: '[member_birth_date]', description: 'Date de naissance' },
+                { token: '[member_address]', description: 'Adresse complète' },
+                { token: '[member_address_line]', description: 'Rue' },
+                { token: '[member_postal_code]', description: 'Code postal' },
+                { token: '[member_city]', description: 'Ville' },
+            ] },
+            { label: 'Tuteur', items: [
+                { token: '[guardian_name]', description: 'Nom complet' },
+                { token: '[guardian_first_name]', description: 'Prénom' },
+                { token: '[guardian_last_name]', description: 'Nom de famille' },
+                { token: '[guardian_email]', description: 'Email' },
+                { token: '[guardian_phone]', description: 'Téléphone' },
+                { token: '[guardian_address]', description: 'Adresse complète' },
+                { token: '[guardian_address_line]', description: 'Rue' },
+                { token: '[guardian_postal_code]', description: 'Code postal' },
+                { token: '[guardian_city]', description: 'Ville' },
+            ] },
+            { label: 'Site', items: [
+                { token: '[site_name]', description: 'Nom du site' },
+                { token: '[site_url]', description: 'URL du site' },
+                { token: '[current_date]', description: 'Date actuelle' },
+                { token: '[current_year]', description: 'Année actuelle' },
+            ] },
+        ];
+
+        var dynFields = (member && Array.isArray(member.dynamicFields)) ? member.dynamicFields : [];
+        var dynItems = dynFields
+            .filter(function (df) { return df.type !== 'title'; })
+            .map(function (df) {
+                var isQcm = df.type === 'radio' || df.type === 'dropdown' || df.type === 'checklist';
+                return { token: '[dynfield_' + df.id + ']', description: df.title + (isQcm ? ' (QCM précoché)' : '') };
+            });
+
+        if (dynItems.length > 0) {
+            groups.push({ label: 'Données dynamiques', items: dynItems });
+        }
+
+        return groups;
+    }
+
+    /**
+     * "Contrat" tab of the member fiche: the same header/content/footer
+     * document-template library pattern as the event contract's "Contrat"
+     * tab (js/registration-manager/document-templates.js), but with
+     * dedicated member_header/member_content/member_footer sections and
+     * this member's own data instead of an event's.
+     */
+    function MemberContractSection(props) {
+        var member = props.member;
+        var config = props.config || {};
+        var strings = props.strings || {};
+        var apiService = props.apiService;
+
+        var TemplateSectionPicker = DocTpl ? DocTpl.TemplateSectionPicker : null;
+        var TemplateEditModal = DocTpl ? DocTpl.TemplateEditModal : null;
+        var PreviewModal = Modals ? Modals.RegistrationDocumentPreviewModal : null;
+
+        var _templates = useState((config && config.documentTemplates) || {});
+        var templates = _templates[0];
+        var setTemplates = _templates[1];
+
+        var contractVariableGroups = useMemo(function () {
+            return buildMemberContractVariableGroups(member);
+        }, [member]);
+
+        // Local-only "which template to preview/edit per section" — there is
+        // no per-member selection to persist (unlike events): the default
+        // template of each section is always what's used in the actual PDF.
+        var _selection = useState({});
+        var selection = _selection[0];
+        var setSelection = _selection[1];
+
+        var handleSelect = useCallback(function (section, id) {
+            setSelection(function (prev) {
+                var next = Object.assign({}, prev);
+                if (id) {
+                    next[section] = id;
+                } else {
+                    delete next[section];
+                }
+                return next;
+            });
+        }, []);
+
+        var _busy = useState(false);
+        var busy = _busy[0];
+        var setBusy = _busy[1];
+
+        var _editState = useState({ isOpen: false, mode: 'create', section: '', id: 0, name: '', content: '', saving: false, error: '' });
+        var editState = _editState[0];
+        var setEditState = _editState[1];
+
+        var _preview = useState({ isOpen: false, title: '', html: '' });
+        var preview = _preview[0];
+        var setPreview = _preview[1];
+
+        var _previewDownloading = useState(false);
+        var previewDownloading = _previewDownloading[0];
+        var setPreviewDownloading = _previewDownloading[1];
+
+        var refreshTemplates = useCallback(function () {
+            if (!apiService) return;
+            apiService.listDocumentTemplates()
+                .then(function (data) {
+                    if (data && data.templates) {
+                        setTemplates(data.templates);
+                    }
+                })
+                .catch(function () { /* keep last known library on failure */ });
+        }, [apiService]);
+
+        var handleOpenCreate = useCallback(function (section) {
+            setEditState({ isOpen: true, mode: 'create', section: section, id: 0, name: '', content: '', saving: false, error: '' });
+        }, []);
+
+        var handleOpenDuplicate = useCallback(function (template) {
+            setEditState({
+                isOpen: true, mode: 'create', section: template.section, id: 0,
+                name: template.name + ' (copie)', content: template.content || '', saving: false, error: '',
+            });
+        }, []);
+
+        var handleOpenEdit = useCallback(function (template) {
+            setEditState({
+                isOpen: true, mode: 'edit', section: template.section, id: template.id,
+                name: template.name, content: template.content || '', saving: false, error: '',
+            });
+        }, []);
+
+        var handleCloseModal = useCallback(function () {
+            setEditState(function (prev) { return Object.assign({}, prev, { isOpen: false }); });
+        }, []);
+
+        var handleSaveModal = useCallback(function (values) {
+            var section = editState.section;
+            var mode = editState.mode;
+            var id = editState.id;
+
+            setEditState(function (prev) { return Object.assign({}, prev, { saving: true, error: '' }); });
+
+            var promise = mode === 'edit'
+                ? apiService.updateDocumentTemplate(id, values.name, values.content)
+                : apiService.createDocumentTemplate(section, values.name, values.content);
+
+            promise
+                .then(function (data) {
+                    setEditState({ isOpen: false, mode: 'create', section: '', id: 0, name: '', content: '', saving: false, error: '' });
+                    refreshTemplates();
+                    if (mode === 'create' && data && data.template && data.template.id) {
+                        handleSelect(section, data.template.id);
+                    }
+                })
+                .catch(function (error) {
+                    setEditState(function (prev) {
+                        return Object.assign({}, prev, { saving: false, error: (error && error.message) || getString(strings, 'docTplSaveError', "Impossible d'enregistrer le modèle.") });
+                    });
+                });
+        }, [editState, apiService, refreshTemplates, strings, handleSelect]);
+
+        var handleSetDefault = useCallback(function (template) {
+            setBusy(true);
+            apiService.setDefaultDocumentTemplate(template.id)
+                .then(function () { refreshTemplates(); })
+                .catch(function () { /* keep previous library on failure */ })
+                .finally(function () { setBusy(false); });
+        }, [apiService, refreshTemplates]);
+
+        var handleDelete = useCallback(function (template) {
+            if (!window.confirm(getString(strings, 'docTplDeleteConfirm', 'Supprimer ce modèle ? Cette action est irréversible.'))) {
+                return;
+            }
+            setBusy(true);
+            apiService.deleteDocumentTemplate(template.id)
+                .then(function () {
+                    if (selection[template.section] === template.id) {
+                        handleSelect(template.section, null);
+                    }
+                    refreshTemplates();
+                })
+                .catch(function () { /* keep previous library on failure */ })
+                .finally(function () { setBusy(false); });
+        }, [apiService, refreshTemplates, selection, handleSelect]);
+
+        var handleOpenPreview = useCallback(function () {
+            if (!DocTpl) return;
+            var blocks = DocTpl.resolveMemberContractBlocks(templates);
+            var variables = buildMemberContractPreviewVariables(member, config);
+            var bodyHtml = DocTpl.buildBlocksHtml(blocks, variables);
+
+            var fullName = ((member && member.firstName) || '') + ' ' + ((member && member.lastName) || '');
+            var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'
+                + getString(strings, 'memberContractPreviewTitle', "Fiche d'inscription") + ' - ' + fullName.trim()
+                + '</title><style>'
+                + '@page{size:A4;margin:8mm 7mm;}'
+                + 'body{font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}'
+                + 'h1{font-size:18pt;margin:0 0 0.75em 0;}h2{font-size:14pt;margin:1em 0 0.5em 0;}h3{font-size:12pt;margin:0.8em 0 0.4em 0;}'
+                + 'p{margin:0 0 0.75em 0;}p:last-child{margin-bottom:0;}'
+                + 'ul,ol{margin:0 0 0.75em 1.5em;padding:0;}li{margin-bottom:0.4em;}'
+                + 'table{width:100%;border-collapse:collapse;margin:0.75em 0;border:none;}th,td{border:none;padding:6pt 8pt;text-align:left;}'
+                + 'img{max-width:100%;height:auto;}'
+                + (DocTpl.PREVIEW_STYLE || '')
+                + '</style></head><body>' + bodyHtml + '</body></html>';
+
+            setPreview({
+                isOpen: true,
+                title: getString(strings, 'memberContractPreviewTitle', "Fiche d'inscription") + (fullName.trim() ? ' — ' + fullName.trim() : ''),
+                html: htmlDoc,
+            });
+        }, [templates, member, config, strings]);
+
+        var handleClosePreview = useCallback(function () {
+            setPreview({ isOpen: false, title: '', html: '' });
+        }, []);
+
+        var handleDownloadPreviewPdf = useCallback(function () {
+            if (!member || !member.id || !apiService) return;
+            setPreviewDownloading(true);
+            apiService.downloadMemberContractPdf(member.id)
+                .then(function (data) {
+                    var downloadUrl = data && typeof data.downloadUrl === 'string' ? data.downloadUrl : '';
+                    if (!downloadUrl) {
+                        throw new Error(getString(strings, 'regDocDownloadError', 'Impossible de générer le PDF (réponse vide).'));
+                    }
+                    var link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = (data && data.filename) || 'fiche-inscription.pdf';
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                })
+                .catch(function (error) {
+                    window.alert((error && error.message) || getString(strings, 'regDocDownloadError', 'Impossible de télécharger le PDF.'));
+                })
+                .finally(function () {
+                    setPreviewDownloading(false);
+                });
+        }, [member, apiService, strings]);
+
+        if (!TemplateSectionPicker || !TemplateEditModal) {
+            return null;
+        }
+
+        return h('div', { class: 'mj-regmgr-regdoc-tab mj-regmgr-member-contract-tab' }, [
+            h('details', { class: 'mj-regmgr-regdoc-sections', open: true }, [
+                h('summary', { class: 'mj-regmgr-regdoc-sections__title' }, getString(strings, 'memberContractSectionsTitle', 'Sections de la fiche d\'inscription (modèles réutilisables)')),
+                h('p', { class: 'mj-regmgr-regdoc-sections__hint' }, getString(strings, 'memberContractSectionsHint', "Ces modèles sont partagés par la fiche d'inscription de tous les membres : modifiez le modèle par défaut de chaque section, ou créez-en un nouveau puis définissez-le par défaut.")),
+                h(TemplateSectionPicker, {
+                    section: 'member_header',
+                    templates: templates.member_header || [],
+                    selectedId: selection.member_header || 0,
+                    busy: busy,
+                    onSelect: function (id) { handleSelect('member_header', id); },
+                    onCreate: handleOpenCreate,
+                    onDuplicate: handleOpenDuplicate,
+                    onEdit: handleOpenEdit,
+                    onSetDefault: handleSetDefault,
+                    onDelete: handleDelete,
+                }),
+                h(TemplateSectionPicker, {
+                    section: 'member_content',
+                    templates: templates.member_content || [],
+                    selectedId: selection.member_content || 0,
+                    busy: busy,
+                    onSelect: function (id) { handleSelect('member_content', id); },
+                    onCreate: handleOpenCreate,
+                    onDuplicate: handleOpenDuplicate,
+                    onEdit: handleOpenEdit,
+                    onSetDefault: handleSetDefault,
+                    onDelete: handleDelete,
+                }),
+                h(TemplateSectionPicker, {
+                    section: 'member_footer',
+                    templates: templates.member_footer || [],
+                    selectedId: selection.member_footer || 0,
+                    busy: busy,
+                    onSelect: function (id) { handleSelect('member_footer', id); },
+                    onCreate: handleOpenCreate,
+                    onDuplicate: handleOpenDuplicate,
+                    onEdit: handleOpenEdit,
+                    onSetDefault: handleSetDefault,
+                    onDelete: handleDelete,
+                }),
+            ]),
+            TemplateEditModal && h(TemplateEditModal, {
+                isOpen: editState.isOpen,
+                title: editState.mode === 'edit'
+                    ? (getString(strings, 'docTplEditTitlePrefix', 'Modifier le modèle') + ' — ' + (DocTpl ? DocTpl.sectionLabel(editState.section) : ''))
+                    : (getString(strings, 'docTplNewTitlePrefix', 'Nouveau modèle') + ' — ' + (DocTpl ? DocTpl.sectionLabel(editState.section) : '')),
+                initialName: editState.name,
+                initialContent: editState.content,
+                saving: editState.saving,
+                error: editState.error,
+                variableGroups: contractVariableGroups,
+                onSave: handleSaveModal,
+                onClose: handleCloseModal,
+            }),
+            h('div', { class: 'mj-regmgr-regdoc-actions' }, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary',
+                    onClick: handleOpenPreview,
+                }, getString(strings, 'memberContractPreviewButton', "Aperçu de la fiche d'inscription")),
+            ]),
+            PreviewModal && h(PreviewModal, {
+                isOpen: preview.isOpen,
+                onClose: handleClosePreview,
+                title: preview.title,
+                htmlContent: preview.html,
+                onDownload: handleDownloadPreviewPdf,
+                isDownloadLoading: previewDownloading,
+                strings: strings,
+            }),
+        ]);
+    }
+
+    // ============================================
     // MEMBER DETAIL PANEL
     // ============================================
 
@@ -3552,7 +3946,7 @@
         var memberId = member && member.id ? member.id : null;
 
         // Onglets valides pour les membres
-        var validMemberTabs = ['information', 'dyndata', 'membership', 'badges', 'photos', 'ideas', 'messages', 'notifications', 'testimonials', 'notes', 'history', 'quotas'];
+        var validMemberTabs = ['information', 'dyndata', 'membership', 'badges', 'photos', 'ideas', 'messages', 'notifications', 'testimonials', 'notes', 'history', 'quotas', 'contract'];
         var resolvedInitialTab = initialTab && validMemberTabs.indexOf(initialTab) !== -1 ? initialTab : 'information';
         var initialTabAppliedRef = useRef(false);
 
@@ -5223,6 +5617,7 @@
         var tabTestimonialsLabel = getString(strings, 'tabMemberTestimonials', 'Témoignages');
         var tabNotesLabel = getString(strings, 'tabMemberNotes', 'Notes');
         var tabHistoryLabel = getString(strings, 'tabMemberHistory', 'Historique');
+        var tabContractLabel = getString(strings, 'tabMemberContract', 'Contrat');
 
         var memberTestimonials = Array.isArray(member.testimonials) ? member.testimonials : [];
         var pendingTestimonialsCount = memberTestimonials.filter(function (t) { return t.status === 'pending'; }).length;
@@ -5280,6 +5675,7 @@
             testimonials: '⭐',
             quotas: '📆',
             dyndata: '🗃️',
+            contract: '📄',
         };
 
         // Préparer l'onglet Données dynamiques (inséré après Informations)
@@ -5297,6 +5693,7 @@
             { key: 'testimonials', label: tabTestimonialsLabel, badge: pendingTestimonialsCount > 0 ? pendingTestimonialsCount : undefined, badgeType: pendingTestimonialsCount > 0 ? 'warning' : undefined, icon: tabIcons.testimonials },
             { key: 'notes', label: tabNotesLabel, badge: notesCount > 0 ? notesCount : undefined, icon: tabIcons.notes },
             { key: 'history', label: tabHistoryLabel, badge: registrations.length > 0 ? registrations.length : undefined, icon: tabIcons.history },
+            { key: 'contract', label: tabContractLabel, icon: tabIcons.contract },
         ]);
 
         // Ajouter l'onglet quotas uniquement pour les animateurs
@@ -7774,6 +8171,14 @@
                         dynFields: dynFields,
                         config: config,
                         onRefresh: onMemberUpdated,
+                    }),
+
+                    // Contrat (fiche d'inscription) tab
+                    activeTab === 'contract' && h(MemberContractSection, {
+                        member: member,
+                        config: config,
+                        strings: strings,
+                        apiService: apiService,
                     }),
 
                     // Nextcloud media tabs

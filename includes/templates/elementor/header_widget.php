@@ -91,12 +91,14 @@ function mj_header_svg_icon(string $name): string {
                     <?php if ($agenda_view_mode === 'calendrier'): ?>
                     <?php Mj_Member_Elementor_Events_Calendar_Widget::render_widget(
                         array(
-                            'show_toolbar_left'    => 'yes',
+                            'show_toolbar_left'    => '',
                             'show_toolbar_actions' => '',
+                            'show_print_button'    => '',
                             'months_before'        => 0,
                             'months_after'         => $agenda_calendar_months,
                             'show_leave_requests'  => '',
                             'show_todos'           => '',
+                            'cover_width_mobile'   => 44,
                         ),
                         array(
                             'force_mobile'       => true,

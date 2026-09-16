@@ -655,24 +655,6 @@
 
             var tooltipAvatarsEl = document.createElement('div');
             tooltipAvatarsEl.className = 'mj-member-events-calendar__day-note-tooltip-avatars';
-            if (note.author_avatar) {
-                var creatorGroupEl = document.createElement('span');
-                creatorGroupEl.className = 'mj-member-events-calendar__day-note-tooltip-avatar-group mj-member-events-calendar__day-note-tooltip-avatar-group--creator';
-                var tooltipAuthorImg = document.createElement('img');
-                tooltipAuthorImg.className = 'mj-member-events-calendar__day-note-avatar';
-                tooltipAuthorImg.src = note.author_avatar;
-                tooltipAuthorImg.alt = '';
-                if (note.author_name) tooltipAuthorImg.title = note.author_name;
-                creatorGroupEl.appendChild(tooltipAuthorImg);
-                if (note.note_type_emoji) {
-                    var creatorTypeEmojiEl = document.createElement('span');
-                    creatorTypeEmojiEl.className = 'mj-member-events-calendar__day-note-tooltip-creator-emoji';
-                    creatorTypeEmojiEl.setAttribute('aria-hidden', 'true');
-                    creatorTypeEmojiEl.textContent = note.note_type_emoji;
-                    creatorGroupEl.appendChild(creatorTypeEmojiEl);
-                }
-                tooltipAvatarsEl.appendChild(creatorGroupEl);
-            }
             if (note.assigned_avatars && note.assigned_avatars.length) {
                 var assigneesGroupEl = document.createElement('span');
                 assigneesGroupEl.className = 'mj-member-events-calendar__day-note-tooltip-avatar-group mj-member-events-calendar__day-note-tooltip-avatar-group--assignees';
@@ -689,6 +671,21 @@
 
             var tooltipMeta = document.createElement('div');
             tooltipMeta.className = 'mj-member-events-calendar__day-note-tooltip-meta';
+            if (note.author_name) {
+                var creatorTag = document.createElement('span');
+                creatorTag.className = 'mj-member-events-calendar__day-note-tooltip-tag mj-member-events-calendar__day-note-tooltip-tag--creator';
+                if (note.author_avatar) {
+                    var creatorTagAvatar = document.createElement('img');
+                    creatorTagAvatar.className = 'mj-member-events-calendar__day-note-avatar mj-member-events-calendar__day-note-tooltip-tag-avatar';
+                    creatorTagAvatar.src = note.author_avatar;
+                    creatorTagAvatar.alt = '';
+                    creatorTag.appendChild(creatorTagAvatar);
+                } else {
+                    creatorTag.appendChild(document.createTextNode('👤 '));
+                }
+                creatorTag.appendChild(document.createTextNode('Créé par ' + note.author_name));
+                tooltipMeta.appendChild(creatorTag);
+            }
             if (note.note_type_label) {
                 var typeTag = document.createElement('span');
                 typeTag.className = 'mj-member-events-calendar__day-note-tooltip-tag';
@@ -701,6 +698,15 @@
             tooltipMeta.appendChild(visTag);
             tooltipEl.appendChild(tooltipMeta);
             row.appendChild(tooltipEl);
+
+            if (note.author_avatar) {
+                var creatorAvatarImg = document.createElement('img');
+                creatorAvatarImg.className = 'mj-member-events-calendar__day-note-avatar mj-member-events-calendar__day-note-creator-avatar';
+                creatorAvatarImg.src = note.author_avatar;
+                creatorAvatarImg.alt = '';
+                if (note.author_name) creatorAvatarImg.title = note.author_name;
+                row.appendChild(creatorAvatarImg);
+            }
 
             var avatarsEl = document.createElement('span');
             avatarsEl.className = 'mj-member-events-calendar__day-note-avatars';

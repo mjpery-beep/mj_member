@@ -612,10 +612,6 @@ a.mj-header-dropdown__header-link:hover {
     gap: 8px;
 }
 
-.mj-header-dropdown--agenda .mj-header-agenda-calendar .mj-member-events-calendar__toolbar {
-    border-radius: 8px;
-}
-
 .mj-header-dropdown--agenda .mj-header-agenda-calendar .mj-cal-mobile {
     padding: 0;
 }

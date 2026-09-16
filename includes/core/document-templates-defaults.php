@@ -49,3 +49,40 @@ function mj_member_get_default_document_template_texts(): array
         ),
     );
 }
+
+/**
+ * Default seed content for the member "fiche d'inscription" contract
+ * (Member fiche's "Contrat" tab): header/content/footer, dedicated to
+ * member data rather than event data.
+ *
+ * Variable tokens match buildMemberContractVariables() in
+ * includes/core/ajax/admin/registration-manager.php.
+ */
+function mj_member_get_default_member_contract_template_texts(): array
+{
+    return array(
+        'member_header' => array(
+            'name' => 'En-tête fiche membre (par défaut)',
+            'content' => '<p><strong>[site_name]</strong></p><p>Fiche d\'inscription</p>',
+        ),
+        'member_content' => array(
+            'name' => 'Fiche d\'inscription (par défaut)',
+            'content' => '<p>Je soussigné(e) [guardian_name], responsable légal de [member_name], sollicite son '
+                . 'inscription auprès de [site_name].</p>'
+                . '<h3>Informations du membre</h3>'
+                . '<p>Nom : [member_last_name]<br/>Prénom : [member_first_name]<br/>Date de naissance : [member_birth_date]<br/>'
+                . 'Adresse : [member_address]<br/>Téléphone : [member_phone]<br/>E-mail : [member_email]</p>'
+                . '<h3>Responsable légal</h3>'
+                . '<p>Nom : [guardian_last_name]<br/>Prénom : [guardian_first_name]<br/>Adresse : [guardian_address]<br/>'
+                . 'Téléphone : [guardian_phone]<br/>E-mail : [guardian_email]</p>'
+                . '<p>Je certifie l\'exactitude des informations ci-dessus et accepte le règlement d\'ordre intérieur de '
+                . '[site_name].</p>',
+        ),
+        'member_footer' => array(
+            'name' => 'Pied de page fiche membre (par défaut)',
+            'content' => '<p>Fait à _______________, le [current_date].</p>'
+                . '<p>Signature :</p>'
+                . '<p>_______________________</p>',
+        ),
+    );
+}

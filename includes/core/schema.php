@@ -2562,6 +2562,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_101($wpdb);
     mj_member_upgrade_to_2_102($wpdb);
     mj_member_upgrade_to_2_103($wpdb);
+    mj_member_upgrade_to_2_104($wpdb);
 
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -7719,6 +7720,53 @@ function mj_member_seed_default_document_templates($wpdb, $table) {
             array('%s', '%s', '%s', '%d', '%s', '%s')
         );
     }
+}
+
+/**
+ * Migration 2.104: seed the member "fiche d'inscription" contract sections
+ * (member_header/member_content/member_footer) into the document-template
+ * library. Added later than the initial 2.100 seed, so it's a dedicated
+ * migration guarded per-section (not the whole-table COUNT(*)===0 check
+ * mj_member_seed_default_document_templates() uses) since existing sites
+ * already have rows for the original sections.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_104($wpdb) {
+    $table = mj_member_get_document_templates_table_name();
+    if (!$table || !mj_member_table_exists($table)) {
+        return;
+    }
+
+    require_once __DIR__ . '/document-templates-defaults.php';
+
+    $lock_acquired = (int) $wpdb->get_var("SELECT GET_LOCK('mj_member_member_contract_doctpl_seed', 10)");
+    if ($lock_acquired !== 1) {
+        return;
+    }
+
+    $now = current_time('mysql');
+    foreach (mj_member_get_default_member_contract_template_texts() as $section => $tpl) {
+        $existing = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE section = %s", $section));
+        if ($existing > 0) {
+            continue;
+        }
+
+        $wpdb->insert(
+            $table,
+            array(
+                'section' => $section,
+                'name' => $tpl['name'],
+                'content' => $tpl['content'],
+                'is_default' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ),
+            array('%s', '%s', '%s', '%d', '%s', '%s')
+        );
+    }
+
+    $wpdb->query("SELECT RELEASE_LOCK('mj_member_member_contract_doctpl_seed')");
 }
 
 /**

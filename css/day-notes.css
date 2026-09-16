@@ -909,6 +909,10 @@
     margin-left: 0;
 }
 
+.mj-member-events-calendar__day-note-creator-avatar {
+    margin-left: 0;
+}
+
 /* +10% on the compact calendar row, +30% then +40% inside the (more spacious)
    tooltip (compounded from the base 16px: 16 -> 17.6 -> 19.36,
    16 -> 20.8 -> 27.04 -> 37.856) */
@@ -1104,22 +1108,6 @@
     align-items: center !important;
 }
 
-/* Creator vs. assignees: a visible separator between the two groups makes
-   the position distinction legible, not just their order in the DOM - only
-   drawn when both groups are present (assignees directly follows creator). */
-.mj-member-events-calendar__day-note-tooltip-avatar-group--creator + .mj-member-events-calendar__day-note-tooltip-avatar-group--assignees {
-    padding-left: 8px !important;
-    border-left: 1px solid #e4e7ec !important;
-}
-
-.mj-member-events-calendar__day-note-tooltip-creator-emoji {
-    all: revert;
-    display: inline-flex !important;
-    margin-left: 4px !important;
-    font-size: 14px !important;
-    line-height: 1 !important;
-}
-
 .mj-member-events-calendar__day-note-tooltip-meta {
     all: revert;
     display: flex !important;
@@ -1130,6 +1118,8 @@
 .mj-member-events-calendar__day-note-tooltip-tag {
     all: revert;
     display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
     padding: 2px 8px !important;
     border-radius: 999px !important;
     background: #f2f4f7 !important;
@@ -1137,4 +1127,10 @@
     font-size: 10px !important;
     font-weight: 600 !important;
     line-height: 1.4 !important;
+}
+
+.mj-member-events-calendar__day-note-tooltip-tag-avatar {
+    width: 14px !important;
+    height: 14px !important;
+    margin-left: 0 !important;
 }

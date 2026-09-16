@@ -1523,6 +1523,7 @@ if (!function_exists('mj_member_get_public_events')) {
         $supports_free_participation = function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'free_participation') : false;
         $supports_registration_mode = !$supports_free_participation && function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'registration_mode') : false;
         $supports_emoji_column = function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'emoji') : false;
+        $supports_capacity_total = function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'capacity_total') : false;
         if ($supports_guardian_toggle) {
             $select_fields[] = 'events.allow_guardian_registration';
         }
@@ -1537,6 +1538,9 @@ if (!function_exists('mj_member_get_public_events')) {
         }
         if ($supports_emoji_column) {
             $select_fields[] = 'events.emoji';
+        }
+        if ($supports_capacity_total) {
+            $select_fields[] = 'events.capacity_total';
         }
 
         $default_free_registration_modes = array('attendance', 'attendance_free', 'free_participation', 'free', 'open_access', 'no_registration', 'optional', 'none', 'libre', 'presence');
@@ -1957,6 +1961,7 @@ if (!function_exists('mj_member_get_public_events')) {
                 'free_participation' => $registration_is_free_participation ? 1 : 0,
                 'is_free_participation' => $registration_is_free_participation,
                 'legacy_registration_mode' => $legacy_registration_mode,
+                'capacity_total' => ($supports_capacity_total && isset($row->capacity_total)) ? (int) $row->capacity_total : 0,
             );
         }
 

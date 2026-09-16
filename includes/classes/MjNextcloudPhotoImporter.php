@@ -919,14 +919,19 @@ final class MjNextcloudPhotoImporter
             }
         }
 
+        // Prefer the EXIF capture date (when the photo was actually taken) over the
+        // Nextcloud file mtime, which usually reflects the upload/import date instead.
+        $takenTs = self::extractExifTakenTimestamp($originalAbsolute);
+        if ($takenTs <= 0) {
+            $takenTs = strtotime($sourceModified);
+        }
+        if ($takenTs === false || $takenTs <= 0) {
+            $takenTs = time();
+        }
+
         // Originals are only used as a transient processing source.
         if (file_exists($originalAbsolute)) {
             @unlink($originalAbsolute);
-        }
-
-        $takenTs = strtotime($sourceModified);
-        if ($takenTs === false || $takenTs <= 0) {
-            $takenTs = time();
         }
 
         $manifest['items'][$id] = array(
@@ -951,6 +956,39 @@ final class MjNextcloudPhotoImporter
         self::debugLog('photo-import importSingleFile done source=' . $sourcePath);
 
         return array('imported' => true, 'id' => $id);
+    }
+
+    /**
+     * Reads the EXIF capture date from a downloaded image, if available.
+     *
+     * @return int Unix timestamp, or 0 when no usable EXIF date was found.
+     */
+    private static function extractExifTakenTimestamp(string $path): int
+    {
+        if ($path === '' || !function_exists('exif_read_data') || !file_exists($path)) {
+            return 0;
+        }
+
+        $exif = @exif_read_data($path);
+        if (!is_array($exif)) {
+            return 0;
+        }
+
+        foreach (array('DateTimeOriginal', 'DateTimeDigitized', 'DateTime') as $key) {
+            $raw = isset($exif[$key]) ? trim((string) $exif[$key]) : '';
+            if ($raw === '') {
+                continue;
+            }
+
+            // EXIF dates look like "2024:05:21 14:33:02"; normalize the date part for strtotime.
+            $normalized = preg_replace('/^(\d{4}):(\d{2}):(\d{2})/', '$1-$2-$3', $raw);
+            $ts = strtotime((string) $normalized);
+            if ($ts !== false && $ts > 0) {
+                return $ts;
+            }
+        }
+
+        return 0;
     }
 
     private static function findExistingImportedItemId(array $manifest, string $sourcePath, string $sourceId): string

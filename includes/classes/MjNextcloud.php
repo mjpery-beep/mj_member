@@ -459,7 +459,7 @@ final class MjNextcloud
     public function folderExists(string $folderPath)
     {
         $folderPath = $this->sanitizePath($folderPath);
-        $url        = $this->davUrl . ($folderPath !== '' ? '/' . ltrim($folderPath, '/') : '');
+        $url        = $this->davUrl . ($folderPath !== '' ? '/' . $this->encodeDavPath($folderPath) : '');
 
         $response = $this->request('PROPFIND', $url, [
             'headers' => [
@@ -491,7 +491,7 @@ final class MjNextcloud
     public function listFolder(string $folderPath = '', bool $autoCreate = true)
     {
         $folderPath = $this->sanitizePath($folderPath);
-        $url        = $this->davUrl . ($folderPath !== '' ? '/' . ltrim($folderPath, '/') : '');
+        $url        = $this->davUrl . ($folderPath !== '' ? '/' . $this->encodeDavPath($folderPath) : '');
 
         $body = '<?xml version="1.0" encoding="UTF-8"?>'
             . '<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">'
@@ -550,7 +550,7 @@ final class MjNextcloud
 
         foreach ($segments as $segment) {
             $current .= ($current !== '' ? '/' : '') . $segment;
-            $url      = $this->davUrl . '/' . $current;
+            $url      = $this->davUrl . '/' . $this->encodeDavPath($current);
 
             // Check existence first.
             $check     = $this->request('PROPFIND', $url, [
@@ -606,7 +606,7 @@ final class MjNextcloud
         }
 
         $filePath = rtrim($folderPath, '/') . '/' . $fileName;
-        $url      = $this->davUrl . '/' . ltrim($filePath, '/');
+        $url      = $this->davUrl . '/' . $this->encodeDavPath(ltrim($filePath, '/'));
 
         $response = $this->request('PUT', $url, [
             'headers' => ['Content-Type' => $mimeType],
@@ -674,7 +674,7 @@ final class MjNextcloud
             return new WP_Error('mj_nextcloud_download_invalid', __('Chemin de fichier invalide.', 'mj-member'));
         }
 
-        $url = $this->davUrl . '/' . ltrim($filePath, '/');
+        $url = $this->davUrl . '/' . $this->encodeDavPath(ltrim($filePath, '/'));
         $response = $this->request('GET', $url);
         if (is_wp_error($response)) {
             return $response;
@@ -714,7 +714,7 @@ final class MjNextcloud
             return new WP_Error('mj_nextcloud_download_target_dir', __('Impossible de créer le dossier cible de téléchargement.', 'mj-member'));
         }
 
-        $url = $this->davUrl . '/' . ltrim($filePath, '/');
+        $url = $this->davUrl . '/' . $this->encodeDavPath(ltrim($filePath, '/'));
         $response = $this->request('GET', $url, [
             'stream'   => true,
             'filename' => $targetPath,
@@ -750,7 +750,7 @@ final class MjNextcloud
     public function delete(string $itemPath)
     {
         $itemPath = $this->sanitizePath($itemPath);
-        $url      = $this->davUrl . '/' . ltrim($itemPath, '/');
+        $url      = $this->davUrl . '/' . $this->encodeDavPath(ltrim($itemPath, '/'));
 
         $response = $this->request('DELETE', $url);
         if (is_wp_error($response)) {
@@ -785,8 +785,8 @@ final class MjNextcloud
 
         $dir     = ltrim(dirname($itemPath), '/');
         $newPath = ($dir !== '' && $dir !== '.') ? $dir . '/' . $newName : $newName;
-        $srcUrl  = $this->davUrl . '/' . ltrim($itemPath, '/');
-        $dstUrl  = $this->davUrl . '/' . ltrim($newPath, '/');
+        $srcUrl  = $this->davUrl . '/' . $this->encodeDavPath(ltrim($itemPath, '/'));
+        $dstUrl  = $this->davUrl . '/' . $this->encodeDavPath(ltrim($newPath, '/'));
 
         $response = $this->request('MOVE', $srcUrl, [
             'headers' => [
@@ -838,8 +838,8 @@ final class MjNextcloud
         }
 
         $newPath = rtrim($targetFolder, '/') . '/' . $baseName;
-        $srcUrl  = $this->davUrl . '/' . ltrim($itemPath, '/');
-        $dstUrl  = $this->davUrl . '/' . ltrim($newPath, '/');
+        $srcUrl  = $this->davUrl . '/' . $this->encodeDavPath(ltrim($itemPath, '/'));
+        $dstUrl  = $this->davUrl . '/' . $this->encodeDavPath(ltrim($newPath, '/'));
 
         $response = $this->request('MOVE', $srcUrl, [
             'headers' => [
@@ -1355,6 +1355,26 @@ final class MjNextcloud
             $safe[] = $part;
         }
         return implode('/', $safe);
+    }
+
+    /**
+     * Percent-encode each segment of an already-sanitized path for use in a DAV URL.
+     *
+     * Filenames commonly contain spaces, accents or other characters that are invalid
+     * unencoded in a URL, which otherwise causes Nextcloud to answer HTTP 404.
+     */
+    private function encodeDavPath(string $path): string
+    {
+        if ($path === '') {
+            return '';
+        }
+
+        $segments = explode('/', $path);
+        $segments = array_map(static function (string $segment): string {
+            return rawurlencode($segment);
+        }, $segments);
+
+        return implode('/', $segments);
     }
 
     /**

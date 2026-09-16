@@ -37,6 +37,22 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
      */
     private static $animateurs_prefetch_cache = null;
 
+    /**
+     * Pre-fetched confirmed registrant avatars indexed by event_id.
+     * null = not yet prefetched; array = already prefetched (events without registrants simply absent).
+     *
+     * @var array<int,list<string>>|null
+     */
+    private static $registered_avatars_prefetch_cache = null;
+
+    /**
+     * Pre-fetched total registrant counts (confirmed + pending) indexed by event_id.
+     * null = not yet prefetched; array = already prefetched (events with 0 registrants simply absent).
+     *
+     * @var array<int,int>|null
+     */
+    private static $registered_counts_prefetch_cache = null;
+
     public function get_name() {
         return 'mj-member-events-calendar';
     }
@@ -637,6 +653,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         // Reset per-render cache so repeated calls (e.g. in tests) don't reuse stale data.
         self::$animateurs_prefetch_cache = null;
+        self::$registered_avatars_prefetch_cache = null;
+        self::$registered_counts_prefetch_cache = null;
 
         $settings = wp_parse_args($settings, self::get_default_render_settings());
         $options = wp_parse_args(
@@ -824,6 +842,10 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
             if (!empty($all_event_ids_for_prefetch)) {
                 self::prefetch_animateurs_for_events($all_event_ids_for_prefetch);
+                // The registrant count/remaining-places number is public; only the names and
+                // avatars built from the same prefetch are restricted at render time to
+                // logged-in members.
+                self::prefetch_registered_avatars_for_events($all_event_ids_for_prefetch);
             }
 
             self::prefetch_cover_attachments($events);
@@ -1379,6 +1401,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
 
             $animateur_items = self::build_event_animateurs_preview($event_id);
+            $registered_avatar_items = self::build_event_registered_avatars_preview($event_id);
+            $registered_total_count = self::build_event_registered_count($event_id);
+            $capacity_total = isset($event['capacity_total']) ? (int) $event['capacity_total'] : 0;
 
             $schedule_occurrences = array();
             if (class_exists(MjEventSchedule::class)) {
@@ -1796,6 +1821,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'registration_label' => $registration_label !== '' ? sanitize_text_field($registration_label) : '',
                     'recurrence_summary' => $recurrence_summary,
                     'animateurs' => $animateur_items,
+                    'registered_avatars' => $registered_avatar_items,
+                    'registered_total' => $registered_total_count,
+                    'capacity_total' => $capacity_total,
                     'palette' => $palette,
                     'permalink' => $permalink,
                     'accent_color' => isset($palette['base']) ? $palette['base'] : '',
@@ -2400,7 +2428,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         AssetsManager::requirePackage($assets_readonly ? 'events-calendar-readonly' : 'events-calendar');
 
         $cover_width_settings = self::normalize_cover_width_settings($settings);
-        $instance_thumb_styles = self::build_cover_width_style_block($instance_id, $cover_width_settings);
+        $instance_thumb_styles = self::build_cover_width_style_block($instance_id, $cover_width_settings, !empty($options['force_mobile']));
         if ($instance_thumb_styles !== '') {
             echo '<style>' . $instance_thumb_styles . '</style>';
         }
@@ -2906,6 +2934,42 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 echo '<span class="mj-member-events-calendar__event-type mj-member-events-calendar__event-type--border">' . esc_html($event_entry['type_label']) . '</span>';
                             }
 
+                            if (!$event_is_closure) {
+                                // Names/avatars of registrants are restricted to logged-in members;
+                                // the registered count and remaining-places number are public.
+                                $card_registered_avatars = (is_user_logged_in() && !empty($event_entry['registered_avatars']) && is_array($event_entry['registered_avatars']))
+                                    ? array_filter(array_map(
+                                        static function ($registrant) {
+                                            return is_array($registrant) && !empty($registrant['avatar']) ? (string) $registrant['avatar'] : '';
+                                        },
+                                        array_slice($event_entry['registered_avatars'], 0, 3)
+                                    ))
+                                    : array();
+                                $card_registered_total = isset($event_entry['registered_total']) ? (int) $event_entry['registered_total'] : 0;
+                                $card_capacity_total = isset($event_entry['capacity_total']) ? (int) $event_entry['capacity_total'] : 0;
+
+                                if (!empty($card_registered_avatars) || $card_registered_total > 0 || $card_capacity_total > 0) {
+                                    echo '<span class="mj-member-events-calendar__event-registrants">';
+                                    if (!empty($card_registered_avatars)) {
+                                        echo '<span class="mj-member-events-calendar__event-avatars">';
+                                        foreach ($card_registered_avatars as $registered_avatar_url) {
+                                            echo '<img class="mj-member-events-calendar__event-avatar" src="' . esc_url($registered_avatar_url) . '" alt="" />';
+                                        }
+                                        echo '</span>';
+                                    }
+                                    if ($card_registered_total > 0 || $card_capacity_total > 0) {
+                                        echo '<span class="mj-member-events-calendar__event-registration-count">';
+                                        if ($card_capacity_total > 0) {
+                                            echo esc_html(sprintf(__('%1$d/%2$d places', 'mj-member'), $card_registered_total, $card_capacity_total));
+                                        } else {
+                                            echo esc_html(sprintf(_n('%d inscrit', '%d inscrits', $card_registered_total, 'mj-member'), $card_registered_total));
+                                        }
+                                        echo '</span>';
+                                    }
+                                    echo '</span>';
+                                }
+                            }
+
                             $preview_cover = '';
                             if (!empty($event_entry['cover_full'])) {
                                 $preview_cover = (string) $event_entry['cover_full'];
@@ -2929,6 +2993,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $preview_recurrence = (!$event_is_closure && !empty($event_entry['recurrence_summary'])) ? (string) $event_entry['recurrence_summary'] : '';
                             $preview_registration = (!$event_is_closure && !empty($event_entry['registration_label'])) ? (string) $event_entry['registration_label'] : '';
                             $preview_animateurs = (!$event_is_closure && !empty($event_entry['animateurs']) && is_array($event_entry['animateurs'])) ? $event_entry['animateurs'] : array();
+                            // Names/avatars of registrants are restricted to logged-in members (the count/places number stays public).
+                            $preview_registered_members = (!$event_is_closure && is_user_logged_in() && !empty($event_entry['registered_avatars']) && is_array($event_entry['registered_avatars'])) ? $event_entry['registered_avatars'] : array();
                             $preview_responsibles = (!$event_is_closure && !empty($event_entry['occurrence_responsible_names']) && is_array($event_entry['occurrence_responsible_names']))
                                 ? array_values(array_filter(array_map('sanitize_text_field', $event_entry['occurrence_responsible_names'])))
                                 : array();
@@ -3079,11 +3145,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                             $has_preview_animateurs = !$event_is_closure && !empty($preview_animateurs);
                             $has_preview_responsibles = !$event_is_closure && !empty($preview_responsibles);
+                            $has_preview_registered_members = !$event_is_closure && !empty($preview_registered_members);
 
-                            if ($preview_cover !== '' || $price_label !== '' || $preview_schedule !== '' || $preview_location !== '' || $preview_description !== '' || $preview_age !== '' || $preview_recurrence !== '' || $preview_registration !== '' || $has_preview_animateurs || $has_preview_responsibles) {
+                            if ($preview_cover !== '' || $price_label !== '' || $preview_schedule !== '' || $preview_location !== '' || $preview_description !== '' || $preview_age !== '' || $preview_recurrence !== '' || $preview_registration !== '' || $has_preview_animateurs || $has_preview_responsibles || $has_preview_registered_members) {
                                 echo '<div class="mj-member-events-calendar__event-preview" aria-hidden="true">';
                                 echo '<div class="mj-member-events-calendar__event-preview-content">';
-                                if ($preview_cover !== '' || $has_preview_animateurs || $preview_registration !== '' || $preview_age !== '') {
+                                if ($preview_cover !== '' || $has_preview_animateurs || $preview_registration !== '' || $preview_age !== '' || $has_preview_registered_members) {
                                     echo '<div class="mj-member-events-calendar__event-preview-side">';
                                     if ($preview_cover !== '') {
                                         echo '<div class="mj-member-events-calendar__event-preview-cover"><img src="' . esc_url($preview_cover) . '" alt="' . esc_attr($event_entry['title']) . '" loading="lazy" /></div>';
@@ -3149,6 +3216,36 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                                         echo '</span>';
                                         echo '</span>';
+                                        echo '</div>';
+                                    }
+                                    if ($has_preview_registered_members) {
+                                        echo '<div class="mj-member-events-calendar__event-preview-registered">';
+                                        echo '<span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Inscrits', 'mj-member') . '</span>';
+                                        echo '<ul class="mj-member-events-calendar__event-registered-list">';
+                                        foreach ($preview_registered_members as $registered_member) {
+                                            if (!is_array($registered_member)) {
+                                                continue;
+                                            }
+
+                                            $registered_name = isset($registered_member['name']) ? (string) $registered_member['name'] : '';
+                                            $registered_avatar = !empty($registered_member['avatar']) ? (string) $registered_member['avatar'] : '';
+                                            $registered_initials = isset($registered_member['initials']) ? (string) $registered_member['initials'] : '';
+
+                                            echo '<li class="mj-member-events-calendar__event-registered-item">';
+                                            echo '<span class="mj-member-events-calendar__event-registered-avatar' . ($registered_avatar !== '' ? ' has-avatar' : '') . '">';
+                                            if ($registered_avatar !== '') {
+                                                $registered_alt = $registered_name !== '' ? sprintf(__('Portrait de %s', 'mj-member'), $registered_name) : '';
+                                                echo '<img src="' . esc_url($registered_avatar) . '" alt="' . esc_attr($registered_alt) . '" loading="lazy" />';
+                                            } elseif ($registered_initials !== '') {
+                                                echo '<span class="mj-member-events-calendar__event-registered-initials" aria-hidden="true">' . esc_html($registered_initials) . '</span>';
+                                            } else {
+                                                echo '<span class="mj-member-events-calendar__event-registered-initials" aria-hidden="true">?</span>';
+                                            }
+                                            echo '</span>';
+                                            echo '<span class="mj-member-events-calendar__event-registered-name">' . esc_html($registered_name) . '</span>';
+                                            echo '</li>';
+                                        }
+                                        echo '</ul>';
                                         echo '</div>';
                                     }
                                     echo '</div>';
@@ -4432,6 +4529,169 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     }
 
     /**
+     * Confirmed registrants for one event (id, name, avatar, initials), from the prefetch cache.
+     *
+     * @param int|string $event_id
+     * @return list<array<string,mixed>>
+     */
+    private static function build_event_registered_avatars_preview($event_id) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || self::$registered_avatars_prefetch_cache === null) {
+            return array();
+        }
+
+        return self::$registered_avatars_prefetch_cache[$event_id] ?? array();
+    }
+
+    /**
+     * Total registrant count (confirmed + pending) for one event, from the prefetch cache.
+     *
+     * @param int|string $event_id
+     * @return int
+     */
+    private static function build_event_registered_count($event_id) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || self::$registered_counts_prefetch_cache === null) {
+            return 0;
+        }
+
+        return self::$registered_counts_prefetch_cache[$event_id] ?? 0;
+    }
+
+    /**
+     * Pre-fetch registrants for all given event IDs in 2 DB queries (event_id → member_id
+     * mappings, then member → name/avatar data) instead of one registrations + member
+     * round-trip per event, and populate $registered_avatars_prefetch_cache (confirmed
+     * registrants only, with name/avatar, for display) and $registered_counts_prefetch_cache
+     * (confirmed + pending total, matching the capacity/remaining-places math used elsewhere).
+     *
+     * @param array $event_ids
+     */
+    private static function prefetch_registered_avatars_for_events(array $event_ids): void {
+        if (self::$registered_avatars_prefetch_cache !== null) {
+            return; // Already prefetched for this render cycle.
+        }
+
+        self::$registered_avatars_prefetch_cache = array();
+        self::$registered_counts_prefetch_cache = array();
+
+        $event_ids = array_values(array_unique(array_filter(array_map('intval', $event_ids))));
+        if (empty($event_ids) || !function_exists('mj_member_get_event_registrations_table_name')) {
+            return;
+        }
+
+        $reg_table = mj_member_get_event_registrations_table_name();
+        if (empty($reg_table)) {
+            return;
+        }
+
+        global $wpdb;
+
+        // Query 1: get all event_id → member_id/statut rows (confirmed + pending) in one round-trip.
+        $placeholders = implode(',', array_fill(0, count($event_ids), '%d'));
+        $reg_rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT event_id, member_id, statut FROM {$reg_table} WHERE event_id IN ({$placeholders}) AND statut IN (%s, %s) ORDER BY created_at ASC",
+                ...array_merge($event_ids, array(MjEventRegistrations::STATUS_CONFIRMED, MjEventRegistrations::STATUS_PENDING))
+            )
+        );
+
+        if (empty($reg_rows)) {
+            return;
+        }
+
+        $event_member_map = array(); // event_id → [member_id, ...] confirmed only, in registration order
+        $all_member_ids = array();   // unique confirmed member IDs (only those need a name/avatar)
+        foreach ($reg_rows as $rr) {
+            $eid = (int) $rr->event_id;
+            $mid = (int) $rr->member_id;
+            if ($eid <= 0 || $mid <= 0) {
+                continue;
+            }
+
+            self::$registered_counts_prefetch_cache[$eid] = (self::$registered_counts_prefetch_cache[$eid] ?? 0) + 1;
+
+            $status = isset($rr->statut) ? (string) $rr->statut : '';
+            if ($status === MjEventRegistrations::STATUS_CONFIRMED) {
+                $event_member_map[$eid][] = $mid;
+                $all_member_ids[$mid] = $mid;
+            }
+        }
+
+        if (empty($all_member_ids)) {
+            return;
+        }
+
+        // Query 2: fetch only the columns needed to resolve a name + avatar for all registrants.
+        $mem_table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+        $mem_placeholders = implode(',', array_fill(0, count($all_member_ids), '%d'));
+        $member_rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, first_name, last_name, nickname, photo_id, wp_user_id, email FROM {$mem_table} WHERE id IN ({$mem_placeholders})",
+                ...array_values($all_member_ids)
+            )
+        );
+
+        $members_by_id = array();
+        if (!empty($member_rows)) {
+            foreach ($member_rows as $member) {
+                $members_by_id[(int) $member->id] = $member;
+            }
+        }
+
+        // Build the registrant list per event, capped to the number actually displayed.
+        foreach ($event_member_map as $eid => $member_ids) {
+            $items = array();
+            foreach ($member_ids as $mid) {
+                $row = isset($members_by_id[$mid]) ? $members_by_id[$mid] : null;
+                if ($row === null) {
+                    continue;
+                }
+
+                $first_name = isset($row->first_name) ? sanitize_text_field((string) $row->first_name) : '';
+                $last_name = isset($row->last_name) ? sanitize_text_field((string) $row->last_name) : '';
+                $full_name = trim($first_name . ' ' . $last_name);
+                if ($full_name === '' && isset($row->nickname)) {
+                    $full_name = sanitize_text_field((string) $row->nickname);
+                }
+                if ($full_name === '') {
+                    $full_name = sprintf(__('Membre #%d', 'mj-member'), $mid);
+                }
+                $full_name = sanitize_text_field($full_name);
+
+                $avatar_url = '';
+                if (!empty($row->photo_id) && function_exists('wp_get_attachment_image_src')) {
+                    $photo_id = (int) $row->photo_id;
+                    if ($photo_id > 0) {
+                        $photo = wp_get_attachment_image_src($photo_id, 'thumbnail');
+                        if (is_array($photo) && !empty($photo[0])) {
+                            $avatar_url = esc_url_raw($photo[0]);
+                        }
+                    }
+                }
+                if ($avatar_url === '' && !empty($row->wp_user_id) && function_exists('get_avatar_url')) {
+                    $avatar_url = esc_url_raw(get_avatar_url((int) $row->wp_user_id, array('size' => 96)));
+                }
+                if ($avatar_url === '' && !empty($row->email) && is_email($row->email) && function_exists('get_avatar_url')) {
+                    $avatar_url = esc_url_raw(get_avatar_url($row->email, array('size' => 96)));
+                }
+
+                $items[] = array(
+                    'id' => $mid,
+                    'name' => $full_name,
+                    'avatar' => $avatar_url,
+                    'initials' => sanitize_text_field(self::build_member_initials($full_name)),
+                );
+
+                if (count($items) >= 10) {
+                    break;
+                }
+            }
+            self::$registered_avatars_prefetch_cache[$eid] = $items;
+        }
+    }
+
+    /**
      * Extract two-letter initials from a name.
      */
     private static function build_member_initials($name) {
@@ -4945,14 +5205,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<p class="mj-member-events-calendar__day-note-tooltip-desc">' . esc_html($note['content']) . '</p>';
         }
         echo '<div class="mj-member-events-calendar__day-note-tooltip-avatars">';
-        if (!empty($note['author_avatar'])) {
-            echo '<span class="mj-member-events-calendar__day-note-tooltip-avatar-group mj-member-events-calendar__day-note-tooltip-avatar-group--creator">';
-            echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($note['author_avatar']) . '" alt="" title="' . esc_attr($note['author_name']) . '" />';
-            if (!empty($note['note_type_emoji'])) {
-                echo '<span class="mj-member-events-calendar__day-note-tooltip-creator-emoji" aria-hidden="true">' . esc_html($note['note_type_emoji']) . '</span>';
-            }
-            echo '</span>';
-        }
         if (!empty($note['assigned_avatars'])) {
             echo '<span class="mj-member-events-calendar__day-note-tooltip-avatar-group mj-member-events-calendar__day-note-tooltip-avatar-group--assignees">';
             foreach ((array) $note['assigned_avatars'] as $assigned_avatar_url) {
@@ -4962,6 +5214,16 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
         echo '</div>';
         echo '<div class="mj-member-events-calendar__day-note-tooltip-meta">';
+        if (!empty($note['author_name'])) {
+            echo '<span class="mj-member-events-calendar__day-note-tooltip-tag mj-member-events-calendar__day-note-tooltip-tag--creator">';
+            if (!empty($note['author_avatar'])) {
+                echo '<img class="mj-member-events-calendar__day-note-avatar mj-member-events-calendar__day-note-tooltip-tag-avatar" src="' . esc_url($note['author_avatar']) . '" alt="" />';
+            } else {
+                echo '👤 ';
+            }
+            echo esc_html('Créé par ' . $note['author_name']);
+            echo '</span>';
+        }
         if (!empty($note['note_type_label'])) {
             echo '<span class="mj-member-events-calendar__day-note-tooltip-tag">' . esc_html(trim(($note['note_type_emoji'] ?? '') . ' ' . $note['note_type_label'])) . '</span>';
         }
@@ -4969,6 +5231,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         echo '</div>';
         echo '</div>';
 
+        if (!empty($note['author_avatar'])) {
+            echo '<img class="mj-member-events-calendar__day-note-avatar mj-member-events-calendar__day-note-creator-avatar" src="' . esc_url($note['author_avatar']) . '" alt="" title="' . esc_attr($note['author_name']) . '" />';
+        }
         echo '<span class="mj-member-events-calendar__day-note-avatars">';
         foreach (array_slice((array) ($note['assigned_avatars'] ?? array()), 0, 3) as $assigned_avatar_url) {
             echo '<img class="mj-member-events-calendar__day-note-avatar" src="' . esc_url($assigned_avatar_url) . '" alt="" />';
@@ -5171,9 +5436,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
      *
      * @param string $instance_id
      * @param array<string,int> $widths
+     * @param bool $force_mobile Whether this instance is always rendered in a narrow
+     *                           container (e.g. the header dropdown) regardless of the
+     *                           actual browser viewport, so the mobile width must apply
+     *                           unconditionally instead of behind a max-width media query.
      * @return string
      */
-    private static function build_cover_width_style_block($instance_id, $widths) {
+    private static function build_cover_width_style_block($instance_id, $widths, $force_mobile = false) {
         if (!is_string($instance_id) || $instance_id === '' || !is_array($widths)) {
             return '';
         }
@@ -5185,7 +5454,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         $desktop = isset($widths['desktop']) ? (int) $widths['desktop'] : 120;
         $tablet = isset($widths['tablet']) ? (int) $widths['tablet'] : 110;
-        $mobile = 90;
+        $mobile = isset($widths['mobile']) ? (int) $widths['mobile'] : 90;
 
         $desktop = min(500, max(10, $desktop));
         $tablet = min(500, max(10, $tablet));
@@ -5196,6 +5465,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $rules[] = sprintf('#%1$s .mj-member-events-calendar__event-thumb img{width:100%%;height:100%%;object-fit:cover;}', $normalized_id);
         $rules[] = sprintf('@media (max-width: 900px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $tablet);
         $rules[] = sprintf('@media (max-width: 767px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $mobile);
+
+        if ($force_mobile) {
+            // Forced-mobile instances (narrow dropdowns/drawers) can be rendered on a
+            // wide desktop viewport, so the max-width media queries above never match.
+            // Pin the mobile width unconditionally via the extra class for specificity.
+            $rules[] = sprintf('#%1$s.mj-member-events-calendar--force-mobile .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}', $normalized_id, $mobile);
+        }
 
         return implode('', $rules);
     }
