@@ -614,8 +614,6 @@ class MjAccountLinks {
             $isBenevole = MjRoles::isBenevole($memberRole);
         }
 
-        $isYoungMember = MjRoles::isJeune($memberRole);
-
         $unreadExtraTargets = self::buildUnreadTargets($currentMemberId, $memberRole);
 
         $currentUserEmail = ($currentUser instanceof WP_User && !empty($currentUser->user_email))
@@ -686,10 +684,6 @@ class MjAccountLinks {
             }
 
             if ($visibility === 'hours_team' && !$isAnimateur && !$isCoordinateur && !$isBenevole) {
-                continue;
-            }
-
-            if ($key === 'registrations' && !$previewMode && !$isYoungMember) {
                 continue;
             }
 
