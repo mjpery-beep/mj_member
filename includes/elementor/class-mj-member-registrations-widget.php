@@ -310,13 +310,17 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 . '.mj-member-registrations__location-media img{width:100%;height:100%;object-fit:cover;}'
                 . '.mj-member-registrations__notes{margin:0;padding:16px;border-radius:14px;background:#f8fafc;color:#1f2937;font-size:0.92rem;line-height:1.5;}'
                 . '.mj-member-registrations__actions{display:flex;flex-wrap:wrap;gap:12px;}'
-                . '.mj-member-registrations__action{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:14px;border:1px solid #1d4ed8;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;font-size:0.92rem;font-weight:600;text-decoration:none;box-shadow:0 16px 34px rgba(37,99,235,0.24);transition:transform 0.2s ease,box-shadow 0.2s ease;}'
-                . '.mj-member-registrations__action:hover{transform:translateY(-1px);box-shadow:0 22px 40px rgba(37,99,235,0.28);}'
-                . '.mj-member-registrations__action:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px;}'
-                . '.mj-member-registrations__action-icon{font-size:1.1rem;line-height:1;}'
-                . '.mj-member-registrations__action--pay{border-color:#15803d;background:linear-gradient(135deg,#16a34a,#15803d);box-shadow:0 16px 34px rgba(21,128,61,0.24);}'
-                . '.mj-member-registrations__action--pay:hover{box-shadow:0 22px 40px rgba(21,128,61,0.28);}'
-                . '.mj-member-registrations__action--pay:disabled{opacity:0.6;cursor:not-allowed;transform:none;box-shadow:none;}'
+                . '.mj-member-registrations a.mj-member-registrations__action,.mj-member-registrations button.mj-member-registrations__action{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:14px;border:1px solid #1d4ed8;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff !important;font-size:0.92rem;font-weight:600;font-family:inherit;line-height:1.2;text-decoration:none !important;box-shadow:0 16px 34px rgba(37,99,235,0.24);transition:transform 0.2s ease,box-shadow 0.2s ease;cursor:pointer;}'
+                . '.mj-member-registrations a.mj-member-registrations__action:visited{color:#ffffff !important;}'
+                . '.mj-member-registrations a.mj-member-registrations__action span,.mj-member-registrations button.mj-member-registrations__action span{color:inherit;text-decoration:none !important;}'
+                . '.mj-member-registrations .mj-member-registrations__action:hover{transform:translateY(-1px);box-shadow:0 22px 40px rgba(37,99,235,0.28);color:#ffffff !important;text-decoration:none !important;}'
+                . '.mj-member-registrations .mj-member-registrations__action:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px;}'
+                . '.mj-member-registrations .mj-member-registrations__action-icon{font-size:1.1rem;line-height:1;}'
+                . '.mj-member-registrations .mj-member-registrations__action--pay{border-color:#15803d;background:linear-gradient(135deg,#16a34a,#15803d);box-shadow:0 16px 34px rgba(21,128,61,0.24);}'
+                . '.mj-member-registrations .mj-member-registrations__action--pay:hover{box-shadow:0 22px 40px rgba(21,128,61,0.28);}'
+                . '.mj-member-registrations button.mj-member-registrations__action--pay:disabled{opacity:0.6;cursor:not-allowed;transform:none;box-shadow:none;}'
+                . '.mj-member-registrations a.mj-member-registrations__action--contract,.mj-member-registrations a.mj-member-registrations__action--contract:visited{border-color:#475569;background:linear-gradient(135deg,#64748b,#475569);box-shadow:0 16px 34px rgba(71,85,105,0.22);color:#ffffff !important;}'
+                . '.mj-member-registrations .mj-member-registrations__action--contract:hover{box-shadow:0 22px 40px rgba(71,85,105,0.26);}'
                 . '.mj-member-registrations__pay-feedback{margin:0;font-size:0.85rem;color:#b91c1c;}'
                 . '.mj-member-registrations__pay-feedback:empty{display:none;}'
                 . '.mj-member-registrations__calendar-card{display:grid;gap:18px;background:#f8fbff;border:1px solid #dbeafe;border-radius:20px;padding:20px;box-shadow:0 12px 26px rgba(15,23,42,0.08);}'
@@ -514,6 +518,18 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             $entry_payment_status = isset($entry['payment_status']) ? sanitize_key((string) $entry['payment_status']) : 'unpaid';
             $can_pay_online = !$is_free && $entry_payment_status === 'unpaid' && $status_key !== 'cancelled' && $registration_id_for_payment > 0;
 
+            $contract_download_url = '';
+            if (!empty($entry['has_contract']) && $registration_id_for_payment > 0) {
+                $contract_download_url = add_query_arg(
+                    array(
+                        'action' => 'mj_member_download_registration_contract',
+                        'registration_id' => $registration_id_for_payment,
+                        'nonce' => wp_create_nonce('mj_member_download_registration_contract'),
+                    ),
+                    admin_url('admin-ajax.php')
+                );
+            }
+
             $all_occurrences = (!empty($entry['occurrences']) && is_array($entry['occurrences'])) ? $entry['occurrences'] : array();
             $available_occurrences = (!empty($entry['available_occurrences']) && is_array($entry['available_occurrences'])) ? $entry['available_occurrences'] : array();
             $occurrence_payload = self::normalize_occurrence_payload($all_occurrences);
@@ -688,7 +704,7 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 echo '<div class="mj-member-registrations__notes">' . wp_kses_post($entry['notes']) . '</div>';
             }
 
-            if (!empty($actions) || $can_pay_online) {
+            if (!empty($actions) || $can_pay_online || $contract_download_url !== '') {
                 echo '<div class="mj-member-registrations__actions">';
                 foreach ($actions as $action) {
                     if (empty($action['url']) || empty($action['label'])) {
@@ -697,6 +713,9 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                     $target = !empty($action['target']) ? $action['target'] : '_self';
                     $rel_attr = ($target === '_blank') ? ' rel="noopener"' : '';
                     echo '<a class="mj-member-registrations__action" href="' . esc_url($action['url']) . '" target="' . esc_attr($target) . '"' . $rel_attr . '><span>' . esc_html($action['label']) . '</span><span class="mj-member-registrations__action-icon" aria-hidden="true">&rarr;</span></a>';
+                }
+                if ($contract_download_url !== '') {
+                    echo '<a class="mj-member-registrations__action mj-member-registrations__action--contract" href="' . esc_url($contract_download_url) . '" target="_blank" rel="noopener"><span>' . esc_html__('Télécharger le contrat', 'mj-member') . '</span><span class="mj-member-registrations__action-icon" aria-hidden="true">&darr;</span></a>';
                 }
                 if ($can_pay_online) {
                     self::ensure_script_localized();

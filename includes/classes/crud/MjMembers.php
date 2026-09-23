@@ -499,6 +499,10 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $insert['card_access_key'] = self::generateCardAccessKey();
         $insert['anonymized_at'] = null;
 
+        if (self::hasColumn('slug')) {
+            $insert['slug'] = self::generateUniqueSlug($first_name, $last_name);
+        }
+
         $custom_inscription = self::sanitizeDateTime($data['date_inscription'] ?? '');
         if ($custom_inscription !== null) {
             $insert['date_inscription'] = $custom_inscription;
@@ -1197,6 +1201,34 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         }
 
         return in_array(strtolower($column), $columns, true);
+    }
+
+    /**
+     * Builds a slug that is guaranteed unique in the members table (the
+     * `slug` column has a UNIQUE key, so an empty/duplicate value on insert
+     * breaks the query).
+     *
+     * @param string $first_name
+     * @param string $last_name
+     * @return string
+     */
+    private static function generateUniqueSlug($first_name, $last_name) {
+        $base_slug = sanitize_title(trim($first_name . '-' . $last_name));
+        if ($base_slug === '') {
+            $base_slug = 'membre';
+        }
+
+        $table = self::table_name();
+        $wpdb = self::getWpdb();
+        $slug = $base_slug;
+        $suffix = 2;
+
+        while ($wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE slug = %s LIMIT 1", $slug))) {
+            $slug = $base_slug . '-' . $suffix;
+            $suffix++;
+        }
+
+        return $slug;
     }
 
     private static function enforceColumnLengths(array $data) {

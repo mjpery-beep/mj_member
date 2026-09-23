@@ -27,6 +27,28 @@ if (!function_exists('mj_member_get_registration_type')) {
     }
 }
 
+if (!function_exists('mj_member_is_minor')) {
+    function mj_member_is_minor($birth_date) {
+        $birth_date = trim((string) $birth_date);
+        if ($birth_date === '') {
+            return false;
+        }
+
+        try {
+            $dob = new \DateTime($birth_date);
+        } catch (\Exception $e) {
+            return false;
+        }
+
+        $today = new \DateTime('today');
+        if ($dob > $today) {
+            return false;
+        }
+
+        return $dob->diff($today)->y < 18;
+    }
+}
+
 if (!function_exists('mj_member_send_registration_email')) {
     function mj_member_send_registration_email($member_id, $guardian = null) {
         if (!class_exists('MjMail') || !class_exists('MjMembers')) {
@@ -163,6 +185,12 @@ if (!function_exists('mj_process_frontend_inscription')) {
             'user_login'  => '',
             'user_password' => (string) wp_unslash($_POST['guardian_user_password'] ?? ''),
             'user_password_confirm' => (string) wp_unslash($_POST['guardian_user_password_confirm'] ?? ''),
+        );
+
+        $parent = array(
+            'first_name' => sanitize_text_field(wp_unslash($_POST['parent_first_name'] ?? '')),
+            'last_name'  => sanitize_text_field(wp_unslash($_POST['parent_last_name'] ?? '')),
+            'phone'      => sanitize_text_field(wp_unslash($_POST['parent_phone'] ?? '')),
         );
 
         if ($requires_guardian) {
@@ -314,6 +342,25 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 );
             }
 
+            $child['is_minor'] = false;
+            if ($registration_type === MjRoles::JEUNE) {
+                $child['is_minor'] = mj_member_is_minor($child['birth_date']);
+
+                if ($child['is_minor']) {
+                    $parent_missing = array();
+                    if ($parent['first_name'] === '') { $parent_missing[] = 'parent_first_name'; }
+                    if ($parent['last_name']  === '') { $parent_missing[] = 'parent_last_name'; }
+                    if ($parent['phone']      === '') { $parent_missing[] = 'parent_phone'; }
+                    if (!empty($parent_missing)) {
+                        return array(
+                            'success' => false,
+                            'message' => "Comme tu es mineur·e, merci de renseigner le prénom, le nom et le téléphone d'un parent ou tuteur de référence.",
+                            'error_fields' => $parent_missing,
+                        );
+                    }
+                }
+            }
+
             $needs_account = ($registration_type === MjRoles::JEUNE) || !empty($child['is_autonomous']);
             $child_login_clean = '';
 
@@ -431,6 +478,32 @@ if (!function_exists('mj_process_frontend_inscription')) {
             }
         }
 
+        $parent_guardian_id = null;
+        $parent_was_existing = false;
+        if ($registration_type === MjRoles::JEUNE && !empty($children[0]['is_minor'])) {
+            $wpdb = MjMembers::getWpdb();
+            $table_name = MjMembers::getTableName(MjMembers::TABLE_NAME);
+            $existing_parent_row = $wpdb->get_row(
+                $wpdb->prepare(
+                    "SELECT id FROM $table_name WHERE first_name = %s AND last_name = %s AND role = %s LIMIT 1",
+                    $parent['first_name'],
+                    $parent['last_name'],
+                    MjRoles::TUTEUR
+                )
+            );
+            if ($existing_parent_row) {
+                $parent_was_existing = true;
+            }
+
+            $parent_guardian_id = MjMembers::upsertGuardian($parent);
+            if (is_wp_error($parent_guardian_id)) {
+                return array('success' => false, 'message' => $parent_guardian_id->get_error_message());
+            }
+            if (!$parent_guardian_id) {
+                return array('success' => false, 'message' => "Impossible d'enregistrer les informations du parent/tuteur. Vérifiez les informations et réessayez.");
+            }
+        }
+
         $created_member_ids = array();
         $created_members = array();
 
@@ -453,7 +526,9 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 'phone'               => $child['phone'],
                 'birth_date'          => $child['birth_date'],
                 'role'                => MjRoles::JEUNE,
-                'guardian_id'         => ($requires_guardian && empty($child['is_autonomous'])) ? $guardian_id : null,
+                'guardian_id'         => ($requires_guardian && empty($child['is_autonomous']))
+                    ? $guardian_id
+                    : (!empty($child['is_minor']) ? $parent_guardian_id : null),
                 'is_autonomous'       => $registration_type === MjRoles::JEUNE ? 1 : ($child['is_autonomous'] ? 1 : 0),
                 'requires_payment'    => 1,
                 'photo_usage_consent' => $child['photo_usage_consent'],
@@ -466,6 +541,10 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 $error_message = is_wp_error($member_id) ? $member_id->get_error_message() : sprintf("Impossible d'enregistrer %s %s. Veuillez réessayer.", esc_html($child['first_name']), esc_html($child['last_name']));
                 foreach ($created_member_ids as $created_id) {
                     MjMembers::delete($created_id);
+                }
+
+                if (!$parent_was_existing && $parent_guardian_id) {
+                    MjMembers::delete($parent_guardian_id);
                 }
 
                 return array('success' => false, 'message' => $error_message);
@@ -544,6 +623,10 @@ if (!function_exists('mj_process_frontend_inscription')) {
                     MjMembers::delete($guardian_id);
                 }
 
+                if (!$parent_was_existing && $parent_guardian_id) {
+                    MjMembers::delete($parent_guardian_id);
+                }
+
                 return array('success' => false, 'message' => $account_result->get_error_message());
             }
 
@@ -575,13 +658,24 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 }
                 $body .= "\nJeunes:\n" . implode("\n", $child_lines) . "\n";
             } else {
-                $body  = "Un jeune majeur s'est inscrit via le site:\n\n";
+                $is_minor_registration = !empty($children[0]['is_minor']);
+                $body  = $is_minor_registration
+                    ? "Un jeune mineur autonome s'est inscrit via le site:\n\n"
+                    : "Un jeune majeur s'est inscrit via le site:\n\n";
                 $body .= implode("\n", $child_lines) . "\n";
                 if (!empty($children[0]['email'])) {
                     $body .= sprintf("Email: %s\n", $children[0]['email']);
                 }
                 if (!empty($children[0]['phone'])) {
                     $body .= sprintf("Téléphone: %s\n", $children[0]['phone']);
+                }
+                if ($is_minor_registration) {
+                    $body .= sprintf(
+                        "\nParent/tuteur de référence: %s %s (%s)\n",
+                        $parent['first_name'],
+                        $parent['last_name'],
+                        $parent['phone']
+                    );
                 }
             }
 
@@ -824,6 +918,9 @@ if (!function_exists('mj_collect_children_form_values')) {
                 'user_login'          => '',
                 'user_password'       => '',
                 'user_password_confirm' => '',
+                'parent_first_name'   => sanitize_text_field(wp_unslash($_POST['parent_first_name'] ?? '')),
+                'parent_last_name'    => sanitize_text_field(wp_unslash($_POST['parent_last_name'] ?? '')),
+                'parent_phone'        => sanitize_text_field(wp_unslash($_POST['parent_phone'] ?? '')),
             ));
         }
 
@@ -847,6 +944,9 @@ if (!function_exists('mj_collect_children_form_values')) {
                 'user_login'          => sanitize_user(wp_unslash($raw_child['user_login'] ?? ''), true),
                 'user_password'       => (string) wp_unslash($raw_child['user_password'] ?? ''),
                 'user_password_confirm' => (string) wp_unslash($raw_child['user_password_confirm'] ?? ''),
+                'parent_first_name'   => sanitize_text_field(wp_unslash($_POST['parent_first_name'] ?? '')),
+                'parent_last_name'    => sanitize_text_field(wp_unslash($_POST['parent_last_name'] ?? '')),
+                'parent_phone'        => sanitize_text_field(wp_unslash($_POST['parent_phone'] ?? '')),
             );
         }
 
@@ -863,6 +963,9 @@ if (!function_exists('mj_collect_children_form_values')) {
                 'user_login'          => '',
                 'user_password'       => '',
                 'user_password_confirm' => '',
+                'parent_first_name'   => sanitize_text_field(wp_unslash($_POST['parent_first_name'] ?? '')),
+                'parent_last_name'    => sanitize_text_field(wp_unslash($_POST['parent_last_name'] ?? '')),
+                'parent_phone'        => sanitize_text_field(wp_unslash($_POST['parent_phone'] ?? '')),
             ));
         }
 
@@ -886,6 +989,9 @@ if (!function_exists('mj_render_child_form_block')) {
             'photo_usage_consent' => 0,
             'notes'               => '',
             'user_login'          => '',
+            'parent_first_name'   => '',
+            'parent_last_name'    => '',
+            'parent_phone'        => '',
         );
 
         $complementary_defaults = array(
@@ -904,6 +1010,11 @@ if (!function_exists('mj_render_child_form_block')) {
         $header_classes = 'mj-child-card__header' . ($show_header ? '' : ' mj-hidden');
         $account_classes = 'mj-child-card__account' . ($is_autonomous ? '' : ' mj-hidden');
         $complementary_panel_id = 'mj_child_' . $index_attr . '_complementary_panel';
+
+        // The header is hidden only in the standalone "jeune autonome" flow (single child, no tuteur fieldset).
+        $is_jeune_autonome_flow = !$show_header;
+        $child_is_minor = $is_jeune_autonome_flow && mj_member_is_minor($values['birth_date']);
+        $parent_section_classes = 'mj-child-card__parent' . ($child_is_minor ? '' : ' mj-hidden');
 
         ob_start();
         ?>
@@ -946,7 +1057,29 @@ if (!function_exists('mj_render_child_form_block')) {
                     <span>Autorisation de l'utilisation d'images</span>
                 </label>
             </div>
-            
+
+            <?php if ($is_jeune_autonome_flow) : ?>
+            <p class="mj-field-hint mj-child-card__reference-note">Même en tant que jeune autonome, il est nécessaire d'avoir au moins une personne de référence (parent, tuteur, proche majeur…) pouvant être contactée en cas de besoin.</p>
+            <div class="<?php echo esc_attr($parent_section_classes); ?>" data-parent-section>
+                <h5>Parent ou tuteur de référence</h5>
+                <p class="mj-field-hint">Tu es mineur·e : indique ici une personne de référence (parent, tuteur, proche majeur…). Sa fiche tuteur sera créée automatiquement.</p>
+                <div class="mj-field-grid">
+                    <div class="mj-field-group">
+                        <label for="mj_child_<?php echo $index_attr; ?>_parent_first_name">Prénom *</label>
+                        <input type="text" id="mj_child_<?php echo $index_attr; ?>_parent_first_name" name="parent_first_name" value="<?php echo esc_attr($values['parent_first_name']); ?>" <?php echo $child_is_minor ? 'required' : ''; ?> data-parent-field />
+                    </div>
+                    <div class="mj-field-group">
+                        <label for="mj_child_<?php echo $index_attr; ?>_parent_last_name">Nom *</label>
+                        <input type="text" id="mj_child_<?php echo $index_attr; ?>_parent_last_name" name="parent_last_name" value="<?php echo esc_attr($values['parent_last_name']); ?>" <?php echo $child_is_minor ? 'required' : ''; ?> data-parent-field />
+                    </div>
+                    <div class="mj-field-group">
+                        <label for="mj_child_<?php echo $index_attr; ?>_parent_phone">Téléphone *</label>
+                        <input type="tel" id="mj_child_<?php echo $index_attr; ?>_parent_phone" name="parent_phone" value="<?php echo esc_attr($values['parent_phone']); ?>" <?php echo $child_is_minor ? 'required' : ''; ?> data-parent-field />
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <?php
             // Dynamic fields (registration)
             $dyn_reg_fields = MjDynamicFields::getRegistrationFields();
@@ -2731,6 +2864,22 @@ if (!function_exists('mj_member_render_registration_form')) {
                 margin-bottom: 20px;
             }
 
+            .mj-child-card__reference-note {
+                margin: 0 0 16px;
+            }
+
+            .mj-child-card__parent {
+                margin: 0 0 20px;
+                padding: 16px;
+                border: 1px solid var(--mj-border);
+                border-radius: 10px;
+                background: var(--mj-bg);
+            }
+
+            .mj-child-card__parent h5 {
+                margin: 0 0 6px;
+            }
+
             .mj-child-card__complementary {
                 position: relative;
                 margin-bottom: 20px;
@@ -3851,6 +4000,50 @@ if (!function_exists('mj_member_render_registration_form')) {
                     });
                 }
 
+                function computeAgeFromDate(dateValue) {
+                    if (!dateValue) {
+                        return null;
+                    }
+                    const parts = String(dateValue).split('-');
+                    if (parts.length !== 3) {
+                        return null;
+                    }
+                    const dob = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                    if (isNaN(dob.getTime())) {
+                        return null;
+                    }
+                    const today = new Date();
+                    let age = today.getFullYear() - dob.getFullYear();
+                    const monthDiff = today.getMonth() - dob.getMonth();
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+                        age--;
+                    }
+                    return age;
+                }
+
+                function updateChildParentSection(card, type) {
+                    const parentSection = card.querySelector('[data-parent-section]');
+                    if (!parentSection) {
+                        return;
+                    }
+
+                    const birthDateInput = card.querySelector('input[type="date"]');
+                    const age = birthDateInput ? computeAgeFromDate(birthDateInput.value) : null;
+                    const isMinor = age !== null && age < 18;
+                    const shouldShow = type === ROLE_JEUNE && isMinor;
+
+                    parentSection.classList.toggle('mj-hidden', !shouldShow);
+
+                    parentSection.querySelectorAll('[data-parent-field]').forEach(function (field) {
+                        field.disabled = !shouldShow;
+                        if (shouldShow) {
+                            field.setAttribute('required', 'required');
+                        } else {
+                            field.removeAttribute('required');
+                        }
+                    });
+                }
+
                 function toggleGuardianFields(type) {
                     if (!guardianFieldset) {
                         return;
@@ -3909,6 +4102,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                         }
 
                         updateChildAccountSection(card, type);
+                        updateChildParentSection(card, type);
                     });
 
                     if (addButton) {
@@ -3979,6 +4173,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                         toggleChildOptions(currentType);
                         toggleChildHeaders(currentType);
                         updateChildAccountSection(card, currentType);
+                        updateChildParentSection(card, currentType);
                     }
                 }
 
@@ -4027,6 +4222,12 @@ if (!function_exists('mj_member_render_registration_form')) {
                         const card = target.closest('.mj-child-card');
                         if (card) {
                             updateChildAccountSection(card, currentType);
+                        }
+                    }
+                    if (target && target.type === 'date') {
+                        const card = target.closest('.mj-child-card');
+                        if (card) {
+                            updateChildParentSection(card, currentType);
                         }
                     }
                 });

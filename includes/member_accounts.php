@@ -13,6 +13,8 @@ namespace Mj\Member\Module {
             add_action('wp_ajax_mj_member_create_child_payment_link', 'mj_member_ajax_create_child_payment_link');
             add_action('wp_ajax_mj_member_create_event_payment_link', 'mj_member_ajax_create_event_payment_link');
             add_action('wp_ajax_nopriv_mj_member_create_event_payment_link', 'mj_member_ajax_create_event_payment_link');
+            add_action('wp_ajax_mj_member_download_registration_contract', 'mj_member_download_registration_contract');
+            add_action('wp_ajax_nopriv_mj_member_download_registration_contract', 'mj_member_download_registration_contract');
             add_action('wp_ajax_mj_member_update_child_profile', 'mj_member_ajax_update_child_profile');
             add_action('wp_ajax_mj_member_update_notification_preferences', 'mj_member_ajax_update_notification_preferences');
             add_filter('mj_member_member_registrations', 'mj_member_collect_member_registration_entries', 10, 3);
@@ -31,6 +33,7 @@ namespace {
     use Mj\Member\Classes\MjPayments;
     use Mj\Member\Classes\MjTrophyService;
     use Mj\Member\Classes\Crud\MjEventLocations;
+    use Mj\Member\Core\Ajax\Admin\RegistrationManagerController;
 
     if (!defined('ABSPATH')) {
         exit;
@@ -982,6 +985,7 @@ if (!function_exists('mj_member_get_member_registrations')) {
                 'schedule_frequency' => $schedule_frequency,
                 'calendar_label' => $calendar_label,
                 'time_label' => $time_label,
+                'has_contract' => !empty($registration['has_contract']),
             );
 
             if ((int) $args['limit'] > 0 && count($sanitized) >= (int) $args['limit']) {
@@ -1277,6 +1281,123 @@ if (!function_exists('mj_member_ajax_create_event_payment_link')) {
         wp_send_json_success(array(
             'redirect_url' => esc_url_raw($payment['checkout_url']),
         ));
+    }
+
+}
+
+if (!function_exists('mj_member_download_registration_contract')) {
+    /**
+     * Génère et télécharge le contrat/autorisation d'inscription d'un membre pour un
+     * événement, en réutilisant le générateur PDF du widget gestionnaire
+     * (RegistrationManagerController::callInternal) plutôt que de dupliquer le rendu.
+     */
+    function mj_member_download_registration_contract() {
+        if (!is_user_logged_in()) {
+            wp_die(__('Vous devez être connecté pour télécharger ce document.', 'mj-member'), '', array('response' => 403));
+        }
+
+        $nonce = isset($_REQUEST['nonce']) ? sanitize_text_field(wp_unslash($_REQUEST['nonce'])) : '';
+        if (!wp_verify_nonce($nonce, 'mj_member_download_registration_contract')) {
+            wp_die(__('La vérification de sécurité a échoué. Merci de recharger la page.', 'mj-member'), '', array('response' => 403));
+        }
+
+        $registration_id = isset($_REQUEST['registration_id']) ? (int) $_REQUEST['registration_id'] : 0;
+        if ($registration_id <= 0) {
+            wp_die(__('Inscription invalide.', 'mj-member'), '', array('response' => 400));
+        }
+
+        if (!class_exists('MjEventRegistrations') || !class_exists('MjEvents') || !class_exists('MjMembers')
+            || !class_exists(RegistrationManagerController::class)) {
+            wp_die(__('Le module de contrat n’est pas disponible.', 'mj-member'), '', array('response' => 500));
+        }
+
+        $registration = MjEventRegistrations::get($registration_id);
+        if (!$registration) {
+            wp_die(__('Inscription introuvable.', 'mj-member'), '', array('response' => 404));
+        }
+
+        $current_member = mj_member_get_current_member();
+        if (!$current_member || empty($current_member->id)) {
+            wp_die(__('Votre profil membre est introuvable. Contactez l’équipe MJ.', 'mj-member'), '', array('response' => 403));
+        }
+
+        $allowed_member_ids = array((int) $current_member->id);
+        if (function_exists('mj_member_can_manage_children') && mj_member_can_manage_children($current_member)) {
+            if (function_exists('mj_member_get_guardian_children')) {
+                $children = mj_member_get_guardian_children($current_member);
+                if (!empty($children) && is_array($children)) {
+                    foreach ($children as $child) {
+                        if ($child && isset($child->id)) {
+                            $allowed_member_ids[] = (int) $child->id;
+                        }
+                    }
+                }
+            }
+        } elseif (!empty($current_member->guardian_id)) {
+            $allowed_member_ids[] = (int) $current_member->guardian_id;
+        }
+
+        $registration_member_id = isset($registration->member_id) ? (int) $registration->member_id : 0;
+        if (!in_array($registration_member_id, $allowed_member_ids, true)) {
+            wp_die(__('Vous ne pouvez pas télécharger ce document.', 'mj-member'), '', array('response' => 403));
+        }
+
+        $event_id = isset($registration->event_id) ? (int) $registration->event_id : 0;
+        $event = $event_id > 0 ? MjEvents::find($event_id) : null;
+        if (!$event) {
+            wp_die(__('Événement introuvable.', 'mj-member'), '', array('response' => 404));
+        }
+
+        $registration_document = isset($event->registration_document) ? trim((string) $event->registration_document) : '';
+        if ($registration_document === '') {
+            wp_die(__('Aucun contrat n’est configuré pour cet événement.', 'mj-member'), '', array('response' => 400));
+        }
+
+        $member = MjMembers::getById($registration_member_id);
+        if (!$member) {
+            wp_die(__('Membre introuvable.', 'mj-member'), '', array('response' => 404));
+        }
+
+        $guardian_id = !empty($member->guardian_id) ? (int) $member->guardian_id : (int) ($registration->guardian_id ?? 0);
+        $guardian = $guardian_id > 0 ? MjMembers::getById($guardian_id) : null;
+
+        try {
+            $controller = RegistrationManagerController::getInstance();
+            $variables = $controller->callInternal('buildRegistrationDocumentVariables', array($event, $member, $guardian));
+            $blocks = $controller->callInternal('buildRegistrationDocumentBlocks', array($event, $member, $registration_document, $variables, null));
+
+            $event_title = isset($event->title) ? (string) $event->title : __('Événement', 'mj-member');
+            $member_name = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
+
+            $pdf_result = $controller->callInternal('buildRegistrationContractPdf', array($blocks, $event_title, $member_name));
+        } catch (Throwable $exception) {
+            if (class_exists('Logger')) {
+                Logger::error('Member-facing contract PDF generation failed', array(
+                    'registration_id' => $registration_id,
+                    'event_id' => $event_id,
+                    'exception' => $exception->getMessage(),
+                ), 'payments');
+            }
+            wp_die(__('Impossible de générer le contrat. Merci de réessayer.', 'mj-member'), '', array('response' => 500));
+        }
+
+        if (is_wp_error($pdf_result)) {
+            wp_die(esc_html($pdf_result->get_error_message()), '', array('response' => 500));
+        }
+
+        $content = isset($pdf_result['content']) ? (string) $pdf_result['content'] : '';
+        if ($content === '') {
+            wp_die(__('Impossible de générer le contrat. Merci de réessayer.', 'mj-member'), '', array('response' => 500));
+        }
+
+        $filename = isset($pdf_result['filename']) ? (string) $pdf_result['filename'] : ('contrat-inscription-' . date_i18n('Ymd') . '.pdf');
+
+        nocache_headers();
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . sanitize_file_name($filename) . '"');
+        header('Content-Length: ' . strlen($content));
+        echo $content;
+        exit;
     }
 
 }
@@ -1604,6 +1725,7 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
             'events.location_id AS event_location_id',
             'events.free_participation',
             'events.occurrence_selection_mode',
+            'events.registration_document',
         );
 
         if (!empty($location_fields)) {
@@ -2074,6 +2196,8 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                 $can_manage_occurrences = false;
             }
 
+            $has_contract = isset($row->registration_document) && trim(wp_strip_all_tags((string) $row->registration_document)) !== '';
+
             if (!empty($row->notes)) {
                 $notes_segments[] = '<strong>' . esc_html__('Note', 'mj-member') . '</strong> : ' . esc_html(wp_strip_all_tags((string) $row->notes));
             }
@@ -2118,6 +2242,7 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                 'schedule_frequency' => $schedule_frequency,
                 'calendar_label' => $calendar_label,
                 'time_label' => $time_label,
+                'has_contract' => $has_contract,
             );
         }
 
