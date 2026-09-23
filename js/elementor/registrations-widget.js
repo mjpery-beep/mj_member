@@ -750,4 +750,74 @@
             node.dataset.initialized = '1';
         });
     });
+
+    function handlePayClick(button) {
+        if (!button || button.disabled) {
+            return;
+        }
+        var registrationId = button.getAttribute('data-registration-id');
+        if (!registrationId || !ajaxUrl || !settings.payNonce) {
+            return;
+        }
+
+        var item = button.closest('[data-mj-registrations-item]');
+        var feedback = item ? item.querySelector('[data-mj-registrations-pay-feedback]') : null;
+        var labelEl = button.querySelector('[data-mj-registrations-pay-label]');
+        var originalLabel = labelEl ? labelEl.textContent : '';
+
+        button.disabled = true;
+        if (labelEl) {
+            labelEl.textContent = strings.payLoading || 'Redirection…';
+        }
+        if (feedback) {
+            feedback.textContent = '';
+        }
+
+        var payload = new window.FormData();
+        payload.append('action', 'mj_member_create_event_payment_link');
+        payload.append('nonce', settings.payNonce);
+        payload.append('registration_id', registrationId);
+
+        window.fetch(ajaxUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: payload,
+        }).then(function (response) {
+            return response.json().then(function (json) {
+                return { ok: response.ok, json: json };
+            }).catch(function () {
+                return { ok: response.ok, json: null };
+            });
+        }).then(function (result) {
+            if (result.ok && result.json && result.json.success && result.json.data && result.json.data.redirect_url) {
+                window.location.href = result.json.data.redirect_url;
+                return;
+            }
+            var message = strings.payError || 'Impossible de générer le lien de paiement. Merci de réessayer.';
+            if (result.json && result.json.data && result.json.data.message) {
+                message = String(result.json.data.message);
+            }
+            throw new Error(message);
+        }).catch(function (error) {
+            var message = error && error.message ? error.message : (strings.payError || 'Impossible de générer le lien de paiement. Merci de réessayer.');
+            if (feedback) {
+                feedback.textContent = message;
+            }
+            button.disabled = false;
+            if (labelEl) {
+                labelEl.textContent = originalLabel || strings.payLabel || 'Payer en ligne';
+            }
+        });
+    }
+
+    domReady(function () {
+        document.addEventListener('click', function (event) {
+            var button = event.target && event.target.closest ? event.target.closest('[data-mj-registrations-pay]') : null;
+            if (!button) {
+                return;
+            }
+            event.preventDefault();
+            handlePayClick(button);
+        });
+    });
 })();

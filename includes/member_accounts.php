@@ -11,6 +11,8 @@ namespace Mj\Member\Module {
             add_action('wp_ajax_mj_member_create_payment_link', 'mj_member_ajax_create_payment_link');
             add_action('wp_ajax_nopriv_mj_member_create_payment_link', 'mj_member_ajax_create_payment_link');
             add_action('wp_ajax_mj_member_create_child_payment_link', 'mj_member_ajax_create_child_payment_link');
+            add_action('wp_ajax_mj_member_create_event_payment_link', 'mj_member_ajax_create_event_payment_link');
+            add_action('wp_ajax_nopriv_mj_member_create_event_payment_link', 'mj_member_ajax_create_event_payment_link');
             add_action('wp_ajax_mj_member_update_child_profile', 'mj_member_ajax_update_child_profile');
             add_action('wp_ajax_mj_member_update_notification_preferences', 'mj_member_ajax_update_notification_preferences');
             add_filter('mj_member_member_registrations', 'mj_member_collect_member_registration_entries', 10, 3);
@@ -1166,6 +1168,119 @@ if (!function_exists('mj_member_ajax_create_child_payment_link')) {
 
 }
 
+if (!function_exists('mj_member_ajax_create_event_payment_link')) {
+    function mj_member_ajax_create_event_payment_link() {
+        if (!is_user_logged_in()) {
+            wp_send_json_error(array('message' => __('Vous devez être connecté pour régler une inscription.', 'mj-member')), 403);
+        }
+
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+        if (!wp_verify_nonce($nonce, 'mj_member_create_event_payment_link')) {
+            wp_send_json_error(array('message' => __('La vérification de sécurité a échoué. Merci de recharger la page.', 'mj-member')), 403);
+        }
+
+        $registration_id = isset($_POST['registration_id']) ? (int) $_POST['registration_id'] : 0;
+        if ($registration_id <= 0) {
+            wp_send_json_error(array('message' => __('Inscription invalide.', 'mj-member')), 400);
+        }
+
+        if (!class_exists('MjEventRegistrations') || !class_exists('MjEvents') || !class_exists('MjPayments')) {
+            wp_send_json_error(array('message' => __('Le module de paiement n’est pas disponible.', 'mj-member')), 500);
+        }
+
+        $registration = MjEventRegistrations::get($registration_id);
+        if (!$registration) {
+            wp_send_json_error(array('message' => __('Inscription introuvable.', 'mj-member')), 404);
+        }
+
+        if (isset($registration->statut) && $registration->statut === MjEventRegistrations::STATUS_CANCELLED) {
+            wp_send_json_error(array('message' => __('Cette inscription a été annulée.', 'mj-member')), 400);
+        }
+
+        $current_member = mj_member_get_current_member();
+        if (!$current_member || empty($current_member->id)) {
+            wp_send_json_error(array('message' => __('Votre profil membre est introuvable. Contactez l’équipe MJ.', 'mj-member')), 403);
+        }
+
+        $allowed_member_ids = array((int) $current_member->id);
+        if (function_exists('mj_member_can_manage_children') && mj_member_can_manage_children($current_member)) {
+            if (function_exists('mj_member_get_guardian_children')) {
+                $children = mj_member_get_guardian_children($current_member);
+                if (!empty($children) && is_array($children)) {
+                    foreach ($children as $child) {
+                        if ($child && isset($child->id)) {
+                            $allowed_member_ids[] = (int) $child->id;
+                        }
+                    }
+                }
+            }
+        } elseif (!empty($current_member->guardian_id)) {
+            $allowed_member_ids[] = (int) $current_member->guardian_id;
+        }
+
+        $registration_member_id = isset($registration->member_id) ? (int) $registration->member_id : 0;
+        if (!in_array($registration_member_id, $allowed_member_ids, true)) {
+            wp_send_json_error(array('message' => __('Vous ne pouvez pas régler cette inscription.', 'mj-member')), 403);
+        }
+
+        $payment_status = isset($registration->payment_status) ? sanitize_key((string) $registration->payment_status) : 'unpaid';
+        if ($payment_status === 'paid') {
+            wp_send_json_error(array('message' => __('Cette inscription est déjà payée.', 'mj-member')));
+        }
+
+        $event_id = isset($registration->event_id) ? (int) $registration->event_id : 0;
+        $event = $event_id > 0 ? MjEvents::find($event_id) : null;
+        if (!$event) {
+            wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+        }
+
+        $event_price = isset($event->prix) ? (float) $event->prix : 0.0;
+        $free_participation = !empty($event->free_participation);
+        if ($free_participation || $event_price <= 0.0) {
+            wp_send_json_error(array('message' => __('Cette inscription ne nécessite aucun paiement.', 'mj-member')));
+        }
+
+        $existing_payment = MjPayments::get_pending_payment_for_registration($registration_id);
+        if ($existing_payment && !empty($existing_payment->checkout_url)) {
+            wp_send_json_success(array(
+                'redirect_url' => esc_url_raw($existing_payment->checkout_url),
+            ));
+        }
+
+        try {
+            $payment = MjPayments::create_stripe_payment(
+                $registration_member_id,
+                $event_price,
+                array(
+                    'context' => 'event',
+                    'event_id' => $event_id,
+                    'registration_id' => $registration_id,
+                    'payer_id' => (int) $current_member->id,
+                    'event' => $event,
+                )
+            );
+        } catch (Throwable $exception) {
+            if (class_exists('Logger')) {
+                Logger::error('Event registration payment link failure', array(
+                    'registration_id' => $registration_id,
+                    'event_id' => $event_id,
+                    'exception' => $exception->getMessage(),
+                ), 'payments');
+            }
+            wp_send_json_error(array('message' => __('Impossible de générer le lien de paiement.', 'mj-member')), 500);
+        }
+
+        if (!$payment || empty($payment['checkout_url'])) {
+            wp_send_json_error(array('message' => __('Impossible de générer le lien de paiement.', 'mj-member')), 500);
+        }
+
+        wp_send_json_success(array(
+            'redirect_url' => esc_url_raw($payment['checkout_url']),
+        ));
+    }
+
+}
+
 if (!function_exists('mj_member_ajax_update_child_profile')) {
     function mj_member_ajax_update_child_profile() {
         if (!is_user_logged_in()) {
@@ -1925,28 +2040,26 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                 }
             }
 
-            if (empty($available_occurrence_details) && is_array($occurrence_summary) && !empty($occurrence_summary['all_occurrences']) && is_array($occurrence_summary['all_occurrences'])) {
-                foreach ($occurrence_summary['all_occurrences'] as $occurrence) {
-                    if (!is_array($occurrence)) {
-                        continue;
-                    }
+            // Repli ultime : si aucune occurrence n'a pu être générée (ex. événement créé via
+            // l'éditeur d'occurrences mais sans lignes dans la table dédiée), on retombe sur la
+            // date brute de l'événement plutôt que de laisser la date disparaître de l'affichage.
+            if (empty($available_occurrence_details) && $start_ts > 0) {
+                $fallback_occurrence = array(
+                    'start' => $start_raw,
+                    'label' => $start_raw,
+                );
+                if ($end_ts > 0 && $end_raw !== $start_raw) {
+                    $fallback_occurrence['end'] = $end_raw;
+                }
 
-                    $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
-                    if ($start === '') {
-                        continue;
-                    }
+                $available_occurrence_details[] = $fallback_occurrence;
 
-                    $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : $start;
-                    $entry = array(
-                        'start' => $start,
-                        'label' => $label,
-                    );
+                if (empty($occurrence_details) && $occurrence_scope === 'all') {
+                    $occurrence_details[] = $fallback_occurrence;
+                }
 
-                    if (!empty($occurrence['end'])) {
-                        $entry['end'] = sanitize_text_field((string) $occurrence['end']);
-                    }
-
-                    $available_occurrence_details[] = $entry;
+                if ($occurrence_count <= 0) {
+                    $occurrence_count = 1;
                 }
             }
 

@@ -314,10 +314,16 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 . '.mj-member-registrations__action:hover{transform:translateY(-1px);box-shadow:0 22px 40px rgba(37,99,235,0.28);}'
                 . '.mj-member-registrations__action:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px;}'
                 . '.mj-member-registrations__action-icon{font-size:1.1rem;line-height:1;}'
+                . '.mj-member-registrations__action--pay{border-color:#15803d;background:linear-gradient(135deg,#16a34a,#15803d);box-shadow:0 16px 34px rgba(21,128,61,0.24);}'
+                . '.mj-member-registrations__action--pay:hover{box-shadow:0 22px 40px rgba(21,128,61,0.28);}'
+                . '.mj-member-registrations__action--pay:disabled{opacity:0.6;cursor:not-allowed;transform:none;box-shadow:none;}'
+                . '.mj-member-registrations__pay-feedback{margin:0;font-size:0.85rem;color:#b91c1c;}'
+                . '.mj-member-registrations__pay-feedback:empty{display:none;}'
                 . '.mj-member-registrations__calendar-card{display:grid;gap:18px;background:#f8fbff;border:1px solid #dbeafe;border-radius:20px;padding:20px;box-shadow:0 12px 26px rgba(15,23,42,0.08);}'
                 . '.mj-member-registrations__calendar-top{display:flex;align-items:center;justify-content:space-between;gap:12px;}'
-                . '.mj-member-registrations__calendar-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}'
+                . '.mj-member-registrations__calendar-meta{display:grid;gap:2px;}'
                 . '.mj-member-registrations__calendar-month{font-size:1.05rem;font-weight:700;color:#0f172a;}'
+                . '.mj-member-registrations__calendar-subtitle{font-size:0.82rem;color:#64748b;}'
                 . '.mj-member-registrations__calendar-nav{display:flex;align-items:center;gap:6px;}'
                 . '.mj-member-registrations__calendar-nav button{width:34px;height:34px;border-radius:10px;border:1px solid #cbd5f5;background:#ffffff;color:#1d4ed8;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background 0.2s ease,border-color 0.2s ease,color 0.2s ease;}'
                 . '.mj-member-registrations__calendar-nav button:hover{background:#e0ecff;border-color:#2563eb;color:#0f172a;}'
@@ -333,9 +339,7 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 . '.mj-member-registrations__calendar-cell[data-today="1"]::after{content:"";position:absolute;bottom:8px;left:50%;width:6px;height:6px;border-radius:50%;background:#1d4ed8;transform:translateX(-50%);}'
                 . '.mj-member-registrations__calendar-cell{position:relative;}'
                 . '.mj-member-registrations__selection{border-top:1px solid #dbeafe;padding-top:14px;display:grid;gap:12px;}'
-                . '.mj-member-registrations__selection-heading{display:grid;gap:4px;}'
                 . '.mj-member-registrations__selection-title{font-size:0.95rem;font-weight:700;color:#1e293b;margin:0;}'
-                . '.mj-member-registrations__selection-note{margin:0;font-size:0.82rem;color:#64748b;}'
                 . '.mj-member-registrations__agenda-list{margin:0;padding-left:18px;list-style:disc;color:#1f2937;font-size:0.88rem;display:grid;gap:8px;}'
                 . '.mj-member-registrations__agenda-item{line-height:1.4;}'
                 . '.mj-member-registrations__agenda-empty{margin:0;font-size:0.9rem;color:#64748b;}'
@@ -506,11 +510,33 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 );
             }
 
+            $registration_id_for_payment = isset($entry['registration_id']) ? absint($entry['registration_id']) : 0;
+            $entry_payment_status = isset($entry['payment_status']) ? sanitize_key((string) $entry['payment_status']) : 'unpaid';
+            $can_pay_online = !$is_free && $entry_payment_status === 'unpaid' && $status_key !== 'cancelled' && $registration_id_for_payment > 0;
+
             $all_occurrences = (!empty($entry['occurrences']) && is_array($entry['occurrences'])) ? $entry['occurrences'] : array();
             $available_occurrences = (!empty($entry['available_occurrences']) && is_array($entry['available_occurrences'])) ? $entry['available_occurrences'] : array();
             $occurrence_payload = self::normalize_occurrence_payload($all_occurrences);
             $available_payload = self::normalize_occurrence_payload($available_occurrences);
             $calendar_slots = self::build_weekday_calendar_slots($available_occurrences, $all_occurrences);
+            $available_count = count($available_occurrences);
+
+            // Le nombre réel d'occurrences (calculé à l'affichage) prime sur les anciens champs
+            // start_date/end_date/schedule_mode, peu fiables pour les événements multi-séances.
+            if ($available_count <= 1) {
+                $single_occurrence = (!empty($available_occurrences[0]) && is_array($available_occurrences[0]))
+                    ? $available_occurrences[0]
+                    : ((!empty($all_occurrences[0]) && is_array($all_occurrences[0])) ? $all_occurrences[0] : null);
+                if ($single_occurrence !== null) {
+                    $single_date_label = self::format_single_occurrence_date($single_occurrence);
+                    if ($single_date_label !== '') {
+                        array_unshift($meta_rows, array(
+                            'label' => __('Date', 'mj-member'),
+                            'value' => $single_date_label,
+                        ));
+                    }
+                }
+            }
             $display_limit = 8;
             $display_occurrences = array_slice($all_occurrences, 0, $display_limit);
             $occurrence_items = array();
@@ -562,32 +588,44 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 $occurrence_scope = 'all';
             }
 
-            $agenda_title = __('Agenda', 'mj-member');
-            if ($occurrence_scope === 'custom') {
-                $agenda_title = __('Jours sélectionnés', 'mj-member');
-            } elseif ($occurrence_scope === 'all') {
-                $agenda_title = __('Occurrences de l’événement', 'mj-member');
-            }
-
-            $agenda_empty_message = '';
-            if ($displayed_count === 0) {
-                if ($occurrence_scope === 'all') {
-                    $agenda_empty_message = __('Inscription valable pour toutes les occurrences de l’événement.', 'mj-member');
-                } elseif ($occurrence_scope === 'custom') {
-                    $agenda_empty_message = __('Aucune occurrence sélectionnée pour cette inscription.', 'mj-member');
-                } else {
-                    $agenda_empty_message = __('Agenda à confirmer.', 'mj-member');
-                }
-            }
-
             $event_id = isset($entry['event_id']) ? absint($entry['event_id']) : 0;
             $registration_id = isset($entry['registration_id']) ? absint($entry['registration_id']) : 0;
             $member_id = isset($entry['member_id']) ? absint($entry['member_id']) : (isset($member->id) ? absint($member->id) : 0);
             $guardian_id = isset($entry['guardian_id']) ? absint($entry['guardian_id']) : 0;
             $can_manage_occurrences_entry = !empty($entry['can_manage_occurrences']);
 
+            // Le panneau "Occurrences" s'adapte au type réel de l'événement : occurrence unique
+            // (rien à afficher, la date est déjà dans les infos ci-dessus), toutes les séances incluses
+            // automatiquement, ou sélection personnalisée gérable par le membre.
+            $panel_mode = 'single';
+            if ($available_count > 1) {
+                $panel_mode = ($occurrence_scope === 'custom' || $can_manage_occurrences_entry) ? 'custom' : 'all';
+            }
+
+            $agenda_title = __('Occurrences de l’événement', 'mj-member');
+            $agenda_subtitle = '';
+            $agenda_empty_message = '';
+
+            if ($panel_mode === 'all') {
+                $agenda_title = __('Toutes les séances incluses', 'mj-member');
+                $agenda_subtitle = sprintf(_n('%d séance', '%d séances', $available_count, 'mj-member'), $available_count);
+                if ($displayed_count === 0) {
+                    $agenda_empty_message = __('Inscription valable pour toutes les occurrences de l’événement.', 'mj-member');
+                }
+            } elseif ($panel_mode === 'custom') {
+                $agenda_title = __('Tes séances sélectionnées', 'mj-member');
+                $agenda_subtitle = sprintf(
+                    _n('%1$d séance sélectionnée sur %2$d', '%1$d séances sélectionnées sur %2$d', $displayed_count, 'mj-member'),
+                    $displayed_count,
+                    $available_count
+                );
+                if ($displayed_count === 0) {
+                    $agenda_empty_message = __('Aucune occurrence sélectionnée pour cette inscription.', 'mj-member');
+                }
+            }
+
             $manager_config = array();
-            if ($can_manage_occurrences_entry && !empty($available_payload) && $event_id > 0 && $member_id > 0) {
+            if ($panel_mode !== 'single' && $can_manage_occurrences_entry && !empty($available_payload) && $event_id > 0 && $member_id > 0) {
                 $manager_config = array(
                     'eventId' => $event_id,
                     'memberId' => $member_id,
@@ -650,7 +688,7 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 echo '<div class="mj-member-registrations__notes">' . wp_kses_post($entry['notes']) . '</div>';
             }
 
-            if (!empty($actions)) {
+            if (!empty($actions) || $can_pay_online) {
                 echo '<div class="mj-member-registrations__actions">';
                 foreach ($actions as $action) {
                     if (empty($action['url']) || empty($action['label'])) {
@@ -660,7 +698,14 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                     $rel_attr = ($target === '_blank') ? ' rel="noopener"' : '';
                     echo '<a class="mj-member-registrations__action" href="' . esc_url($action['url']) . '" target="' . esc_attr($target) . '"' . $rel_attr . '><span>' . esc_html($action['label']) . '</span><span class="mj-member-registrations__action-icon" aria-hidden="true">&rarr;</span></a>';
                 }
+                if ($can_pay_online) {
+                    self::ensure_script_localized();
+                    echo '<button type="button" class="mj-member-registrations__action mj-member-registrations__action--pay" data-mj-registrations-pay data-registration-id="' . esc_attr($registration_id_for_payment) . '"><span data-mj-registrations-pay-label>' . esc_html__('Payer en ligne', 'mj-member') . '</span><span class="mj-member-registrations__action-icon" aria-hidden="true">&rarr;</span></button>';
+                }
                 echo '</div>';
+                if ($can_pay_online) {
+                    echo '<p class="mj-member-registrations__pay-feedback" data-mj-registrations-pay-feedback role="alert"></p>';
+                }
             }
 
             echo '</div>';
@@ -694,10 +739,14 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
 
             echo '</div>';
 
-            echo '<aside class="mj-member-registrations__calendar-card" data-mj-registrations-agenda data-occurrence-scope="' . esc_attr($occurrence_scope) . '">';
+            if ($panel_mode !== 'single') {
+            echo '<aside class="mj-member-registrations__calendar-card" data-mj-registrations-agenda data-occurrence-scope="' . esc_attr($occurrence_scope) . '" data-panel-mode="' . esc_attr($panel_mode) . '">';
             echo '<div class="mj-member-registrations__calendar-top">';
             echo '<div class="mj-member-registrations__calendar-meta">';
             echo '<span class="mj-member-registrations__calendar-month" data-mj-registrations-agenda-title>' . esc_html($agenda_title) . '</span>';
+            if ($agenda_subtitle !== '') {
+                echo '<span class="mj-member-registrations__calendar-subtitle">' . esc_html($agenda_subtitle) . '</span>';
+            }
             echo '</div>';
             echo '</div>';
 
@@ -725,10 +774,8 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             }
 
             echo '<div class="mj-member-registrations__selection">';
-            echo '<div class="mj-member-registrations__selection-heading">';
-            echo '<p class="mj-member-registrations__selection-title">' . esc_html__('Jours sélectionnés', 'mj-member') . '</p>';
-            echo '<p class="mj-member-registrations__selection-note">' . esc_html__('Séances sélectionnées', 'mj-member') . '</p>';
-            echo '</div>';
+            $selection_title = ($panel_mode === 'all') ? __('Toutes les séances', 'mj-member') : __('Jours sélectionnés', 'mj-member');
+            echo '<p class="mj-member-registrations__selection-title">' . esc_html($selection_title) . '</p>';
 
             $list_hidden_attr = $displayed_count > 0 ? '' : ' hidden';
             echo '<ul class="mj-member-registrations__agenda-list" data-mj-registrations-agenda-list' . $list_hidden_attr . '>';
@@ -751,6 +798,7 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
 
             echo '</div>';
             echo '</aside>';
+            }
 
             echo '</div>';
             echo '</li>';
@@ -776,9 +824,9 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             'calendarStateSelected' => __('Séance sélectionnée', 'mj-member'),
             'calendarStateAvailable' => __('Séance possible', 'mj-member'),
             'calendarDay' => __('Jour de séance', 'mj-member'),
-            'agendaTitleDefault' => __('Agenda', 'mj-member'),
-            'agendaTitleCustom' => __('Jours sélectionnés', 'mj-member'),
-            'agendaTitleAll' => __('Occurrences de l’événement', 'mj-member'),
+            'agendaTitleDefault' => __('Occurrences de l’événement', 'mj-member'),
+            'agendaTitleCustom' => __('Tes séances sélectionnées', 'mj-member'),
+            'agendaTitleAll' => __('Toutes les séances incluses', 'mj-member'),
             'agendaEmptyUnknown' => __('Agenda à confirmer.', 'mj-member'),
             'agendaEmptyAll' => __('Inscription valable pour toutes les occurrences de l’événement.', 'mj-member'),
             'agendaEmptyCustom' => __('Aucune occurrence sélectionnée pour cette inscription.', 'mj-member'),
@@ -793,11 +841,15 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             'loading' => __('En cours...', 'mj-member'),
             'success' => __('Occurrences mises à jour.', 'mj-member'),
             'submitLabel' => __('Enregistrer', 'mj-member'),
+            'payLabel' => __('Payer en ligne', 'mj-member'),
+            'payLoading' => __('Redirection…', 'mj-member'),
+            'payError' => __('Impossible de générer le lien de paiement. Merci de réessayer.', 'mj-member'),
         );
 
         $data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('mj-member-event-register'),
+            'payNonce' => wp_create_nonce('mj_member_create_event_payment_link'),
             'strings' => $strings,
         );
 
@@ -912,6 +964,42 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             return date_i18n($format, $timestamp);
         }
         return $value;
+    }
+
+    /**
+     * @param array<string,mixed> $occurrence
+     */
+    private static function format_single_occurrence_date($occurrence) {
+        if (!is_array($occurrence)) {
+            return '';
+        }
+
+        $start = isset($occurrence['start']) ? trim((string) $occurrence['start']) : '';
+        if ($start === '') {
+            return isset($occurrence['label']) ? trim((string) $occurrence['label']) : '';
+        }
+
+        $start_ts = strtotime($start);
+        if (!$start_ts) {
+            return isset($occurrence['label']) ? trim((string) $occurrence['label']) : $start;
+        }
+
+        $label = date_i18n(get_option('date_format', 'd/m/Y'), $start_ts);
+        $start_time = self::format_time_label($start_ts);
+        if ($start_time !== '') {
+            $label .= ' · ' . $start_time;
+        }
+
+        $end = isset($occurrence['end']) ? trim((string) $occurrence['end']) : '';
+        $end_ts = $end !== '' ? strtotime($end) : false;
+        if ($end_ts) {
+            $end_time = self::format_time_label($end_ts);
+            if ($end_time !== '' && $end_time !== $start_time) {
+                $label .= ' - ' . $end_time;
+            }
+        }
+
+        return $label;
     }
 
     private static function format_time_label($timestamp) {
