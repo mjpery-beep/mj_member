@@ -1,0 +1,99 @@
+/* ── Account Tabs (shared component) ──
+   Reused wherever a member's data needs to be split between "moi" and
+   "mes jeunes" (mes informations, mes inscriptions, ...). Custom properties
+   are declared with defaults on .mj-account-tabs itself so the component
+   renders correctly even outside the .mj-account-modern design system. */
+.mj-account-tabs {
+    --mj-account-radius-lg: 24px;
+    --mj-account-border: rgba(47, 82, 143, 0.08);
+    --mj-account-muted: #5c6b8a;
+    --mj-account-text: #1f2742;
+    --mj-account-card-bg: #ffffff;
+    --mj-account-accent: #2f528f;
+
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px;
+    background: rgba(47, 82, 143, 0.06);
+    border-radius: var(--mj-account-radius-lg);
+    border: 1px solid var(--mj-account-border);
+}
+
+.mj-account-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border: none;
+    border-radius: calc(var(--mj-account-radius-lg) - 4px);
+    background: transparent;
+    color: var(--mj-account-muted);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.mj-account-tab:hover {
+    background: rgba(47, 82, 143, 0.08);
+    color: var(--mj-account-text);
+}
+
+.mj-account-tab--active {
+    background: var(--mj-account-card-bg);
+    color: var(--mj-account-accent);
+    box-shadow: 0 2px 8px rgba(47, 82, 143, 0.12);
+}
+
+.mj-account-tab--add {
+    margin-left: auto;
+    color: var(--mj-account-accent);
+    font-size: 0.9rem;
+}
+
+.mj-account-tab--add:hover {
+    background: rgba(47, 82, 143, 0.12);
+}
+
+.mj-account-tab--add[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.mj-account-tab__avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: 0 0 auto;
+}
+
+.mj-account-tab__icon {
+    display: inline-flex;
+    line-height: 1;
+}
+
+.mj-account-tab__label {
+    line-height: 1.2;
+}
+
+@media (max-width: 640px) {
+    .mj-account-tabs {
+        gap: 4px;
+        padding: 4px;
+    }
+
+    .mj-account-tab {
+        padding: 8px 12px;
+        font-size: 0.85rem;
+    }
+
+    .mj-account-tab--add {
+        margin-left: 0;
+        width: 100%;
+        justify-content: center;
+    }
+}

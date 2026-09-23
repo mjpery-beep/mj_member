@@ -435,6 +435,9 @@ final class AssetsManager
         );
         self::registerScript('mj-member-todo-widget', 'js/elementor/todo-widget.js', array('mj-member-utils', 'mj-member-preact-hooks', 'media-editor', 'mj-member-regmgr-emoji-picker', 'mj-member-regmgr-services', 'mj-member-regmgr-nextcloud-files', 'mj-member-occurrence-picker'));
 
+        self::registerStyle('mj-member-account-tabs', 'css/account-tabs.css');
+        self::registerScript('mj-member-account-tabs', 'js/shared/account-tabs.js', array());
+
         self::registerStyle('mj-member-login-component', 'css/login-component.css');
         self::registerScript('mj-member-login-component', 'js/login-component.js');
         self::registerStyle('mj-member-account-links-slider', 'css/account-links-slider.css', array('mj-member-components'));
@@ -801,6 +804,8 @@ final class AssetsManager
 
             case 'registrations-widget':
                 wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-account-tabs');
+                wp_enqueue_script('mj-member-account-tabs');
                 wp_enqueue_script('mj-member-registrations-widget');
                 break;
 
@@ -818,6 +823,8 @@ final class AssetsManager
 
             case 'member-account':
                 wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-account-tabs');
+                wp_enqueue_script('mj-member-account-tabs');
                 wp_enqueue_script('mj-member-member-account');
                 break;
 

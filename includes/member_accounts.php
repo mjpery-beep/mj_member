@@ -384,6 +384,38 @@ if (!function_exists('mj_member_get_guardian_children')) {
     }
 }
 
+if (!function_exists('mj_member_render_account_tab_button')) {
+    /**
+     * Rend un bouton d'onglet "mj-account-tabs" (avatar du membre si disponible, sinon icône de repli).
+     *
+     * @param string $key           Clé de l'onglet (utilisée pour data-mj-tab).
+     * @param string $label         Libellé affiché.
+     * @param string $avatar_url    URL de l'avatar du membre, si disponible.
+     * @param string $fallback_icon Icône (emoji) affichée en l'absence d'avatar.
+     * @param bool   $is_active     Onglet actif par défaut.
+     * @return string
+     */
+    function mj_member_render_account_tab_button($key, $label, $avatar_url = '', $fallback_icon = '', $is_active = false) {
+        $avatar_url = trim((string) $avatar_url);
+
+        $icon_html = '';
+        if ($avatar_url !== '') {
+            $icon_html = '<img class="mj-account-tab__avatar" src="' . esc_url($avatar_url) . '" alt="" loading="lazy" />';
+        } elseif ($fallback_icon !== '') {
+            $icon_html = '<span class="mj-account-tab__icon" aria-hidden="true">' . $fallback_icon . '</span>';
+        }
+
+        return sprintf(
+            '<button type="button" class="mj-account-tab%1$s" role="tab" aria-selected="%2$s" data-mj-tab="%3$s">%4$s<span class="mj-account-tab__label">%5$s</span></button>',
+            $is_active ? ' mj-account-tab--active' : '',
+            $is_active ? 'true' : 'false',
+            esc_attr($key),
+            $icon_html,
+            esc_html($label)
+        );
+    }
+}
+
 if (!function_exists('mj_member_get_guardian_children_statuses')) {
     /**
      * @param object $guardian_member

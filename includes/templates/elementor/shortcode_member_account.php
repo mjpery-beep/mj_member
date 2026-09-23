@@ -945,14 +945,12 @@ if (!function_exists('mj_member_render_account_component')) {
             <div class="mj-account-shell">
                 <?php if ($has_children_tabs) : ?>
                 <nav class="mj-account-tabs" role="tablist" data-mj-account-tabs>
-                    <button type="button" class="mj-account-tab mj-account-tab--active" role="tab" aria-selected="true" data-mj-tab="parent">
-                        📋 <?php esc_html_e('Mes données', 'mj-member'); ?>
-                    </button>
-                    <?php foreach ($children_payload as $tab_child) : ?>
-                    <button type="button" class="mj-account-tab" role="tab" aria-selected="false" data-mj-tab="child-<?php echo esc_attr((string) $tab_child['id']); ?>">
-                        🧒 <?php echo esc_html($tab_child['full_name'] !== '' ? $tab_child['full_name'] : __('Jeune', 'mj-member')); ?>
-                    </button>
-                    <?php endforeach; ?>
+                    <?php echo mj_member_render_account_tab_button('parent', __('Mes données', 'mj-member'), $photo_preview['url'] ?? '', '📋', true); ?>
+                    <?php foreach ($children_payload as $tab_child) :
+                        $tab_child_avatar = !empty($tab_child['photo']['url']) ? $tab_child['photo']['url'] : '';
+                        $tab_child_label = $tab_child['full_name'] !== '' ? $tab_child['full_name'] : __('Jeune', 'mj-member');
+                        echo mj_member_render_account_tab_button('child-' . (string) $tab_child['id'], $tab_child_label, $tab_child_avatar, '🧒', false);
+                    endforeach; ?>
                     <button
                         type="button"
                         class="mj-account-tab mj-account-tab--add"
@@ -3149,59 +3147,7 @@ img.wp-smiley, img.emoji {
 		padding: 0 !important;
 	}
 
-/* ── Account Tabs ── */
-.mj-account-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 6px;
-    background: rgba(47, 82, 143, 0.06);
-    border-radius: var(--mj-account-radius-lg);
-    border: 1px solid var(--mj-account-border);
-}
-
-.mj-account-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 18px;
-    border: none;
-    border-radius: calc(var(--mj-account-radius-lg) - 4px);
-    background: transparent;
-    color: var(--mj-account-muted);
-    font-weight: 600;
-    font-size: 0.95rem;
-    cursor: pointer;
-    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-    white-space: nowrap;
-    font-family: inherit;
-}
-
-.mj-account-tab:hover {
-    background: rgba(47, 82, 143, 0.08);
-    color: var(--mj-account-text);
-}
-
-.mj-account-tab--active {
-    background: var(--mj-account-card-bg);
-    color: var(--mj-account-accent);
-    box-shadow: 0 2px 8px rgba(47, 82, 143, 0.12);
-}
-
-.mj-account-tab--add {
-    margin-left: auto;
-    color: var(--mj-account-accent);
-    font-size: 0.9rem;
-}
-
-.mj-account-tab--add:hover {
-    background: rgba(47, 82, 143, 0.12);
-}
-
-.mj-account-tab--add[disabled] {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+/* ── Account Tabs: see css/account-tabs.css (shared mj-member-account-tabs asset) ── */
 
 /* ── Child Detail Panel ── */
 .mj-account-card--child-detail[hidden] {
@@ -3247,23 +3193,6 @@ img.wp-smiley, img.emoji {
     display: none !important;
 }
 
-@media (max-width: 640px) {
-    .mj-account-tabs {
-        gap: 4px;
-        padding: 4px;
-    }
-
-    .mj-account-tab {
-        padding: 8px 12px;
-        font-size: 0.85rem;
-    }
-
-    .mj-account-tab--add {
-        margin-left: 0;
-        width: 100%;
-        justify-content: center;
-    }
-}
             </style><?php
         }
 
@@ -3372,56 +3301,7 @@ img.wp-smiley, img.emoji {
     }
 })();
 
-// ── Account tabs switching ──
-(function () {
-    function initTabs(shell) {
-        var nav = shell.querySelector('[data-mj-account-tabs]');
-        if (!nav) return;
-        var tabs = Array.prototype.slice.call(nav.querySelectorAll('[data-mj-tab]'));
-        var panels = Array.prototype.slice.call(shell.querySelectorAll('[data-mj-tab-panel]'));
-        if (!tabs.length || !panels.length) return;
-
-        function activate(key) {
-            tabs.forEach(function (t) {
-                var isActive = t.getAttribute('data-mj-tab') === key;
-                t.classList.toggle('mj-account-tab--active', isActive);
-                t.setAttribute('aria-selected', isActive ? 'true' : 'false');
-            });
-            panels.forEach(function (p) {
-                var isActive = p.getAttribute('data-mj-tab-panel') === key;
-                if (isActive) {
-                    p.removeAttribute('hidden');
-                } else {
-                    p.setAttribute('hidden', '');
-                }
-            });
-        }
-
-        nav.addEventListener('click', function (e) {
-            var btn = e.target.closest('[data-mj-tab]');
-            if (!btn || !nav.contains(btn)) return;
-            e.preventDefault();
-            activate(btn.getAttribute('data-mj-tab'));
-        });
-    }
-
-    function setup() {
-        var shells = document.querySelectorAll('.mj-account-shell');
-        for (var i = 0; i < shells.length; i++) {
-            if (shells[i].dataset.mjTabsInit === '1') continue;
-            shells[i].dataset.mjTabsInit = '1';
-            initTabs(shells[i]);
-        }
-    }
-
-    if (typeof document !== 'undefined') {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', setup);
-        } else {
-            setup();
-        }
-    }
-})();
+// ── Account tabs switching: see js/shared/account-tabs.js (shared mj-member-account-tabs asset) ──
 
 // ── Child tab form AJAX submission ──
 (function () {
@@ -3475,13 +3355,20 @@ img.wp-smiley, img.emoji {
                                     }
                                 }
                             }
-                            // update tab label if name changed
+                            // update tab label/avatar if name or photo changed
                             if (resp.data && resp.data.child) {
                                 var tabBtn = document.querySelector('[data-mj-tab="child-' + childId + '"]');
+                                var newName = (resp.data.child.first_name || '') + ' ' + (resp.data.child.last_name || '');
+                                newName = newName.trim();
                                 if (tabBtn) {
-                                    var newName = (resp.data.child.first_name || '') + ' ' + (resp.data.child.last_name || '');
-                                    newName = newName.trim();
-                                    if (newName) tabBtn.textContent = '🧒 ' + newName;
+                                    if (newName) {
+                                        var tabLabel = tabBtn.querySelector('.mj-account-tab__label');
+                                        if (tabLabel) tabLabel.textContent = newName;
+                                    }
+                                    if (resp.data.child.photo && resp.data.child.photo.url) {
+                                        var tabAvatar = tabBtn.querySelector('.mj-account-tab__avatar');
+                                        if (tabAvatar) tabAvatar.src = resp.data.child.photo.url;
+                                    }
                                 }
                                 // update header title
                                 var header = form.parentElement.querySelector('.mj-account-card__title');

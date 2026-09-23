@@ -121,6 +121,19 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'show_children',
+            array(
+                'label' => __('Afficher les jeunes associés', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Ajoute un onglet par jeune associé pour consulter ses inscriptions.', 'mj-member'),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->register_visibility_controls();
@@ -235,20 +248,26 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
 
         AssetsManager::requirePackage('registrations-widget');
 
-        $limit = isset($settings['limit']) ? max(1, (int) $settings['limit']) : 10;
-        $registrations = mj_member_get_member_registrations(
-            $member->id,
-            array(
-                'limit' => $limit,
-                'upcoming_only' => isset($settings['upcoming_only']) && $settings['upcoming_only'] === 'yes',
-            )
+        $registration_args = array(
+            'limit' => isset($settings['limit']) ? max(1, (int) $settings['limit']) : 10,
+            'upcoming_only' => isset($settings['upcoming_only']) && $settings['upcoming_only'] === 'yes',
         );
+        $registrations = mj_member_get_member_registrations($member->id, $registration_args);
 
         $show_status = isset($settings['show_status']) && $settings['show_status'] === 'yes';
-        $show_dates = isset($settings['show_dates']) && $settings['show_dates'] === 'yes';
         $show_type = isset($settings['show_type']) && $settings['show_type'] === 'yes';
         $title = isset($settings['title']) ? $settings['title'] : '';
         $empty_message = isset($settings['empty_message']) ? $settings['empty_message'] : __("Vous n'avez pas encore d'inscription active.", 'mj-member');
+
+        $show_children = isset($settings['show_children']) && $settings['show_children'] === 'yes';
+        $children = ($show_children && function_exists('mj_member_get_guardian_children'))
+            ? mj_member_get_guardian_children($member)
+            : array();
+        $has_children_tabs = !empty($children);
+
+        $member_avatar_url = function_exists('mj_member_account_get_photo_preview')
+            ? (mj_member_account_get_photo_preview($member)['url'] ?? '')
+            : '';
 
         static $styles_printed = false;
         if (!$styles_printed) {
@@ -342,6 +361,8 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 . '.mj-member-registrations__manager-feedback{margin:0;font-size:0.85rem;color:#475569;}'
                 . '.mj-member-registrations__manager-feedback.is-error{color:#b91c1c;}'
                 . '.mj-member-registrations__empty{margin:0;font-size:0.95rem;color:#6c757d;}'
+                . '.mj-member-registrations__panel{display:grid;gap:28px;}'
+                . '.mj-member-registrations__panel[hidden]{display:none !important;}'
                 . '@media (max-width:1180px){.mj-member-registrations__layout{grid-template-columns:1fr;}.mj-member-registrations__calendar-card{order:2;}.mj-member-registrations__event{flex-direction:column;}.mj-member-registrations__media{width:100%;max-width:260px;height:auto;padding-bottom:56%;}}'
                 . '@media (max-width:640px){.mj-member-registrations__item{padding:22px;}.mj-member-registrations__search input{width:100%;}.mj-member-registrations__calendar-grid,.mj-member-registrations__calendar-weekdays{gap:4px;}.mj-member-registrations__calendar-cell{padding:10px 0;}}'
                 . '</style>';
@@ -363,9 +384,53 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
         echo '</div>';
         echo '</div>';
 
+        if ($has_children_tabs) {
+            echo '<nav class="mj-account-tabs" role="tablist" data-mj-account-tabs>';
+            echo mj_member_render_account_tab_button('parent', __('Mes inscriptions', 'mj-member'), $member_avatar_url, '📋', true);
+            foreach ($children as $tab_child) {
+                if (!is_object($tab_child) || empty($tab_child->id)) {
+                    continue;
+                }
+                $tab_child_name = trim(($tab_child->first_name ?? '') . ' ' . ($tab_child->last_name ?? ''));
+                if ($tab_child_name === '') {
+                    $tab_child_name = __('Jeune', 'mj-member');
+                }
+                $tab_child_avatar = function_exists('mj_member_account_get_photo_preview')
+                    ? (mj_member_account_get_photo_preview($tab_child)['url'] ?? '')
+                    : '';
+                echo mj_member_render_account_tab_button('child-' . (string) (int) $tab_child->id, $tab_child_name, $tab_child_avatar, '🧒', false);
+            }
+            echo '</nav>';
+        }
+
+        echo '<div class="mj-member-registrations__panel"' . ($has_children_tabs ? ' data-mj-tab-panel="parent"' : '') . '>';
+        self::render_registrations_list($registrations, $show_status, $show_type, $empty_message);
+        echo '</div>';
+
+        if ($has_children_tabs) {
+            foreach ($children as $tab_child) {
+                if (!is_object($tab_child) || empty($tab_child->id)) {
+                    continue;
+                }
+                $tab_child_id = (int) $tab_child->id;
+                $tab_child_name = trim(($tab_child->first_name ?? '') . ' ' . ($tab_child->last_name ?? ''));
+                $child_registrations = mj_member_get_member_registrations($tab_child_id, $registration_args);
+                $child_empty_message = $tab_child_name !== ''
+                    ? sprintf(__("%s n'a pas encore d'inscription active.", 'mj-member'), $tab_child_name)
+                    : $empty_message;
+
+                echo '<div class="mj-member-registrations__panel" data-mj-tab-panel="child-' . esc_attr((string) $tab_child_id) . '" hidden>';
+                self::render_registrations_list($child_registrations, $show_status, $show_type, $child_empty_message);
+                echo '</div>';
+            }
+        }
+
+        echo '</div>';
+    }
+
+    private static function render_registrations_list($registrations, $show_status, $show_type, $empty_message) {
         if (empty($registrations)) {
             echo '<p class="mj-member-registrations__empty">' . esc_html($empty_message) . '</p>';
-            echo '</div>';
             return;
         }
 
@@ -691,7 +756,6 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             echo '</li>';
         }
         echo '</ul>';
-        echo '</div>';
     }
 
     private static function ensure_script_localized() {
