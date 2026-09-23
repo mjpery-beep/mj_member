@@ -165,6 +165,7 @@ final class EventPageViewBuilder
     {
         return array(
             'hero' => $this->buildHeroPartial(),
+            'poster' => $this->buildPosterPartial(),
             'description' => $this->buildDescriptionPartial(),
             'registration' => $this->buildRegistrationPartial(),
             'location' => $this->buildLocationPartial(),
@@ -228,6 +229,22 @@ final class EventPageViewBuilder
             'next_occurrence' => $nextOccurrenceData,
             'next_occurrence_label' => $nextOccurrenceLabel,
             'price_label' => isset($registration['price_display']) ? (string) $registration['price_display'] : '',
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildPosterPartial(): array
+    {
+        $event = isset($this->model['event']) && is_array($this->model['event'])
+            ? $this->model['event']
+            : array();
+
+        return array(
+            'image_url' => isset($event['poster_image_url']) ? (string) $event['poster_image_url'] : '',
+            'link_url' => isset($event['poster_url']) ? (string) $event['poster_url'] : '',
+            'title' => isset($event['title']) ? (string) $event['title'] : '',
         );
     }
 

@@ -1096,6 +1096,7 @@ if ($event) {
         'accent_color' => $accent_color_value,
         'emoji' => mj_member_admin_sanitize_emoji(isset($event->emoji) ? $event->emoji : ''),
         'cover_id' => (int) $event->cover_id,
+        'poster_id' => isset($event->poster_id) ? (int) $event->poster_id : 0,
         'poster_url' => isset($event->poster_url) ? (string) $event->poster_url : '',
         'article_id' => isset($event->article_id) ? (int) $event->article_id : 0,
         'location_id' => (int) (isset($event->location_id) ? $event->location_id : 0),
@@ -1262,6 +1263,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     }
 
     $cover_id = isset($_POST['event_cover_id']) ? (int) $_POST['event_cover_id'] : 0;
+    $poster_id = isset($_POST['event_poster_id']) ? (int) $_POST['event_poster_id'] : 0;
     $poster_url = isset($_POST['event_poster_url']) ? esc_url_raw(trim(wp_unslash((string) $_POST['event_poster_url']))) : '';
 
     $age_min = isset($_POST['event_age_min']) ? (int) $_POST['event_age_min'] : (int) $defaults['age_min'];
@@ -1959,6 +1961,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
         'accent_color' => $accent_color_input,
         'emoji' => $emoji_input,
         'cover_id' => $cover_id,
+        'poster_id' => $poster_id,
         'poster_url' => $poster_url,
         'description' => $description,
         'age_min' => $age_min,
@@ -2036,6 +2039,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
             'accent_color' => $accent_color_input,
             'emoji' => $emoji_input,
             'cover_id' => $cover_id,
+            'poster_id' => $poster_id,
             'poster_url' => $poster_url,
             'description' => $description,
             'age_min' => $age_min,
@@ -2089,6 +2093,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                     $form_values['type'] = $event->type;
                     $form_values['accent_color'] = isset($event->accent_color) ? mj_member_admin_normalize_hex_color($event->accent_color) : '';
                     $form_values['cover_id'] = (int) $event->cover_id;
+                    $form_values['poster_id'] = isset($event->poster_id) ? (int) $event->poster_id : 0;
                     $form_values['poster_url'] = isset($event->poster_url) ? (string) $event->poster_url : '';
                     $form_values['article_id'] = isset($event->article_id) ? (int) $event->article_id : 0;
                     $form_values['location_id'] = (int) (isset($event->location_id) ? $event->location_id : 0);
@@ -2180,6 +2185,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                     $form_values['date_fin'] = mj_member_format_event_datetime($event->date_fin);
                     $form_values['date_fin_inscription'] = mj_member_format_event_datetime($event->date_fin_inscription);
                     $form_values['cover_id'] = (int) $event->cover_id;
+                    $form_values['poster_id'] = isset($event->poster_id) ? (int) $event->poster_id : 0;
                     $form_values['poster_url'] = isset($event->poster_url) ? (string) $event->poster_url : '';
                     $form_values['article_id'] = isset($event->article_id) ? (int) $event->article_id : 0;
                     $form_values['location_id'] = (int) (isset($event->location_id) ? $event->location_id : 0);
@@ -2693,6 +2699,14 @@ if (!empty($form_values['cover_id'])) {
     }
 }
 
+$poster_preview = '';
+if (!empty($form_values['poster_id'])) {
+    $poster_image = wp_get_attachment_image_src((int) $form_values['poster_id'], 'medium');
+    if (!empty($poster_image[0])) {
+        $poster_preview = '<img src="' . esc_url($poster_image[0]) . '" alt="" style="max-width:240px;height:auto;" />';
+    }
+}
+
 $article_categories = get_categories(array('hide_empty' => false));
 $article_category_ids = !empty($article_categories) ? array_map('intval', wp_list_pluck($article_categories, 'term_id')) : array();
 $selected_article_cat = isset($form_values['article_cat']) ? (int) $form_values['article_cat'] : 0;
@@ -2995,10 +3009,24 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                 </td>
             </tr>
             <tr>
+                <th scope="row">Affiche (format A4)</th>
+                <td>
+                    <div id="mj-event-poster-preview" class="mj-event-cover-preview">
+                        <?php echo $poster_preview !== '' ? $poster_preview : '<span>Aucune affiche selectionnee.</span>'; ?>
+                    </div>
+                    <input type="hidden" id="mj-event-poster-id" name="event_poster_id" value="<?php echo esc_attr((int) $form_values['poster_id']); ?>" />
+                    <div class="mj-event-cover-actions">
+                        <button type="button" class="button" id="mj-event-poster-select">Choisir une image</button>
+                        <button type="button" class="button" id="mj-event-poster-remove">Retirer</button>
+                    </div>
+                    <p class="description mj-event-help-text">Fichier distinct du visuel ci-dessus, affiché en pleine page (format A4) sur la fiche événement.</p>
+                </td>
+            </tr>
+            <tr>
                 <th scope="row"><label for="mj-event-poster-url">Lien affiche (Canva, ...)</label></th>
                 <td>
                     <input type="url" id="mj-event-poster-url" name="event_poster_url" class="regular-text" value="<?php echo esc_attr(isset($form_values['poster_url']) ? $form_values['poster_url'] : ''); ?>" placeholder="https://www.canva.com/design/xxxx/view" />
-                    <p class="description mj-event-help-text">Lien vers l'affiche (ex. Canva). Affiche un bouton "Voir l'affiche" sur la fiche événement, en plus du visuel ci-dessus.</p>
+                    <p class="description mj-event-help-text">Lien de référence vers le design (ex. Canva). Facultatif : ouvre le design source depuis la fiche événement.</p>
                 </td>
             </tr>
             <tr class="mj-event-section-heading">

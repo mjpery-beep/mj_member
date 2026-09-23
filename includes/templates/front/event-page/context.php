@@ -115,6 +115,7 @@ function mj_member_render_event_page_fallback(array $payload): string
     $partials = $view['partials'] ?? array();
 
     $hero = $partials['hero'] ?? array();
+    $poster = $partials['poster'] ?? array();
     $description = $partials['description'] ?? array();
     $registration = $partials['registration'] ?? array();
     $location = $partials['location'] ?? array();
@@ -155,6 +156,24 @@ function mj_member_render_event_page_fallback(array $payload): string
                     <?php if (!empty($description['content_html'])) : ?>
                         <section class="mj-event-page__card mj-event-page__description">
                             <?php echo wp_kses_post($description['content_html']); ?>
+                        </section>
+                    <?php endif; ?>
+
+                    <?php if (!empty($poster['image_url'])) : ?>
+                        <?php $poster_caption = sprintf(__('Affiche de l\'événement %s', 'mj-member'), $poster['title'] ?? ''); ?>
+                        <section class="mj-event-page__card mj-event-page__poster">
+                            <div class="mj-event-page__poster-a4">
+                                <a href="<?php echo esc_url($poster['image_url']); ?>"
+                                   data-mj-event-preview="1"
+                                   data-mj-event-preview-group="poster"
+                                   data-mj-event-preview-caption="<?php echo esc_attr($poster_caption); ?>"
+                                   data-elementor-open-lightbox="no"
+                                   data-lightbox="none"
+                                   data-fancybox=""
+                                   aria-label="<?php echo esc_attr($poster_caption); ?>">
+                                    <img src="<?php echo esc_url($poster['image_url']); ?>" alt="<?php echo esc_attr($poster_caption); ?>" loading="lazy" />
+                                </a>
+                            </div>
                         </section>
                     <?php endif; ?>
 

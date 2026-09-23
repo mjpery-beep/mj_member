@@ -64,6 +64,53 @@
         setCover('', '');
     });
 
+    var posterMediaFrame;
+
+    function setPoster(imageId, imageUrl) {
+        $('#mj-event-poster-id').val(imageId || 0);
+        var preview = $('#mj-event-poster-preview');
+        if (imageUrl) {
+            preview.html('<img src="' + imageUrl + '" alt="" style="max-width:240px;height:auto;" />');
+        } else {
+            preview.html('<span>Aucune affiche selectionnee.</span>');
+        }
+    }
+
+    $('#mj-event-poster-select').on('click', function (event) {
+        event.preventDefault();
+
+        if (posterMediaFrame) {
+            posterMediaFrame.open();
+            return;
+        }
+
+        posterMediaFrame = wp.media({
+            title: "Selectionner l'affiche",
+            button: { text: 'Utiliser cette image' },
+            multiple: false
+        });
+
+        posterMediaFrame.on('select', function () {
+            var attachment = posterMediaFrame.state().get('selection').first();
+            if (!attachment) {
+                return;
+            }
+            var data = attachment.toJSON();
+            var url = data.url;
+            if (data.sizes && data.sizes.medium) {
+                url = data.sizes.medium.url;
+            }
+            setPoster(data.id, url);
+        });
+
+        posterMediaFrame.open();
+    });
+
+    $('#mj-event-poster-remove').on('click', function (event) {
+        event.preventDefault();
+        setPoster('', '');
+    });
+
     var startInput = document.getElementById('mj-event-date-start');
     var endInput = document.getElementById('mj-event-date-end');
     var deadlineInput = document.getElementById('mj-event-date-deadline');

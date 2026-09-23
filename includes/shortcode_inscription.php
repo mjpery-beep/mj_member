@@ -1851,6 +1851,23 @@ if (!function_exists('mj_member_render_registration_form')) {
                         <div class="mj-registration-type-selector" data-registration-selector>
                             <button
                                 type="button"
+                                class="mj-registration-type-card<?php echo (!$registration_type_selected || $registration_type === MjRoles::JEUNE) ? ' mj-registration-type-card--active' : ''; ?>"
+                                data-registration-type-value="<?php echo esc_attr(MjRoles::JEUNE); ?>"
+                                aria-pressed="<?php echo (!$registration_type_selected || $registration_type === MjRoles::JEUNE) ? 'true' : 'false'; ?>"
+                            >
+                                <?php if ($member_option_image_url !== '') : ?>
+                                    <span class="mj-registration-type-card__media">
+                                        <img src="<?php echo esc_url($member_option_image_url); ?>" alt="<?php echo esc_attr($member_option_image_alt); ?>" loading="lazy" />
+                                    </span>
+                                <?php endif; ?>
+                                <span class="mj-registration-type-card__content">
+                                    <span class="mj-registration-type-card__title">Je suis un jeune autonome</span>
+                                    <span class="mj-registration-type-card__description">Je m'inscris moi-même.</span>
+                                </span>
+                            </button>
+
+                            <button
+                                type="button"
                                 class="mj-registration-type-card<?php echo ($registration_type_selected && $registration_type !== MjRoles::JEUNE) ? ' mj-registration-type-card--active' : ''; ?>"
                                 data-registration-type-value="guardian"
                                 aria-pressed="<?php echo ($registration_type_selected && $registration_type !== MjRoles::JEUNE) ? 'true' : 'false'; ?>"
@@ -1865,29 +1882,13 @@ if (!function_exists('mj_member_render_registration_form')) {
                                     <span class="mj-registration-type-card__description">J'inscris un ou plusieurs jeunes.</span>
                                 </span>
                             </button>
-
-                            <button
-                                type="button"
-                                class="mj-registration-type-card<?php echo ($registration_type_selected && $registration_type === MjRoles::JEUNE) ? ' mj-registration-type-card--active' : ''; ?>"
-                                data-registration-type-value="<?php echo esc_attr(MjRoles::JEUNE); ?>"
-                                aria-pressed="<?php echo ($registration_type_selected && $registration_type === MjRoles::JEUNE) ? 'true' : 'false'; ?>"
-                            >
-                                <?php if ($member_option_image_url !== '') : ?>
-                                    <span class="mj-registration-type-card__media">
-                                        <img src="<?php echo esc_url($member_option_image_url); ?>" alt="<?php echo esc_attr($member_option_image_alt); ?>" loading="lazy" />
-                                    </span>
-                                <?php endif; ?>
-                                <span class="mj-registration-type-card__content">
-                                    <span class="mj-registration-type-card__title">Je suis un jeune autonome</span>
-                                    <span class="mj-registration-type-card__description">Je m'inscris moi-même.</span>
-                                </span>
-                            </button>
                         </div>
-                        <input type="hidden" name="registration_type" value="<?php echo $registration_type_selected ? esc_attr($registration_type) : ''; ?>" data-registration-type-input />
+                        <?php $effective_registration_type = $registration_type_selected ? $registration_type : MjRoles::JEUNE; ?>
+                        <input type="hidden" name="registration_type" value="<?php echo esc_attr($effective_registration_type); ?>" data-registration-type-input />
                         <p class="mj-field-hint mj-registration-type-selector__hint" data-registration-type-hint>Choisissez cette option si vous avez 18 ans ou plus et que vous n'avez pas de tuteur.</p>
                     </fieldset>
 
-                    <div class="mj-registration-form-panels<?php echo $registration_type_selected ? ' mj-registration-form-panels--active' : ''; ?>" data-registration-form-panels>
+                    <div class="mj-registration-form-panels mj-registration-form-panels--active" data-registration-form-panels>
                     <fieldset class="mj-fieldset" data-section="guardian">
                         <legend>Informations du tuteur</legend>
                         <div class="mj-field-grid">
@@ -1940,7 +1941,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                         <legend>Jeunes à inscrire</legend>
                         <div id="mj-children-wrapper">
                             <?php foreach ($children_values as $index => $values) : ?>
-                                <?php echo mj_render_child_form_block($index, $values, $index > 0, $registration_type !== MjRoles::JEUNE, $complementary_form_options); ?>
+                                <?php echo mj_render_child_form_block($index, $values, $index > 0, $effective_registration_type !== MjRoles::JEUNE, $complementary_form_options); ?>
                             <?php endforeach; ?>
                         </div>
                         <button type="button" class="mj-button mj-button--secondary" id="mj-add-child">+ Ajouter un jeune</button>
@@ -2091,7 +2092,7 @@ if (!function_exists('mj_member_render_registration_form')) {
         </div>
 
         <script type="text/template" id="mj-child-template">
-            <?php echo mj_render_child_form_block('__INDEX__', array(), true, $registration_type !== MjRoles::JEUNE, $complementary_form_options); ?>
+            <?php echo mj_render_child_form_block('__INDEX__', array(), true, $effective_registration_type !== MjRoles::JEUNE, $complementary_form_options); ?>
         </script>
 
         <style>
@@ -2419,8 +2420,10 @@ if (!function_exists('mj_member_render_registration_form')) {
                 font-size: 15px;
             }
 
-            .mj-field-group input,
+            .mj-field-group input:not([type="radio"]):not([type="checkbox"]),
             .mj-field-group textarea {
+                box-sizing: border-box;
+                width: 100%;
                 padding: 12px 16px;
                 border: 1px solid rgba(148, 163, 184, 0.55);
                 border-radius: 12px;
@@ -2436,7 +2439,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                 min-height: 120px;
             }
 
-            .mj-field-group input:focus,
+            .mj-field-group input:not([type="radio"]):not([type="checkbox"]):focus,
             .mj-field-group textarea:focus {
                 outline: none;
                 border-color: var(--mj-accent);
@@ -2451,7 +2454,8 @@ if (!function_exists('mj_member_render_registration_form')) {
             .mj-field-hint {
                 font-size: 13px;
                 color: var(--mj-muted);
-                margin-top: -4px;
+                line-height: 15px;
+                margin-top: 15px;
             }
 
             /* ── Dynamic-field group improvements ── */
@@ -2629,6 +2633,8 @@ if (!function_exists('mj_member_render_registration_form')) {
 
             /* Dropdown / select styling inside dynamic fields */
             .mj-field-group--dyn select {
+                box-sizing: border-box;
+                width: 100%;
                 padding: 10px 14px;
                 border: 1px solid rgba(148, 163, 184, 0.55);
                 border-radius: 12px;
@@ -2791,16 +2797,13 @@ if (!function_exists('mj_member_render_registration_form')) {
             .mj-child-card__complementary-panel {
                 border: 1px solid rgba(37, 99, 235, 0.28);
                 background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
-                border-radius: 0 14px 14px 14px;
+                border-radius: 0 0 14px 14px;
                 padding: 14px 14px 2px;
                 box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 10px 24px rgba(29, 78, 216, 0.08);
             }
 
             .mj-child-complementary-toggle[aria-expanded="true"] + .mj-child-complementary-hint {
-                color: #1d4ed8;
-                opacity: 0;
-                visibility: hidden;
-                transform: translateY(-2px);
+                display: none;
             }
 
             .mj-child-complementary-toggle[aria-expanded="true"] ~ .mj-child-card__complementary-panel {
@@ -3014,7 +3017,8 @@ if (!function_exists('mj_member_render_registration_form')) {
 
             @media (max-width: 640px) {
                 .mj-inscription-container {
-                    padding: 22px;
+                    margin: 16px auto;
+                    padding: 14px;
                 }
 
                 .mj-registration-type-selector {
@@ -3022,7 +3026,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                 }
 
                 .mj-inscription-form {
-                    padding: 22px;
+                    padding: 16px;
                 }
 
                 .mj-inscription-container__title {
@@ -3039,6 +3043,31 @@ if (!function_exists('mj_member_render_registration_form')) {
 
                 .mj-regulation {
                     gap: 12px;
+                }
+
+                .mj-child-card {
+                    padding: 0;
+                    background: none;
+                    border: 0;
+                    box-shadow: none;
+                }
+
+                .mj-child-card__grid {
+                    gap: 14px;
+                    margin-bottom: 14px;
+                }
+
+                .mj-child-card__options,
+                .mj-child-card__complementary {
+                    margin-bottom: 14px;
+                }
+
+                .mj-child-complementary-header {
+                    flex-wrap: wrap;
+                }
+
+                .mj-child-complementary-hint {
+                    flex-basis: 100%;
                 }
             }
 
@@ -3147,6 +3176,7 @@ if (!function_exists('mj_member_render_registration_form')) {
             }
 
             .mj-inscription-login-form .mj-field-group input {
+                box-sizing: border-box;
                 width: 100%;
                 padding: 10px 12px;
                 border-radius: 8px;
@@ -4143,6 +4173,45 @@ if (!function_exists('mj_member_render_registration_form')) {
                     });
                 }
                 initDynfieldOtherToggles(document);
+
+                // ── Deselectable radio buttons for non-required dynamic fields ──
+                (function () {
+                    function resolveDynRadio(el) {
+                        if (!el || typeof el.closest !== 'function') {
+                            return null;
+                        }
+                        var label = el.closest('.mj-field-group--dyn label.mj-radio');
+                        return label ? label.querySelector('input[type="radio"]') : null;
+                    }
+
+                    var pendingRadio = null;
+                    var pendingWasChecked = false;
+
+                    document.addEventListener('mousedown', function (e) {
+                        pendingRadio = resolveDynRadio(e.target);
+                        pendingWasChecked = pendingRadio ? pendingRadio.checked : false;
+                    });
+
+                    document.addEventListener('click', function (e) {
+                        if (!(e.target instanceof HTMLInputElement) || e.target.type !== 'radio') {
+                            return;
+                        }
+                        var radio = e.target;
+                        if (radio !== pendingRadio || !pendingWasChecked) {
+                            return;
+                        }
+
+                        var isRequired = Array.prototype.some.call(document.getElementsByName(radio.name), function (r) {
+                            return r.required;
+                        });
+                        if (isRequired) {
+                            return;
+                        }
+
+                        radio.checked = false;
+                        radio.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                })();
 
                 // Re-init when a new child block is cloned
                 var childContainer = document.getElementById('mj-child-fields-container');

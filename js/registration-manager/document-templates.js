@@ -167,6 +167,10 @@
                 var otherLabel = df.otherLabel || 'Autre';
                 if (otherChecked && otherText) {
                     otherLabel += ' : ' + otherText;
+                } else {
+                    // No answer to show (unchecked, or checked but blanked for
+                    // "Aperçu document vierge") — leave a dotted line to fill in by hand.
+                    otherLabel += ' : ' + new Array(21).join('.');
                 }
                 rows.push('<span style="display:inline-block;margin:0 1.2em 0.3em 0;white-space:nowrap;' + (otherChecked ? 'font-weight:700;' : '') + '">'
                     + (otherChecked ? '&#9745;' : '&#9744;') + ' ' + Utils.escapeHtml(otherLabel) + '</span>');
@@ -193,13 +197,17 @@
      * value).
      *
      * @param {Array} dynamicFields - member.dynamicFields
+     * @param {boolean} [blank] - "Aperçu document vierge": ignore the
+     *   member's stored answers and render every field unanswered (no
+     *   option checked, empty text) — mirrors buildMemberContractDynFieldVariables()
+     *   (PHP) called with $blank = true.
      * @returns {Object} { 'dynfield_<id>': htmlFragment }
      */
-    function buildMemberContractDynFieldVariables(dynamicFields) {
+    function buildMemberContractDynFieldVariables(dynamicFields, blank) {
         var variables = {};
         (dynamicFields || []).forEach(function (df) {
             if (df.type === 'title') return;
-            variables['dynfield_' + df.id] = buildDynFieldContractHtml(df);
+            variables['dynfield_' + df.id] = buildDynFieldContractHtml(blank ? Object.assign({}, df, { value: '' }) : df);
         });
         return variables;
     }

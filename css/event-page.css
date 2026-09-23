@@ -238,6 +238,36 @@
     font-size: 1rem;
 }
 
+.mj-event-page__poster {
+    padding: 0;
+    overflow: hidden;
+}
+
+.mj-event-page__poster-a4 {
+    width: 100%;
+    max-width: 420px;
+    aspect-ratio: 1 / 1.4142;
+    margin: 0 auto;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--mj-event-shadow);
+    background: #fff;
+}
+
+.mj-event-page__poster-a4 a {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: zoom-in;
+}
+
+.mj-event-page__poster-a4 img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
 /* =====================================================
    Hero Section
    ===================================================== */

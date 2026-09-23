@@ -212,6 +212,8 @@ final class EventSingleDefaults
 
             'poster_url' => '',
 
+            'poster_image_url' => '',
+
             'registration_price_label' => '',
 
             'registration_deadline_label' => '',

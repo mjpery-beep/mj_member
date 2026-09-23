@@ -9,6 +9,8 @@
             <div class="mj-member-event-single__main">
                 {% include 'event-single/partials/description.html.twig' with { description: partials.description|default({}) } only %}
 
+                {% include 'event-single/partials/poster.html.twig' with { poster: partials.poster|default({}) } only %}
+
                 {% include 'event-single/partials/registration.html.twig' with {
                     registration: partials.registration|default({}),
                     user: user|default({})

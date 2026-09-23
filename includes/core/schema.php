@@ -1064,6 +1064,29 @@ function mj_member_get_member_badges_table_name() {
     return $cached;
 }
 
+function mj_member_get_member_guardians_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_member_guardians',
+        $wpdb->prefix . 'member_guardians',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
 function mj_member_get_badge_criteria_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -2564,6 +2587,8 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_103($wpdb);
     mj_member_upgrade_to_2_104($wpdb);
     mj_member_upgrade_to_2_105($wpdb);
+    mj_member_upgrade_to_2_106($wpdb);
+    mj_member_upgrade_to_2_107($wpdb);
 
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -7747,6 +7772,58 @@ function mj_member_upgrade_to_2_105($wpdb) {
 
     if (!mj_member_column_exists($events_table, 'poster_url')) {
         $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN poster_url VARCHAR(500) NOT NULL DEFAULT '' AFTER cover_id");
+    }
+}
+
+/**
+ * Migration 2.106: additional (non-default) guardians for a "jeune" member.
+ * The existing members.guardian_id column keeps representing the default
+ * guardian everywhere else (contracts, emails, is_autonomous); this new
+ * join table only tracks the extra guardians shown in the widget gestionnaire.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_106($wpdb) {
+    $member_guardians_table = mj_member_get_member_guardians_table_name();
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql_member_guardians = "CREATE TABLE {$member_guardians_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        member_id mediumint(9) NOT NULL,
+        guardian_id mediumint(9) NOT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY idx_member_guardian_unique (member_id, guardian_id),
+        KEY idx_member (member_id),
+        KEY idx_guardian (guardian_id)
+    ) {$charset_collate};";
+
+    dbDelta($sql_member_guardians);
+
+    if (mj_member_table_exists($member_guardians_table)) {
+        mj_member_convert_table_to_utf8mb4($member_guardians_table);
+    }
+}
+
+/**
+ * Migration 2.107: events — add poster_id, a dedicated media upload for the
+ * poster (distinct from the existing cover_id visual).
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_107($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+    if (!$events_table || !mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($events_table, 'poster_id')) {
+        $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN poster_id bigint(20) unsigned DEFAULT NULL AFTER poster_url");
     }
 }
 

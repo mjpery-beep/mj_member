@@ -1748,6 +1748,11 @@ body.mj-header-body-scroll-lock {
         padding: 0 !important;
     }
 
+    .mj-header-acc-card__icon img {
+        width: 20px;
+        height: 20px;
+    }
+
     /* Gestionnaire : largeur contrainte + une seule colonne */
     .mj-header-dropdown--gestionnaire {
         width: min(560px, 100vw);
@@ -2145,13 +2150,12 @@ a.mj-header-gest-fav-link:hover {
     grid-template-columns: 1fr 1fr;
     gap: 0;
     padding: 12px 8px 16px;
-    max-height: 71vh;
     overflow-y: auto;
 }
 
 /* Section individuelle */
 .mj-header-acc-section {
-    padding: 4px 8px 8px;
+    padding: 2px 5px 4px;
 }
 
 .mj-header-acc-section__title {

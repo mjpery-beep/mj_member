@@ -60,9 +60,17 @@
         coverEmpty: 'Aucun visuel selectionne.',
         coverPreviewAlt: 'Apercu du visuel de couverture',
         coverModalTitle: 'Choisir un visuel de couverture',
+        posterLabel: 'Affiche (format A4)',
+        posterLabelHint: "Fichier distinct du visuel ci-dessus, affiche en pleine page sur la fiche evenement.",
+        posterSelect: 'Selectionner un fichier',
+        posterReplace: 'Remplacer le fichier',
+        posterEmpty: 'Aucune affiche selectionnee.',
+        posterPreviewAlt: "Apercu de l'affiche",
+        posterModalTitle: "Choisir l'affiche de l'evenement",
+        posterId: "ID de l'affiche",
         posterUrl: 'Lien affiche (Canva, ...)',
         posterUrlOpen: 'Ouvrir le lien',
-        posterUrlHint: "Lien vers l'affiche (ex. Canva). Affiche un bouton \"Voir l'affiche\" sur la fiche evenement, en plus du visuel ci-dessus.",
+        posterUrlHint: "Lien de reference vers le design (ex. Canva). Facultatif : ouvre le design source depuis la fiche evenement.",
         aiVisualModalTitle: 'IA Visual Generator',
         aiVisualPromptLabel: 'Prompt fusionne',
         aiVisualBasePromptLabel: 'Prompt de base',
@@ -3896,6 +3904,7 @@
         var initialOptions = data ? data.options : {};
         var initialMeta = data ? data.meta : {};
         var initialCoverUrl = eventSummary && eventSummary.coverUrl ? eventSummary.coverUrl : '';
+        var initialPosterUrl = eventSummary && eventSummary.posterUrl ? eventSummary.posterUrl : '';
 
         var _locationOptionsState = useState(function () {
             var baseChoices = {};
@@ -3939,6 +3948,10 @@
         var _coverPreview = useState(initialCoverUrl);
         var coverPreview = _coverPreview[0];
         var setCoverPreview = _coverPreview[1];
+
+        var _posterPreview = useState(initialPosterUrl);
+        var posterPreview = _posterPreview[0];
+        var setPosterPreview = _posterPreview[1];
 
         var _aiVisualModalOpen = useState(false);
         var aiVisualModalOpen = _aiVisualModalOpen[0];
@@ -4005,6 +4018,7 @@
         var setExceptionDialogError = _exceptionDialogError[1];
 
         var mediaFrameRef = useRef(null);
+        var posterMediaFrameRef = useRef(null);
         var previousTypeRef = useRef(initialValues && initialValues.event_type ? initialValues.event_type : '');
         var manageLocationEnabled = !!(props.canManageLocations && typeof props.onManageLocation === 'function');
         var onManageLocation = manageLocationEnabled ? props.onManageLocation : null;
@@ -4129,6 +4143,17 @@
             }
             setCoverPreview(nextCover);
         }, [eventSummary, isDirty, coverPreview]);
+
+        useEffect(function () {
+            if (isDirty) {
+                return;
+            }
+            var nextPoster = eventSummary && eventSummary.posterUrl ? eventSummary.posterUrl : '';
+            if (posterPreview === nextPoster) {
+                return;
+            }
+            setPosterPreview(nextPoster);
+        }, [eventSummary, isDirty, posterPreview]);
 
         useEffect(function () {
             var currentType = formState.event_type || '';
@@ -4643,6 +4668,96 @@
             setCoverPreview('');
         }, [updateFormValue]);
 
+        var handleSelectPoster = useCallback(function () {
+            var wpGlobal = global.wp;
+            if (!wpGlobal || !wpGlobal.media || typeof wpGlobal.media !== 'function') {
+                return;
+            }
+            if (!posterMediaFrameRef.current) {
+                posterMediaFrameRef.current = wpGlobal.media({
+                    title: getString(strings, 'posterModalTitle', "Choisir l'affiche de l'evenement"),
+                    button: { text: getString(strings, 'posterSelect', 'Selectionner un fichier') },
+                    multiple: false,
+                    library: { type: 'image' },
+                });
+                posterMediaFrameRef.current.on('select', function () {
+                    var frame = posterMediaFrameRef.current;
+                    if (!frame) {
+                        return;
+                    }
+                    var state = typeof frame.state === 'function' ? frame.state() : frame.state;
+                    if (!state || typeof state.get !== 'function') {
+                        return;
+                    }
+                    var selection = state.get('selection');
+                    if (!selection || typeof selection.first !== 'function') {
+                        return;
+                    }
+                    var attachment = selection.first();
+                    if (!attachment || typeof attachment.toJSON !== 'function') {
+                        return;
+                    }
+                    var details = attachment.toJSON();
+                    var id = details && details.id ? parseInt(details.id, 10) || 0 : 0;
+                    updateFormValue('event_poster_id', id);
+                    var url = '';
+                    if (details) {
+                        if (details.sizes && details.sizes.medium && details.sizes.medium.url) {
+                            url = details.sizes.medium.url;
+                        } else if (details.url) {
+                            url = details.url;
+                        }
+                    }
+                    setPosterPreview(url);
+                });
+            }
+            var frameInstance = posterMediaFrameRef.current;
+            if (!frameInstance) {
+                return;
+            }
+            var syncSelection = function () {
+                var state = typeof frameInstance.state === 'function' ? frameInstance.state() : frameInstance.state;
+                if (!state || typeof state.get !== 'function') {
+                    return;
+                }
+                var selection = state.get('selection');
+                if (!selection || typeof selection.reset !== 'function') {
+                    return;
+                }
+                selection.reset();
+                var currentId = formState.event_poster_id ? parseInt(formState.event_poster_id, 10) || 0 : 0;
+                if (currentId <= 0) {
+                    return;
+                }
+                var attachment = wpGlobal.media.attachment(currentId);
+                if (!attachment) {
+                    return;
+                }
+                if (typeof attachment.fetch === 'function') {
+                    attachment.fetch();
+                }
+                selection.add(attachment);
+            };
+            if (typeof frameInstance.once === 'function') {
+                frameInstance.once('open', syncSelection);
+            } else if (typeof frameInstance.on === 'function') {
+                frameInstance.on('open', function handleOpenOnce() {
+                    if (typeof frameInstance.off === 'function') {
+                        frameInstance.off('open', handleOpenOnce);
+                    }
+                    syncSelection();
+                });
+            } else {
+                syncSelection();
+            }
+            frameInstance.open();
+        }, [strings, updateFormValue, formState.event_poster_id, setPosterPreview]);
+
+        var handleRemovePoster = useCallback(function () {
+            updateFormValue('event_poster_id', 0);
+            setPosterPreview('');
+        }, [updateFormValue]);
+
         var resolvedVisualBasePrompt = useMemo(function () {
             var eventTitle = (formState && formState.event_title) || (eventSummary && eventSummary.title) || '';
             var eventDescription = '';
@@ -5063,6 +5178,45 @@
                                 min: '0',
                             }),
                         ]),
+                        wpMediaAvailable ? h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                            h('label', null, getString(strings, 'posterLabel', "Affiche (format A4)")),
+                            h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'posterLabelHint', "Fichier distinct du visuel ci-dessus, affiche en pleine page sur la fiche evenement.")),
+                            h('div', { class: 'mj-regmgr-media-control' }, [
+                                h('div', {
+                                    class: classNames('mj-regmgr-media-control__preview mj-regmgr-media-control__preview--a4', {
+                                        'mj-regmgr-media-control__preview--empty': !posterPreview,
+                                    }),
+                                }, posterPreview ? h('img', {
+                                    src: posterPreview,
+                                    alt: getString(strings, 'posterPreviewAlt', "Apercu de l'affiche"),
+                                }) : h('span', { class: 'mj-regmgr-media-control__placeholder' }, getString(strings, 'posterEmpty', 'Aucune affiche selectionnee.'))),
+                                h('div', { class: 'mj-regmgr-media-control__content' }, [
+                                    h('p', { class: 'mj-regmgr-media-control__meta' }, formState.event_poster_id ? '#' + formState.event_poster_id : getString(strings, 'posterEmpty', 'Aucune affiche selectionnee.')),
+                                    h('div', { class: 'mj-regmgr-media-control__actions' }, [
+                                        h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--ghost',
+                                            onClick: handleSelectPoster,
+                                            disabled: loading || saving,
+                                        }, formState.event_poster_id ? getString(strings, 'posterReplace', 'Remplacer le fichier') : getString(strings, 'posterSelect', 'Selectionner un fichier')),
+                                        formState.event_poster_id ? h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--ghost mj-btn--sm',
+                                            onClick: handleRemovePoster,
+                                            disabled: loading || saving,
+                                        }, getString(strings, 'remove', 'Supprimer')) : null,
+                                    ]),
+                                ]),
+                            ]),
+                        ]) : h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', null, getString(strings, 'posterId', "ID de l'affiche")),
+                            h('input', {
+                                type: 'number',
+                                value: formState.event_poster_id || '',
+                                onChange: function (e) { handleNumberChange('event_poster_id', e.target.value); },
+                                min: '0',
+                            }),
+                        ]),
                         h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
                             h('label', null, getString(strings, 'posterUrl', 'Lien affiche (Canva, ...)')),
                             h('input', {
@@ -5073,7 +5227,7 @@
                             }),
                             formState.event_poster_url ? h('p', { class: 'mj-regmgr-field-hint' }, [
                                 h('a', { href: formState.event_poster_url, target: '_blank', rel: 'noopener noreferrer' }, getString(strings, 'posterUrlOpen', 'Ouvrir le lien')),
-                            ]) : h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'posterUrlHint', "Lien vers l'affiche (ex. Canva). Affiche un bouton \"Voir l'affiche\" sur la fiche evenement, en plus du visuel ci-dessus.")),
+                            ]) : h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'posterUrlHint', "Lien de reference vers le design (ex. Canva). Facultatif : ouvre le design source depuis la fiche evenement.")),
                         ]),
                     ]),
                 ]),

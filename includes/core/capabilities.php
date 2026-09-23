@@ -302,3 +302,23 @@ function mj_member_hide_admin_bar_for_members()
     show_admin_bar(false);
 }
 add_action('after_setup_theme', 'mj_member_hide_admin_bar_for_members');
+
+/**
+ * Hide the WP admin bar on mobile viewports, even for users allowed to see it
+ * (administrators, gestionnaires) — it eats too much space on small screens.
+ */
+function mj_member_hide_admin_bar_on_mobile()
+{
+    if (is_admin() || !is_admin_bar_showing()) {
+        return;
+    }
+    ?>
+<style id="mj-member-hide-admin-bar-mobile">
+@media screen and (max-width: 782px) {
+    #wpadminbar { display: none !important; }
+    html { margin-top: 0 !important; }
+}
+</style>
+    <?php
+}
+add_action('wp_head', 'mj_member_hide_admin_bar_on_mobile', 999);

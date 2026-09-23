@@ -135,6 +135,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_get_members', [$this, 'getMembers']);
         add_action('wp_ajax_mj_regmgr_get_member_details', [$this, 'getMemberDetails']);
         add_action('wp_ajax_mj_regmgr_update_member', [$this, 'updateMember']);
+        add_action('wp_ajax_mj_regmgr_add_member_guardian', [$this, 'addMemberGuardian']);
+        add_action('wp_ajax_mj_regmgr_remove_member_guardian', [$this, 'removeMemberGuardian']);
+        add_action('wp_ajax_mj_regmgr_set_default_member_guardian', [$this, 'setDefaultMemberGuardian']);
         add_action('wp_ajax_mj_regmgr_update_member_trusted_status', [$this, 'updateMemberTrustedStatus']);
         add_action('wp_ajax_mj_regmgr_get_member_registrations', [$this, 'getMemberRegistrations']);
         add_action('wp_ajax_mj_regmgr_update_registration_occurrences', [$this, 'updateRegistrationOccurrences']);
@@ -2944,6 +2947,10 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'coverId' => $event->cover_id,
                 'coverUrl' => $this->getEventCoverUrl($event, 'medium'),
                 'coverFullUrl' => $this->getEventCoverUrl($event, 'full'),
+                'posterId' => isset($event->poster_id) ? (int) $event->poster_id : 0,
+                'posterUrl' => $this->getEventPosterUrl($event, 'medium'),
+                'posterFullUrl' => $this->getEventPosterUrl($event, 'full'),
+                'posterLinkUrl' => isset($event->poster_url) ? (string) $event->poster_url : '',
                 'accentColor' => $event->accent_color,
                 'prix' => (float) $event->prix,
                 'freeParticipation' => !empty($event->free_participation),
@@ -5390,6 +5397,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'accent_color' => $accent_color,
                 'emoji' => $sanitized_emoji,
                 'cover_id' => isset($event->cover_id) ? (int) $event->cover_id : 0,
+                'poster_id' => isset($event->poster_id) ? (int) $event->poster_id : 0,
                 'poster_url' => isset($event->poster_url) ? (string) $event->poster_url : '',
                 'article_id' => isset($event->article_id) ? (int) $event->article_id : 0,
                 'location_id' => isset($event->location_id) ? (int) $event->location_id : 0,
@@ -6201,6 +6209,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
         $accent_color = isset($form_values['accent_color']) ? $this->normalizeHexColor($form_values['accent_color']) : '';
         $cover_id = isset($form_values['cover_id']) ? (int) $form_values['cover_id'] : 0;
+        $poster_id = isset($form_values['poster_id']) ? (int) $form_values['poster_id'] : 0;
         $poster_url = isset($form_values['poster_url']) ? esc_url_raw(trim((string) $form_values['poster_url'])) : '';
         $description = isset($form_values['description']) ? $this->sanitizeRichHtmlForPdfTemplates($form_values['description']) : '';
         $registration_document = isset($form_values['registration_document']) ? $this->sanitizeRichHtmlForPdfTemplates($form_values['registration_document']) : '';
@@ -6408,6 +6417,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'accent_color' => $accent_color,
             'emoji' => isset($form_values['emoji']) ? sanitize_text_field((string) $form_values['emoji']) : '',
             'cover_id' => $cover_id,
+            'poster_id' => $poster_id,
             'poster_url' => $poster_url,
             'description' => $description,
             'registration_document' => $registration_document,
@@ -6596,8 +6606,11 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'articleId' => isset($event->article_id) ? (int) $event->article_id : 0,
             'coverId' => isset($event->cover_id) ? (int) $event->cover_id : 0,
             'coverUrl' => $this->getEventCoverUrl($event, 'medium'),
-            'posterUrl' => isset($event->poster_url) ? (string) $event->poster_url : '',
             'coverFullUrl' => $this->getEventCoverUrl($event, 'full'),
+            'posterId' => isset($event->poster_id) ? (int) $event->poster_id : 0,
+            'posterUrl' => $this->getEventPosterUrl($event, 'medium'),
+            'posterFullUrl' => $this->getEventPosterUrl($event, 'full'),
+            'posterLinkUrl' => isset($event->poster_url) ? (string) $event->poster_url : '',
             'capacityTotal' => isset($event->capacity_total) ? (int) $event->capacity_total : 0,
             'capacityWaitlist' => isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0,
             'prix' => isset($event->prix) ? (float) $event->prix : 0.0,
@@ -9064,6 +9077,10 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 $other_label = $other_label !== '' ? $other_label : 'Autre';
                 if ($checked && $other_text !== '') {
                     $other_label .= ' : ' . $other_text;
+                } else {
+                    // No answer to show (unchecked, or checked but blanked for
+                    // "Aperçu document vierge") — leave a dotted line to fill in by hand.
+                    $other_label .= ' : ' . str_repeat('.', 20);
                 }
                 $rows[] = '<span style="display:inline-block;margin:0 1.2em 0.3em 0;white-space:nowrap;' . ($checked ? 'font-weight:700;' : '') . '">'
                     . ($checked ? '&#9745;' : '&#9744;') . ' ' . esc_html($other_label) . '</span>';
@@ -9089,10 +9106,14 @@ final class RegistrationManagerController implements AjaxHandlerInterface
      * no value), so admins can drop e.g. [dynfield_12] into the
      * member_content template — mirrors
      * buildMemberContractDynFieldVariables() (JS).
+     *
+     * @param bool $blank "Aperçu document vierge": ignore the member's
+     *   stored answers and render every field unanswered (no option
+     *   checked, empty text) instead of the real data.
      */
-    private function buildMemberContractDynFieldVariables(int $member_id): array {
+    private function buildMemberContractDynFieldVariables(int $member_id, bool $blank = false): array {
         $fields = \Mj\Member\Classes\Crud\MjDynamicFields::getAll();
-        $values = \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($member_id);
+        $values = $blank ? array() : \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($member_id);
 
         $variables = array();
         foreach ($fields as $df) {
@@ -9155,7 +9176,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
             $variables = array_merge(
                 $this->buildMemberContractVariables($member, $guardian),
-                $this->buildMemberContractDynFieldVariables($member_id)
+                $this->buildMemberContractDynFieldVariables($member_id, $member_blank)
             );
             if ($member_blank) {
                 $variables = $this->blankMemberAndGuardianContractVariables($variables);
@@ -9164,7 +9185,11 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
             $blocks = $this->buildMemberContractBlocks($variables);
 
-            $member_name_for_contract = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
+            // Blank document = no member data on it, so it shouldn't be named
+            // after the member either.
+            $member_name_for_contract = $member_blank
+                ? ''
+                : trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
 
             $pdf_result = $this->buildRegistrationContractPdf(
                 $blocks,
@@ -9178,9 +9203,13 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 return;
             }
 
-            $filename = isset($pdf_result['filename']) ? (string) $pdf_result['filename'] : '';
-            if ($filename === '') {
-                $filename = 'fiche-inscription-' . date_i18n('Ymd') . '.pdf';
+            if ($member_blank) {
+                $filename = 'fiche-membre-vierge.pdf';
+            } else {
+                $filename = isset($pdf_result['filename']) ? (string) $pdf_result['filename'] : '';
+                if ($filename === '') {
+                    $filename = 'fiche-inscription-' . date_i18n('Ymd') . '.pdf';
+                }
             }
 
             $content = isset($pdf_result['content']) ? (string) $pdf_result['content'] : '';
@@ -11195,6 +11224,22 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     }
 
     /**
+     * @param mixed $event
+     * @param string $size
+     * @return string
+     */
+    private function getEventPosterUrl($event, $size = 'medium') {
+        if (!empty($event->poster_id) && (int) $event->poster_id > 0) {
+            $url = wp_get_attachment_image_url((int) $event->poster_id, $size);
+            if ($url) {
+                return $url;
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * Ensure member notes table exists
      */
     private function ensureNotesTable() {
@@ -12067,7 +12112,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $member['cardClaimUrl'] = mj_member_get_card_claim_url((int) $memberData->id);
         }
 
-        // Add guardian info if exists
+        // Add guardian info if exists (default guardian, kept for backward
+        // compatibility with contract/email flows still reading these keys)
         if (!empty($memberData->guardian_id)) {
             $guardian = MjMembers::getById((int) $memberData->guardian_id);
             if ($guardian) {
@@ -12095,8 +12141,15 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
         }
 
-        // Add children info if member is a guardian (tuteur)
-        $children = MjMembers::getChildrenForGuardian($member_id);
+        // Full list of guardians (default + additional) for the widget gestionnaire UI
+        $member['guardians'] = $this->buildGuardiansPayload($member_id);
+
+        // Add children info if member is a guardian (tuteur/animateur/coordinateur):
+        // includes members for which this member is only an additional guardian.
+        $guardian_capable_roles = array(MjRoles::TUTEUR, MjRoles::ANIMATEUR, MjRoles::COORDINATEUR);
+        $children = in_array($role, $guardian_capable_roles, true)
+            ? MjMembers::getChildrenForGuardianIncludingAdditional($member_id)
+            : MjMembers::getChildrenForGuardian($member_id);
         if (!empty($children)) {
             $member['children'] = array();
             foreach ($children as $child) {
@@ -12934,6 +12987,130 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         wp_send_json_success($response);
+    }
+
+    /**
+     * Builds the guardians payload for a member, in the same shape as
+     * getMemberDetails() (see 'guardians' key), for AJAX responses.
+     *
+     * @param int $member_id
+     * @return array<int,array<string,mixed>>
+     */
+    private function buildGuardiansPayload($member_id) {
+        $role_labels = array(
+            'jeune' => __('Jeune', 'mj-member'),
+            'animateur' => __('Animateur', 'mj-member'),
+            'tuteur' => __('Tuteur', 'mj-member'),
+            'benevole' => __('Bénévole', 'mj-member'),
+            'coordinateur' => __('Coordinateur', 'mj-member'),
+        );
+
+        $guardians = array();
+        foreach (MjMembers::getGuardiansForMember($member_id) as $guardian_entry) {
+            $guardian = $guardian_entry['member'];
+            $guardian_role = $guardian->role ?? '';
+            $guardian_role_label = $guardian_role !== '' && isset($role_labels[$guardian_role])
+                ? $role_labels[$guardian_role]
+                : ($guardian_role !== '' ? ucfirst($guardian_role) : '');
+
+            $guardians[] = array(
+                'id' => (int) $guardian->id,
+                'firstName' => $guardian->first_name ?? '',
+                'lastName' => $guardian->last_name ?? '',
+                'avatarUrl' => $this->getMemberAvatarUrl((int) $guardian->id),
+                'role' => $guardian_role,
+                'roleLabel' => $guardian_role_label,
+                'email' => $guardian->email ?? '',
+                'phone' => $guardian->phone ?? '',
+                'phoneSecondary' => $guardian->phone_secondary ?? '',
+                'isDefault' => !empty($guardian_entry['is_default']),
+            );
+        }
+
+        return $guardians;
+    }
+
+    /**
+     * Attaches a guardian to a "jeune" member (additional guardian, or the
+     * default one if the member doesn't have one yet).
+     */
+    public function addMemberGuardian() {
+        $current_member = $this->verifyRequest();
+        if (!$current_member) return;
+
+        $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+        $guardian_id = isset($_POST['guardianId']) ? absint($_POST['guardianId']) : 0;
+
+        if (!$member_id || !$guardian_id) {
+            wp_send_json_error(array('message' => __('Membre ou tuteur manquant.', 'mj-member')));
+            return;
+        }
+
+        $result = MjMembers::addAdditionalGuardian($member_id, $guardian_id);
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+            return;
+        }
+
+        wp_send_json_success(array(
+            'message' => __('Tuteur assigné avec succès.', 'mj-member'),
+            'guardians' => $this->buildGuardiansPayload($member_id),
+        ));
+    }
+
+    /**
+     * Detaches a guardian from a member. Removing the default guardian while
+     * other guardians remain is refused (MjMembers::removeGuardianFromMember).
+     */
+    public function removeMemberGuardian() {
+        $current_member = $this->verifyRequest();
+        if (!$current_member) return;
+
+        $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+        $guardian_id = isset($_POST['guardianId']) ? absint($_POST['guardianId']) : 0;
+
+        if (!$member_id || !$guardian_id) {
+            wp_send_json_error(array('message' => __('Membre ou tuteur manquant.', 'mj-member')));
+            return;
+        }
+
+        $result = MjMembers::removeGuardianFromMember($member_id, $guardian_id);
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+            return;
+        }
+
+        wp_send_json_success(array(
+            'message' => __('Tuteur retiré avec succès.', 'mj-member'),
+            'guardians' => $this->buildGuardiansPayload($member_id),
+        ));
+    }
+
+    /**
+     * Promotes an existing additional guardian to default guardian.
+     */
+    public function setDefaultMemberGuardian() {
+        $current_member = $this->verifyRequest();
+        if (!$current_member) return;
+
+        $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+        $guardian_id = isset($_POST['guardianId']) ? absint($_POST['guardianId']) : 0;
+
+        if (!$member_id || !$guardian_id) {
+            wp_send_json_error(array('message' => __('Membre ou tuteur manquant.', 'mj-member')));
+            return;
+        }
+
+        $result = MjMembers::setDefaultGuardian($member_id, $guardian_id);
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+            return;
+        }
+
+        wp_send_json_success(array(
+            'message' => __('Tuteur par défaut mis à jour.', 'mj-member'),
+            'guardians' => $this->buildGuardiansPayload($member_id),
+        ));
     }
 
     /**

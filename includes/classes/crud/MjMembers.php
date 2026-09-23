@@ -780,6 +780,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $wpdb = self::getWpdb();
 
         $wpdb->query($wpdb->prepare("UPDATE $table_name SET guardian_id = NULL WHERE guardian_id = %d", $id));
+        MjMemberGuardians::remove_all_for_member($id);
 
         $deleted = $wpdb->delete($table_name, array('id' => $id), array('%d'));
         if ($deleted === false) {
@@ -912,6 +913,43 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         }
 
         return self::hydrate_members($rows);
+    }
+
+    /**
+     * Like getChildrenForGuardian(), but also includes members for which
+     * $guardian_id is only an additional (non-default) guardian. Only used
+     * by the widget gestionnaire member detail view — contracts/emails keep
+     * using getChildrenForGuardian() so their behaviour stays unchanged.
+     *
+     * @param int $guardian_id
+     * @return array<int,MemberData>
+     */
+    public static function getChildrenForGuardianIncludingAdditional($guardian_id) {
+        $guardian_id = intval($guardian_id);
+        if ($guardian_id <= 0) {
+            return array();
+        }
+
+        $children = self::getChildrenForGuardian($guardian_id);
+        $existing_ids = array();
+        foreach ($children as $child) {
+            $existing_ids[(int) $child->id] = true;
+        }
+
+        $additional_member_ids = MjMemberGuardians::get_for_guardian($guardian_id);
+        foreach ($additional_member_ids as $member_id) {
+            if (isset($existing_ids[$member_id])) {
+                continue;
+            }
+
+            $member = self::getById($member_id);
+            if ($member) {
+                $children[] = $member;
+                $existing_ids[$member_id] = true;
+            }
+        }
+
+        return $children;
     }
 
     /**
@@ -1188,6 +1226,18 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             return null;
         }
 
+        return self::validateGuardianCandidate($guardian_id, $self_id);
+    }
+
+    /**
+     * Checks that $guardian_id points to an existing member with an allowed
+     * guardian role (tuteur/animateur/coordinateur), and isn't $self_id.
+     *
+     * @param mixed $guardian_id
+     * @param mixed $self_id
+     * @return int|null
+     */
+    private static function validateGuardianCandidate($guardian_id, $self_id) {
         $guardian_id = intval($guardian_id);
         if ($guardian_id <= 0) {
             return null;
@@ -1208,6 +1258,168 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         }
 
         return $guardian_id;
+    }
+
+    /**
+     * All guardians of a member: the default one (members.guardian_id, if
+     * any) first, then the additional ones from MjMemberGuardians.
+     *
+     * @param int $member_id
+     * @return array<int,array{member: MemberData, is_default: bool}>
+     */
+    public static function getGuardiansForMember($member_id) {
+        $member_id = intval($member_id);
+        if ($member_id <= 0) {
+            return array();
+        }
+
+        $member = self::getById($member_id);
+        if (!$member) {
+            return array();
+        }
+
+        $guardians = array();
+
+        if (!empty($member->guardian_id)) {
+            $default_guardian = self::getById((int) $member->guardian_id);
+            if ($default_guardian) {
+                $guardians[] = array('member' => $default_guardian, 'is_default' => true);
+            }
+        }
+
+        foreach (MjMemberGuardians::get_for_member($member_id) as $guardian_id) {
+            $guardian = self::getById($guardian_id);
+            if ($guardian) {
+                $guardians[] = array('member' => $guardian, 'is_default' => false);
+            }
+        }
+
+        return $guardians;
+    }
+
+    /**
+     * Attaches a guardian to a "jeune" member. The first guardian ever
+     * assigned becomes the default one (members.guardian_id), matching the
+     * pre-existing single-guardian behaviour; subsequent ones are stored as
+     * additional guardians.
+     *
+     * @param int $member_id
+     * @param int $guardian_id
+     * @return true|WP_Error
+     */
+    public static function addAdditionalGuardian($member_id, $guardian_id) {
+        $member_id = intval($member_id);
+        $member = self::getById($member_id);
+        if (!$member) {
+            return new WP_Error('mj_member_missing', 'Membre introuvable.');
+        }
+
+        if ($member->role !== self::ROLE_JEUNE) {
+            return new WP_Error('mj_member_guardian_role_invalid', 'Seul un membre "jeune" peut avoir un tuteur.');
+        }
+
+        $validated_guardian_id = self::validateGuardianCandidate($guardian_id, $member_id);
+        if (!$validated_guardian_id) {
+            return new WP_Error('mj_member_guardian_invalid', 'Le tuteur spécifié est introuvable ou invalide.');
+        }
+
+        if (!empty($member->guardian_id) && (int) $member->guardian_id === $validated_guardian_id) {
+            return true;
+        }
+
+        if (empty($member->guardian_id)) {
+            return self::update($member_id, array('guardian_id' => $validated_guardian_id));
+        }
+
+        if (!MjMemberGuardians::add($member_id, $validated_guardian_id)) {
+            return new WP_Error('mj_member_guardian_add_failed', "Impossible d'ajouter ce tuteur.");
+        }
+
+        return true;
+    }
+
+    /**
+     * Detaches a guardian from a member. Removing the default guardian while
+     * other (additional) guardians remain is refused — the caller must
+     * promote another guardian to default first.
+     *
+     * @param int $member_id
+     * @param int $guardian_id
+     * @return true|WP_Error
+     */
+    public static function removeGuardianFromMember($member_id, $guardian_id) {
+        $member_id = intval($member_id);
+        $guardian_id = intval($guardian_id);
+
+        $member = self::getById($member_id);
+        if (!$member) {
+            return new WP_Error('mj_member_missing', 'Membre introuvable.');
+        }
+
+        $is_default = !empty($member->guardian_id) && (int) $member->guardian_id === $guardian_id;
+
+        if ($is_default) {
+            $additional_guardian_ids = MjMemberGuardians::get_for_member($member_id);
+            if (!empty($additional_guardian_ids)) {
+                return new WP_Error(
+                    'mj_member_guardian_default_locked',
+                    "Impossible de retirer le tuteur par défaut tant qu'il y a d'autres tuteurs. Définissez d'abord un autre tuteur par défaut."
+                );
+            }
+
+            return self::update($member_id, array('guardian_id' => null));
+        }
+
+        if (!MjMemberGuardians::exists($member_id, $guardian_id)) {
+            return new WP_Error('mj_member_guardian_not_found', 'Ce tuteur n\'est pas rattaché à ce membre.');
+        }
+
+        if (!MjMemberGuardians::remove($member_id, $guardian_id)) {
+            return new WP_Error('mj_member_guardian_remove_failed', 'Impossible de retirer ce tuteur.');
+        }
+
+        return true;
+    }
+
+    /**
+     * Promotes an existing additional guardian to default, demoting the
+     * current default guardian (if any) to an additional one.
+     *
+     * @param int $member_id
+     * @param int $guardian_id
+     * @return true|WP_Error
+     */
+    public static function setDefaultGuardian($member_id, $guardian_id) {
+        $member_id = intval($member_id);
+        $guardian_id = intval($guardian_id);
+
+        $member = self::getById($member_id);
+        if (!$member) {
+            return new WP_Error('mj_member_missing', 'Membre introuvable.');
+        }
+
+        if (!empty($member->guardian_id) && (int) $member->guardian_id === $guardian_id) {
+            return true;
+        }
+
+        if (!MjMemberGuardians::exists($member_id, $guardian_id)) {
+            return new WP_Error('mj_member_guardian_not_found', 'Ce tuteur n\'est pas rattaché à ce membre.');
+        }
+
+        $previous_default_id = !empty($member->guardian_id) ? (int) $member->guardian_id : 0;
+
+        $updated = self::update($member_id, array('guardian_id' => $guardian_id));
+        if (is_wp_error($updated)) {
+            return $updated;
+        }
+
+        MjMemberGuardians::remove($member_id, $guardian_id);
+
+        if ($previous_default_id > 0) {
+            MjMemberGuardians::add($member_id, $previous_default_id);
+        }
+
+        return true;
     }
 
     /**

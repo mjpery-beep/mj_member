@@ -1,0 +1,20 @@
+{% set image_url = poster.image_url|default('') %}
+{% set title = poster.title|default('') %}
+{% set caption = title ? ('Affiche de l\'événement ' ~ title) : 'Affiche de l\'événement' %}
+
+{% if image_url %}
+<section class="mj-event-page__card mj-event-page__poster">
+    <div class="mj-event-page__poster-a4">
+        <a href="{{ image_url|esc_url }}"
+           data-mj-event-preview="1"
+           data-mj-event-preview-group="poster"
+           data-mj-event-preview-caption="{{ caption|esc_attr }}"
+           data-elementor-open-lightbox="no"
+           data-lightbox="none"
+           data-fancybox=""
+           aria-label="{{ caption|esc_attr }}">
+            <img src="{{ image_url|esc_url }}" alt="{{ caption|esc_attr }}" loading="lazy" decoding="async" />
+        </a>
+    </div>
+</section>
+{% endif %}

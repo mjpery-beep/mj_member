@@ -2086,6 +2086,10 @@ a.mj-member-events-calendar__mobile-event.is-filtered-out {
     left: auto;
 }
 
+.mj-member-events-calendar__mobile-event:has(.mj-member-events-calendar__mobile-pill) .mj-member-events-calendar__mobile-body {
+    padding-top: 20px;
+}
+
 .mj-member-events-calendar__mobile-event:has(.mj-member-events-calendar__event-actions--mobile) .mj-member-events-calendar__mobile-body {
     padding-right: 62px;
 }

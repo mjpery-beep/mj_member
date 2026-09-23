@@ -3484,29 +3484,53 @@
     // MEMBER CONTRACT ("fiche d'inscription") TAB
     // ============================================
 
-    // Dotted-line length per guardian_ field suffix when "Responsable légal
-    // vierge" is checked — mirrors blankLineForFieldSuffix() (PHP): a postal
-    // code needs far less room to fill in by hand than a full address.
-    var GUARDIAN_BLANK_LENGTH_BY_SUFFIX = {
+    // Dotted-line length per member_/guardian_ field suffix when "Responsable
+    // légal vierge" or "Aperçu document vierge" is used — mirrors
+    // blankLineForFieldSuffix() (PHP): a postal code needs far less room to
+    // fill in by hand than a full address.
+    var BLANK_LENGTH_BY_SUFFIX = {
         name: 48,
         first_name: 20,
         last_name: 20,
         email: 30,
         phone: 16,
+        birth_date: 14,
         address: 58,
         address_line: 40,
         postal_code: 8,
         city: 22,
     };
-    var GUARDIAN_BLANK_DEFAULT_LENGTH = 30;
+    var BLANK_DEFAULT_LENGTH = 30;
 
+    function blankLineForSuffix(suffix) {
+        var length = BLANK_LENGTH_BY_SUFFIX[suffix] || BLANK_DEFAULT_LENGTH;
+        return new Array(length + 1).join('.');
+    }
+
+    // "Responsable légal vierge": blanks guardian_* only (member_* stays real).
     function blankGuardianContractVariables(variables) {
         var result = Object.assign({}, variables);
         Object.keys(result).forEach(function (key) {
             if (key.indexOf('guardian_') !== 0) return;
-            var suffix = key.slice('guardian_'.length);
-            var length = GUARDIAN_BLANK_LENGTH_BY_SUFFIX[suffix] || GUARDIAN_BLANK_DEFAULT_LENGTH;
-            result[key] = new Array(length + 1).join('.');
+            result[key] = blankLineForSuffix(key.slice('guardian_'.length));
+        });
+        return result;
+    }
+
+    // "Aperçu document vierge": blanks member_* AND guardian_* (other
+    // variables — site_*, current_date/year, dynfield_* — stay real).
+    function blankMemberContractVariables(variables) {
+        var result = Object.assign({}, variables);
+        Object.keys(result).forEach(function (key) {
+            var suffix = null;
+            if (key.indexOf('member_') === 0) {
+                suffix = key.slice('member_'.length);
+            } else if (key.indexOf('guardian_') === 0) {
+                suffix = key.slice('guardian_'.length);
+            } else {
+                return;
+            }
+            result[key] = blankLineForSuffix(suffix);
         });
         return result;
     }
@@ -3518,8 +3542,11 @@
      *
      * @param {boolean} [guardianBlank] - "Responsable légal vierge": replace
      *   every guardian_* value with a dotted line to fill in by hand.
+     * @param {boolean} [fullBlank] - "Aperçu document vierge": replace every
+     *   member_* AND guardian_* value with a dotted line (takes priority
+     *   over guardianBlank).
      */
-    function buildMemberContractPreviewVariables(member, config, guardianBlank) {
+    function buildMemberContractPreviewVariables(member, config, guardianBlank, fullBlank) {
         var firstName = (member && member.firstName) || '';
         var lastName = (member && member.lastName) || '';
         var memberName = (firstName + ' ' + lastName).trim();
@@ -3565,9 +3592,10 @@
             current_year: new Date().getFullYear().toString(),
         };
 
-        var dynFieldVariables = DocTpl ? DocTpl.buildMemberContractDynFieldVariables(member && member.dynamicFields) : {};
+        var dynFieldVariables = DocTpl ? DocTpl.buildMemberContractDynFieldVariables(member && member.dynamicFields, fullBlank) : {};
 
         var allVariables = Object.assign({}, baseVariables, dynFieldVariables);
+        if (fullBlank) return blankMemberContractVariables(allVariables);
         return guardianBlank ? blankGuardianContractVariables(allVariables) : allVariables;
     }
 
@@ -3678,7 +3706,7 @@
         var editState = _editState[0];
         var setEditState = _editState[1];
 
-        var _preview = useState({ isOpen: false, title: '', html: '' });
+        var _preview = useState({ isOpen: false, title: '', html: '', isBlank: false });
         var preview = _preview[0];
         var setPreview = _preview[1];
 
@@ -3773,15 +3801,9 @@
                 .finally(function () { setBusy(false); });
         }, [apiService, refreshTemplates, selection, handleSelect]);
 
-        var handleOpenPreview = useCallback(function () {
-            if (!DocTpl) return;
-            var blocks = DocTpl.resolveMemberContractBlocks(templates);
-            var variables = buildMemberContractPreviewVariables(member, config, guardianBlank);
-            var bodyHtml = DocTpl.buildBlocksHtml(blocks, variables);
-
-            var fullName = ((member && member.firstName) || '') + ' ' + ((member && member.lastName) || '');
-            var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'
-                + getString(strings, 'memberContractPreviewTitle', "Fiche d'inscription") + ' - ' + fullName.trim()
+        var buildMemberContractHtmlDoc = useCallback(function (variables, docTitle) {
+            var bodyHtml = DocTpl.buildBlocksHtml(DocTpl.resolveMemberContractBlocks(templates), variables);
+            return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + docTitle
                 + '</title><style>'
                 + '@page{size:A4;margin:8mm 7mm;}'
                 + 'body{font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}'
@@ -3792,22 +3814,43 @@
                 + 'img{max-width:100%;height:auto;}'
                 + (DocTpl.PREVIEW_STYLE || '')
                 + '</style></head><body>' + bodyHtml + '</body></html>';
+        }, [templates]);
+
+        var handleOpenPreview = useCallback(function () {
+            if (!DocTpl) return;
+            var variables = buildMemberContractPreviewVariables(member, config, guardianBlank);
+            var fullName = ((member && member.firstName) || '') + ' ' + ((member && member.lastName) || '');
+            var docTitle = getString(strings, 'memberContractPreviewTitle', "Fiche d'inscription") + ' - ' + fullName.trim();
 
             setPreview({
                 isOpen: true,
                 title: getString(strings, 'memberContractPreviewTitle', "Fiche d'inscription") + (fullName.trim() ? ' — ' + fullName.trim() : ''),
-                html: htmlDoc,
+                html: buildMemberContractHtmlDoc(variables, docTitle),
+                isBlank: false,
             });
-        }, [templates, member, config, strings, guardianBlank]);
+        }, [buildMemberContractHtmlDoc, member, config, strings, guardianBlank]);
+
+        var handleOpenBlankPreview = useCallback(function () {
+            if (!DocTpl) return;
+            var variables = buildMemberContractPreviewVariables(member, config, false, true);
+            var docTitle = getString(strings, 'memberContractBlankPreviewTitle', 'Document vierge à imprimer');
+
+            setPreview({
+                isOpen: true,
+                title: docTitle,
+                html: buildMemberContractHtmlDoc(variables, docTitle),
+                isBlank: true,
+            });
+        }, [buildMemberContractHtmlDoc, member, config, strings]);
 
         var handleClosePreview = useCallback(function () {
-            setPreview({ isOpen: false, title: '', html: '' });
+            setPreview({ isOpen: false, title: '', html: '', isBlank: false });
         }, []);
 
         var handleDownloadPreviewPdf = useCallback(function () {
             if (!member || !member.id || !apiService) return;
             setPreviewDownloading(true);
-            apiService.downloadMemberContractPdf(member.id, guardianBlank)
+            apiService.downloadMemberContractPdf(member.id, guardianBlank, preview.isBlank)
                 .then(function (data) {
                     var downloadUrl = data && typeof data.downloadUrl === 'string' ? data.downloadUrl : '';
                     if (!downloadUrl) {
@@ -3815,7 +3858,7 @@
                     }
                     var link = document.createElement('a');
                     link.href = downloadUrl;
-                    link.download = (data && data.filename) || 'fiche-inscription.pdf';
+                    link.download = (data && data.filename) || (preview.isBlank ? 'fiche-membre-vierge.pdf' : 'fiche-inscription.pdf');
                     link.target = '_blank';
                     link.rel = 'noopener noreferrer';
                     document.body.appendChild(link);
@@ -3828,7 +3871,7 @@
                 .finally(function () {
                     setPreviewDownloading(false);
                 });
-        }, [member, apiService, strings, guardianBlank]);
+        }, [member, apiService, strings, guardianBlank, preview.isBlank]);
 
         var handleGuardianBlankChange = useCallback(function (event) {
             setGuardianBlank(!!(event && event.target && event.target.checked));
@@ -3909,6 +3952,12 @@
                     class: 'mj-btn mj-btn--primary',
                     onClick: handleOpenPreview,
                 }, getString(strings, 'memberContractPreviewButton', "Aperçu de la fiche d'inscription")),
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--secondary',
+                    title: getString(strings, 'memberContractBlankPreviewHint', "Aperçu de la fiche d'inscription avec toutes les variables du membre ([member_*] et [guardian_*]) remplacées par des pointillés à compléter à la main."),
+                    onClick: handleOpenBlankPreview,
+                }, getString(strings, 'memberContractBlankPreviewButton', 'Aperçu document vierge')),
             ]),
             PreviewModal && h(PreviewModal, {
                 isOpen: preview.isOpen,
@@ -3966,6 +4015,8 @@
         var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
         var onUpdateRegistrationOccurrences = typeof props.onUpdateRegistrationOccurrences === 'function' ? props.onUpdateRegistrationOccurrences : null;
         var onOpenMember = typeof props.onOpenMember === 'function' ? props.onOpenMember : null;
+        var onSetDefaultGuardian = typeof props.onSetDefaultGuardian === 'function' ? props.onSetDefaultGuardian : null;
+        var onRemoveGuardian = typeof props.onRemoveGuardian === 'function' ? props.onRemoveGuardian : null;
         var onSyncBadgeCriteria = typeof props.onSyncBadgeCriteria === 'function' ? props.onSyncBadgeCriteria : null;
         var onAdjustXp = typeof props.onAdjustXp === 'function' ? props.onAdjustXp : null;
         var onToggleTrophy = typeof props.onToggleTrophy === 'function' ? props.onToggleTrophy : null;
@@ -4550,6 +4601,28 @@
                 guardianDisplayName = ((guardianReference.firstName || '') + ' ' + (guardianReference.lastName || '')).trim();
             }
         }
+
+        // Tuteurs multiples : member.guardians (backend) contient le tuteur par
+        // défaut + les tuteurs additionnels. Fallback sur le tuteur singulier
+        // (guardianReference) si le backend ne renvoie pas encore ce tableau.
+        var guardianList = Array.isArray(member.guardians) && member.guardians.length > 0
+            ? member.guardians.map(function (g) {
+                var displayName = ((g.firstName || '') + ' ' + (g.lastName || '')).trim() || g.displayName || '';
+                return {
+                    id: g.id,
+                    firstName: g.firstName || '',
+                    lastName: g.lastName || '',
+                    displayName: displayName,
+                    role: g.role || 'tuteur',
+                    roleLabel: g.roleLabel || '',
+                    avatarUrl: g.avatarUrl || '',
+                    email: g.email || '',
+                    phone: g.phone || '',
+                    phoneSecondary: g.phoneSecondary || '',
+                    isDefault: !!g.isDefault,
+                };
+            })
+            : (guardianReference ? [Object.assign({ isDefault: true }, guardianReference)] : []);
 
         var handleGuardianEditClick = function () {
             if (canEditGuardianInline && typeof config.onEditGuardian === 'function') {
@@ -6194,7 +6267,7 @@
                     member.role && h('span', { 
                         class: 'mj-regmgr-badge mj-regmgr-badge--role-' + member.role 
                     }, roleLabels[member.role] || member.role),
-                    !guardianDisplayName && memberRole === 'jeune' && config && typeof config.onAssignGuardian === 'function' && h('button', {
+                    memberRole === 'jeune' && config && typeof config.onAssignGuardian === 'function' && h('button', {
                         type: 'button',
                         class: 'mj-regmgr-member-detail__add-guardian-btn',
                         onClick: function () { config.onAssignGuardian(member); },
@@ -6210,72 +6283,111 @@
                             h('line', { x1: 20, y1: 8, x2: 20, y2: 14 }),
                             h('line', { x1: 17, y1: 11, x2: 23, y2: 11 }),
                         ]),
-                        h('span', null, getString(strings, 'addGuardian', 'Ajouter un tuteur')),
+                        h('span', null, getString(strings, guardianList.length > 0 ? 'addAnotherGuardian' : 'addGuardian', guardianList.length > 0 ? 'Ajouter un autre tuteur' : 'Ajouter un tuteur')),
                     ]),
-                    guardianDisplayName && h('div', { class: 'mj-regmgr-member-detail__guardian-chip' }, [
-                        h('svg', {
-                            class: 'mj-regmgr-member-detail__guardian-chip-icon',
-                            width: 25, height: 25, viewBox: '0 0 24 24',
-                            fill: 'none', stroke: 'currentColor',
-                            'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-                        }, [
-                            h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
-                            h('circle', { cx: 9, cy: 7, r: 4 }),
-                            h('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
-                            h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
-                        ]),
-                        onOpenMember && guardianReference
-                            ? h('button', {
-                                type: 'button',
-                                class: 'mj-regmgr-member-detail__guardian-chip-name',
-                                onClick: function () { onOpenMember(guardianReference); },
-                                title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
-                            }, guardianDisplayName)
-                            : h('span', { class: 'mj-regmgr-member-detail__guardian-chip-name mj-regmgr-member-detail__guardian-chip-name--static' }, guardianDisplayName),
-                        (guardianReference && guardianReference.phone) && h('a', {
-                            href: 'tel:' + guardianReference.phone,
-                            class: 'mj-regmgr-member-detail__guardian-chip-phone',
-                            title: getString(strings, 'guardianPhone', 'Tél. tuteur'),
+                    guardianList.map(function (g) {
+                        var gDisplayName = g.displayName || ((g.firstName || '') + ' ' + (g.lastName || '')).trim();
+                        var canRemove = !g.isDefault || guardianList.length === 1;
+                        return h('div', {
+                            key: 'guardian-' + g.id,
+                            class: classNames('mj-regmgr-member-detail__guardian-chip', {
+                                'mj-regmgr-member-detail__guardian-chip--default': g.isDefault,
+                            }),
                         }, [
                             h('svg', {
-                                width: 12, height: 12, viewBox: '0 0 24 24',
+                                class: 'mj-regmgr-member-detail__guardian-chip-icon',
+                                width: 25, height: 25, viewBox: '0 0 24 24',
                                 fill: 'none', stroke: 'currentColor',
                                 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
                             }, [
-                                h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                                h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
+                                h('circle', { cx: 9, cy: 7, r: 4 }),
+                                h('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
+                                h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
                             ]),
-                            h('span', null, guardianReference.phone),
-                        ]),
-                        (guardianReference && guardianReference.phoneSecondary) && h('a', {
-                            href: 'tel:' + guardianReference.phoneSecondary,
-                            class: 'mj-regmgr-member-detail__guardian-chip-phone',
-                            title: getString(strings, 'guardianPhoneSecondary', 'Tél. 2 tuteur'),
-                        }, [
-                            h('svg', {
-                                width: 12, height: 12, viewBox: '0 0 24 24',
-                                fill: 'none', stroke: 'currentColor',
-                                'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                            onOpenMember && g.id
+                                ? h('button', {
+                                    type: 'button',
+                                    class: 'mj-regmgr-member-detail__guardian-chip-name',
+                                    onClick: function () { onOpenMember(g); },
+                                    title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+                                }, gDisplayName)
+                                : h('span', { class: 'mj-regmgr-member-detail__guardian-chip-name mj-regmgr-member-detail__guardian-chip-name--static' }, gDisplayName),
+                            g.isDefault && h('span', {
+                                class: 'mj-regmgr-member-detail__guardian-chip-badge',
+                                title: getString(strings, 'defaultGuardianHint', 'Tuteur par défaut : utilisé pour les contrats et communications.'),
+                            }, getString(strings, 'defaultGuardianBadge', 'Par défaut')),
+                            g.phone && h('a', {
+                                href: 'tel:' + g.phone,
+                                class: 'mj-regmgr-member-detail__guardian-chip-phone',
+                                title: getString(strings, 'guardianPhone', 'Tél. tuteur'),
                             }, [
-                                h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                                h('svg', {
+                                    width: 12, height: 12, viewBox: '0 0 24 24',
+                                    fill: 'none', stroke: 'currentColor',
+                                    'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                                }, [
+                                    h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                                ]),
+                                h('span', null, g.phone),
                             ]),
-                            h('span', null, guardianReference.phoneSecondary),
-                        ]),
-                        (guardianReference && guardianReference.email) && h('a', {
-                            href: 'mailto:' + guardianReference.email,
-                            class: 'mj-regmgr-member-detail__guardian-chip-action',
-                            title: guardianReference.email,
-                            'aria-label': getString(strings, 'guardianEmail', 'Email tuteur'),
-                        }, [
-                            h('svg', {
-                                width: 12, height: 12, viewBox: '0 0 24 24',
-                                fill: 'none', stroke: 'currentColor',
-                                'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                            g.phoneSecondary && h('a', {
+                                href: 'tel:' + g.phoneSecondary,
+                                class: 'mj-regmgr-member-detail__guardian-chip-phone',
+                                title: getString(strings, 'guardianPhoneSecondary', 'Tél. 2 tuteur'),
                             }, [
-                                h('rect', { x: 2, y: 4, width: 20, height: 16, rx: 2 }),
-                                h('path', { d: 'M22 7l-10 7L2 7' }),
+                                h('svg', {
+                                    width: 12, height: 12, viewBox: '0 0 24 24',
+                                    fill: 'none', stroke: 'currentColor',
+                                    'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                                }, [
+                                    h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                                ]),
+                                h('span', null, g.phoneSecondary),
                             ]),
-                        ]),
-                    ]),
+                            g.email && h('a', {
+                                href: 'mailto:' + g.email,
+                                class: 'mj-regmgr-member-detail__guardian-chip-action',
+                                title: g.email,
+                                'aria-label': getString(strings, 'guardianEmail', 'Email tuteur'),
+                            }, [
+                                h('svg', {
+                                    width: 12, height: 12, viewBox: '0 0 24 24',
+                                    fill: 'none', stroke: 'currentColor',
+                                    'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                                }, [
+                                    h('rect', { x: 2, y: 4, width: 20, height: 16, rx: 2 }),
+                                    h('path', { d: 'M22 7l-10 7L2 7' }),
+                                ]),
+                            ]),
+                            h('div', { class: 'mj-regmgr-member-detail__guardian-chip-actions' }, [
+                                !g.isDefault && onSetDefaultGuardian && h('button', {
+                                    type: 'button',
+                                    class: 'mj-regmgr-member-detail__guardian-chip-action--set-default',
+                                    onClick: function () { onSetDefaultGuardian(member.id, g.id); },
+                                    title: getString(strings, 'setDefaultGuardian', 'Définir comme tuteur par défaut'),
+                                }, getString(strings, 'setDefaultGuardian', 'Définir par défaut')),
+                                onRemoveGuardian && h('button', {
+                                    type: 'button',
+                                    class: 'mj-regmgr-member-detail__guardian-chip-action--remove',
+                                    disabled: !canRemove,
+                                    title: canRemove
+                                        ? getString(strings, 'removeGuardian', 'Retirer ce tuteur')
+                                        : getString(strings, 'removeDefaultGuardianBlocked', "Impossible de retirer le tuteur par défaut tant qu'il y a d'autres tuteurs. Définissez d'abord un autre tuteur par défaut."),
+                                    onClick: function () {
+                                        if (!canRemove) {
+                                            return;
+                                        }
+                                        var confirmMsg = getString(strings, 'removeGuardianConfirm', 'Retirer ce tuteur de la fiche de ce membre ?');
+                                        if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) {
+                                            return;
+                                        }
+                                        onRemoveGuardian(member.id, g.id);
+                                    },
+                                }, getString(strings, 'removeGuardian', 'Retirer')),
+                            ]),
+                        ]);
+                    }),
                     hasChildren && h('div', { class: 'mj-regmgr-member-detail__children-chips' },
                         member.children.map(function (child) {
                             var childName = ((child.firstName || '') + ' ' + (child.lastName || '')).trim();

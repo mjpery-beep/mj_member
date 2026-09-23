@@ -1,0 +1,20 @@
+{% set image_url = poster.image_url|default('') %}
+{% set link_url = poster.link_url|default('') %}
+{% set title = poster.title|default('') %}
+
+{% if image_url %}
+<section class="mj-member-event-single__poster">
+    <h2 class="mj-member-event-single__poster-title">Affiche</h2>
+    <div class="mj-member-event-single__poster-a4">
+        {% if link_url %}
+            <a href="{{ link_url|esc_url }}" target="_blank" rel="noopener noreferrer">
+                <img src="{{ image_url|esc_url }}" alt="Affiche de l'evenement {{ title|esc_attr }}" loading="lazy" />
+            </a>
+        {% else %}
+            <a href="{{ image_url|esc_url }}" target="_blank" rel="noopener noreferrer">
+                <img src="{{ image_url|esc_url }}" alt="Affiche de l'evenement {{ title|esc_attr }}" loading="lazy" />
+            </a>
+        {% endif %}
+    </div>
+</section>
+{% endif %}

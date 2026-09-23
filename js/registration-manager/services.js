@@ -274,9 +274,10 @@
             /**
              * Génère puis retourne la fiche d'inscription (contrat) d'un membre en PDF.
              * @param {boolean} [guardianBlank] - remplace les variables [guardian_*] par des pointillés à compléter à la main.
+             * @param {boolean} [memberBlank] - remplace les variables [member_*] ET [guardian_*] par des pointillés (document vierge).
              */
-            downloadMemberContractPdf: function (memberId, guardianBlank) {
-                return post('mj_regmgr_download_member_contract_pdf', { memberId: memberId, guardianBlank: !!guardianBlank });
+            downloadMemberContractPdf: function (memberId, guardianBlank, memberBlank) {
+                return post('mj_regmgr_download_member_contract_pdf', { memberId: memberId, guardianBlank: !!guardianBlank, memberBlank: !!memberBlank });
             },
 
             /**
@@ -608,6 +609,36 @@
                 return post('mj_regmgr_update_member', {
                     memberId: memberId,
                     data: data,
+                });
+            },
+
+            /**
+             * Ajoute un tuteur à un jeune (devient tuteur par défaut si c'est le premier)
+             */
+            addMemberGuardian: function (memberId, guardianId) {
+                return post('mj_regmgr_add_member_guardian', {
+                    memberId: memberId,
+                    guardianId: guardianId,
+                });
+            },
+
+            /**
+             * Retire un tuteur d'un jeune
+             */
+            removeMemberGuardian: function (memberId, guardianId) {
+                return post('mj_regmgr_remove_member_guardian', {
+                    memberId: memberId,
+                    guardianId: guardianId,
+                });
+            },
+
+            /**
+             * Définit un tuteur additionnel comme tuteur par défaut
+             */
+            setDefaultMemberGuardian: function (memberId, guardianId) {
+                return post('mj_regmgr_set_default_member_guardian', {
+                    memberId: memberId,
+                    guardianId: guardianId,
                 });
             },
 

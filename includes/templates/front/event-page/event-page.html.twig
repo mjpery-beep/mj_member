@@ -36,6 +36,8 @@
             <div class="mj-event-page__main">
                 {% include 'event-page/partials/description.html.twig' with { description: partials.description|default({}) } only %}
 
+                {% include 'event-page/partials/poster.html.twig' with { poster: partials.poster|default({}) } only %}
+
                 {% include 'event-page/partials/location.html.twig' with { location: partials.location|default({}) } only %}
 
                 {% include 'event-page/partials/registration.html.twig' with {

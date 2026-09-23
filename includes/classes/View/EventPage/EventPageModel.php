@@ -190,6 +190,10 @@ final class EventPageModel
             }
         }
 
+        $posterId = isset($eventArray['poster_id']) ? (int) $eventArray['poster_id'] : 0;
+        $posterImageUrl = $posterId > 0 ? (wp_get_attachment_image_url($posterId, 'large') ?: '') : '';
+        $posterLinkUrl = isset($eventArray['poster_url']) ? (string) $eventArray['poster_url'] : '';
+
         $typeLabels = MjEvents::get_type_labels();
         $typeKey = isset($eventArray['type']) ? sanitize_key($eventArray['type']) : '';
         $typeLabel = isset($typeLabels[$typeKey]) ? $typeLabels[$typeKey] : ucfirst($typeKey);
@@ -214,6 +218,8 @@ final class EventPageModel
             'is_internal' => $typeKey === MjEvents::TYPE_INTERNE,
             'cover_url' => $coverUrl,
             'cover_thumb' => $coverThumb,
+            'poster_image_url' => $posterImageUrl,
+            'poster_url' => $posterLinkUrl,
             'accent_color' => isset($eventArray['accent_color']) ? (string) $eventArray['accent_color'] : '',
             'article_id' => $articleId,
             'article_url' => $articleUrl ?: '',

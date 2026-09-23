@@ -5342,9 +5342,7 @@
                 return Promise.reject(new Error(getString(strings, 'error', 'Une erreur est survenue.')));
             }
 
-            return api.updateMember(child.id, {
-                guardianId: guardian.id,
-            })
+            return api.addMemberGuardian(child.id, guardian.id)
                 .then(function (result) {
                     var successMessage = result && result.message
                         ? result.message
@@ -5379,7 +5377,7 @@
                         throw new Error(getString(strings, 'createChildError', 'Impossible de créer le jeune.'));
                     }
 
-                    return api.updateMember(createdMember.id, { guardianId: guardian.id })
+                    return api.addMemberGuardian(createdMember.id, guardian.id)
                         .then(function () {
                             showSuccess(getString(strings, 'childCreatedAndAttached', 'Jeune créé et rattaché avec succès.'));
                             loadMemberDetails(guardian.id);
@@ -5398,15 +5396,55 @@
                 return Promise.reject(new Error(getString(strings, 'error', 'Une erreur est survenue.')));
             }
 
-            return api.updateMember(child.id, {
-                guardianId: guardian.id,
-            })
+            return api.addMemberGuardian(child.id, guardian.id)
                 .then(function (result) {
                     var successMessage = result && result.message
                         ? result.message
                         : getString(strings, 'guardianAssigned', 'Tuteur assigné avec succès.');
                     showSuccess(successMessage);
                     loadMemberDetails(child.id);
+                    loadMembers(membersPagination.page);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
+
+        var handleSetDefaultGuardian = useCallback(function (memberId, guardianId) {
+            if (!memberId || !guardianId) {
+                return Promise.reject(new Error(getString(strings, 'error', 'Une erreur est survenue.')));
+            }
+
+            return api.setDefaultMemberGuardian(memberId, guardianId)
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'defaultGuardianUpdated', 'Tuteur par défaut mis à jour.');
+                    showSuccess(successMessage);
+                    loadMemberDetails(memberId);
+                    loadMembers(membersPagination.page);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
+
+        var handleRemoveGuardian = useCallback(function (memberId, guardianId) {
+            if (!memberId || !guardianId) {
+                return Promise.reject(new Error(getString(strings, 'error', 'Une erreur est survenue.')));
+            }
+
+            return api.removeMemberGuardian(memberId, guardianId)
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'guardianRemoved', 'Tuteur retiré avec succès.');
+                    showSuccess(successMessage);
+                    loadMemberDetails(memberId);
                     loadMembers(membersPagination.page);
                     return result;
                 })
@@ -5440,7 +5478,7 @@
                         : Promise.resolve();
 
                     return updatePromise.then(function () {
-                        return api.updateMember(child.id, { guardianId: createdMember.id });
+                        return api.addMemberGuardian(child.id, createdMember.id);
                     }).then(function () {
                         showSuccess(getString(strings, 'guardianCreatedAndAssigned', 'Tuteur créé et assigné avec succès.'));
                         loadMemberDetails(child.id);
@@ -5553,6 +5591,25 @@
                     isVideo: false,
                     url: coverUrl,
                     thumbnailUrl: coverUrl,
+                });
+            }
+
+            var posterUrl = normalizePublishMediaUrl(
+                (eventDetails && (eventDetails.posterFullUrl || eventDetails.posterUrl))
+                || (selectedEvent && (selectedEvent.posterFullUrl || selectedEvent.posterUrl))
+                || ''
+            );
+            if (posterUrl) {
+                items.push({
+                    key: 'poster:' + posterUrl,
+                    source: 'event_poster',
+                    sourceLabel: 'Affiche de l\'événement',
+                    name: 'Affiche',
+                    mimeType: 'image/*',
+                    isImage: true,
+                    isVideo: false,
+                    url: posterUrl,
+                    thumbnailUrl: posterUrl,
                 });
             }
 
@@ -6885,6 +6942,8 @@
                             onDeleteRegistration: handleDeleteMemberRegistration,
                             onUpdateRegistrationOccurrences: handleUpdateRegistrationOccurrences,
                             onOpenMember: handleViewMemberFromRegistration,
+                            onSetDefaultGuardian: handleSetDefaultGuardian,
+                            onRemoveGuardian: handleRemoveGuardian,
                             pendingEditRequest: pendingMemberEdit,
                             onPendingEditHandled: handleConsumePendingMemberEdit,
                             onCreateMessage: handleCreateMemberMessage,

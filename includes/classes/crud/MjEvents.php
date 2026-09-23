@@ -39,6 +39,7 @@ class MjEvents implements CrudRepositoryInterface {
         'accent_color' => '%s',
         'emoji' => '%s',
         'cover_id' => '%d',
+        'poster_id' => '%d',
         'poster_url' => '%s',
         'location_id' => '%d',
         'animateur_id' => '%d',
@@ -824,6 +825,10 @@ class MjEvents implements CrudRepositoryInterface {
             $nullable_columns[] = 'cover_id';
             unset($data['cover_id']);
         }
+        if (array_key_exists('poster_id', $data) && (int) $data['poster_id'] <= 0) {
+            $nullable_columns[] = 'poster_id';
+            unset($data['poster_id']);
+        }
         if (array_key_exists('date_fin_inscription', $data) && empty($data['date_fin_inscription'])) {
             $nullable_columns[] = 'date_fin_inscription';
             unset($data['date_fin_inscription']);
@@ -1104,6 +1109,7 @@ class MjEvents implements CrudRepositoryInterface {
             'accent_color' => '',
             'emoji' => '',
             'cover_id' => 0,
+            'poster_id' => 0,
             'poster_url' => '',
             'location_id' => 0,
             'allow_guardian_registration' => 0,
@@ -1173,6 +1179,7 @@ class MjEvents implements CrudRepositoryInterface {
 
             switch ($column) {
                 case 'cover_id':
+                case 'poster_id':
                 case 'location_id':
                 case 'animateur_id':
                 case 'created_by_member_id':
@@ -1182,7 +1189,7 @@ class MjEvents implements CrudRepositoryInterface {
                 case 'allow_guardian_registration':
                 case 'requires_validation':
                     $value = (int) $value;
-                    if ($value <= 0 && in_array($column, array('cover_id', 'location_id', 'animateur_id', 'created_by_member_id'), true)) {
+                    if ($value <= 0 && in_array($column, array('cover_id', 'poster_id', 'location_id', 'animateur_id', 'created_by_member_id'), true)) {
                         continue 2;
                     }
                     if ($column === 'article_id' && $value <= 0) {

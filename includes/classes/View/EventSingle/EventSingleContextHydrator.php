@@ -70,6 +70,13 @@ final class EventSingleContextHydrator
             $event = array_replace($this->context['event'], $event);
         }
 
+        if (empty($event['poster_image_url']) && !empty($event['poster_id'])) {
+            $posterUrl = wp_get_attachment_image_url((int) $event['poster_id'], 'large');
+            if ($posterUrl) {
+                $event['poster_image_url'] = $posterUrl;
+            }
+        }
+
         return $event;
     }
 

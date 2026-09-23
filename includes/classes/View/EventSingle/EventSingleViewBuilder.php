@@ -562,6 +562,8 @@ final class EventSingleViewBuilder
 
         $this->state['poster_url'] = $this->resolveString('poster_url', $event['poster_url'] ?? '');
 
+        $this->state['poster_image_url'] = $this->resolveString('poster_image_url', $event['poster_image_url'] ?? '');
+
     }
 
 
@@ -2595,6 +2597,8 @@ final class EventSingleViewBuilder
             'cover_thumb',
 
             'poster_url',
+
+            'poster_image_url',
 
             'registration_is_open',
 
