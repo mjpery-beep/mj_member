@@ -7,7 +7,7 @@
 {% set payment_required = registration.payment_required|default(false) %}
 {% set price_display = registration.price_display|default('') %}
 {% set has_reservations = registration.has_reservations|default(false) %}
-{% set cta_label = registration.cta_label|default(__("S'inscrire", 'mj-member')) %}
+{% set cta_label = registration.cta_label|default(__('Inscrire', 'mj-member')) %}
 {% set cta_action = registration.cta_action|default('register') %}
 {% set config_json = registration.config_json|default('{}') %}
 {% set allows_selection = registration.allows_selection|default(false) %}

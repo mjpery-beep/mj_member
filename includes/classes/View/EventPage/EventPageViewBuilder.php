@@ -1047,7 +1047,7 @@ final class EventPageViewBuilder
         $hasReservations = !empty($registration['has_reservations']);
 
         // Déterminer le CTA principal
-        $ctaLabel = __("S'inscrire", 'mj-member');
+        $ctaLabel = __('Inscrire', 'mj-member');
         $ctaAction = 'register';
 
         if ($hasReservations) {

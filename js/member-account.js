@@ -77,12 +77,17 @@
             return;
         }
 
-        var trigger = root.querySelector('[data-mj-member-delete-trigger]');
-        var modal = root.querySelector('#mj-member-delete-modal');
-        if (!trigger || !modal) {
-            return;
-        }
+        // Each trigger points to its modal id (defaults to the account deletion modal).
+        toArray(root.querySelectorAll('[data-mj-member-delete-trigger]')).forEach(function (trigger) {
+            var modalId = trigger.getAttribute('data-mj-member-delete-trigger') || 'mj-member-delete-modal';
+            var modal = document.getElementById(modalId);
+            if (modal) {
+                bindDeletionModal(trigger, modal);
+            }
+        });
+    }
 
+    function bindDeletionModal(trigger, modal) {
         var dismissButtons = toArray(modal.querySelectorAll('[data-mj-member-delete-dismiss]'));
 
         var isOpen = false;

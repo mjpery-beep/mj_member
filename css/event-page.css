@@ -918,10 +918,105 @@
     color: var(--mj-event-warning, #d97706);
 }
 
-.mj-event-page__participants {
-    display: flex;
+/* Sélecteur de participant : présenté comme des "fiches profil" cliquables
+   (avatar en haut, nom en dessous) plutôt que des onglets de navigation, pour
+   qu'on comprenne au premier coup d'œil qu'il s'agit de choisir la personne
+   inscrite, pas de changer de section/filtre. */
+.mj-event-page__participant-picker {
+    background: var(--mj-event-surface-alt);
+    border: 1px solid var(--mj-event-border);
+    border-radius: var(--mj-event-radius-sm);
+    padding: 1rem;
+    margin-bottom: 1rem !important;
+}
+
+.mj-event-page__participant-picker-label {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 700 !important;
+    color: var(--mj-event-text) !important;
+    margin: 0 0 0.75rem !important;
+    padding: 0 !important;
+}
+
+.mj-event-page .mj-event-page__participant-tabs.mj-account-tabs {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    gap: 10px;
+}
+
+.mj-event-page .mj-event-page__participant-tabs button.mj-account-tab {
     flex-direction: column;
-    gap: 0.25rem;
+    align-items: center;
+    gap: 6px;
+    min-width: 84px;
+    max-width: 120px;
+    padding: 12px 14px !important;
+    background: var(--mj-event-surface, #fff) !important;
+    border: 2px solid var(--mj-event-border) !important;
+    border-radius: 16px;
+    white-space: normal;
+}
+
+.mj-event-page .mj-event-page__participant-tabs button.mj-account-tab:hover {
+    border-color: var(--mj-event-accent) !important;
+    background: var(--mj-event-surface, #fff) !important;
+}
+
+.mj-event-page .mj-event-page__participant-tabs button.mj-account-tab--active {
+    border-color: var(--mj-event-accent) !important;
+    background: var(--mj-event-surface, #fff) !important;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+
+.mj-event-page .mj-account-tab__avatar-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.mj-event-page .mj-event-page__participant-tabs .mj-account-tab__avatar {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+}
+
+.mj-event-page .mj-event-page__participant-tabs .mj-account-tab__icon {
+    font-size: 1.5rem;
+}
+
+.mj-event-page .mj-account-tab__check {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--mj-event-accent) !important;
+    color: #fff !important;
+    font-size: 0.7rem;
+    line-height: 1;
+    border: 2px solid var(--mj-event-surface, #fff);
+}
+
+.mj-event-page .mj-event-page__participant-tabs .mj-account-tab__label {
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.mj-event-page .mj-account-tab.is-registered:not(.is-pending) {
+    box-shadow: inset 0 0 0 1px var(--mj-event-success);
+}
+
+.mj-event-page .mj-account-tab.is-pending {
+    box-shadow: inset 0 0 0 1px var(--mj-event-warning, #d97706);
+}
+
+.mj-event-page .mj-account-tab .mj-event-page__participant-badge {
+    margin-left: 0;
 }
 
 .mj-event-page__registration-summary {
@@ -971,6 +1066,25 @@
     border-radius: var(--mj-event-radius);
     padding: 1rem;
     margin-bottom: 1rem;
+}
+
+/* Occurrence unique : pas de calendrier, juste la date sous forme de résumé. */
+.mj-event-page__occurrence-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--mj-event-surface);
+    border: 1px solid var(--mj-event-border);
+    border-radius: var(--mj-event-radius);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    color: var(--mj-event-text);
+}
+
+.mj-event-page__occurrence-summary-icon {
+    font-size: 1.1rem;
+    line-height: 1;
 }
 
 .mj-event-page__calendar-header {
@@ -1154,50 +1268,98 @@
 /* =====================================================
    Buttons
    ===================================================== */
-.mj-event-page__btn {
+.mj-event-page button.mj-event-page__btn,
+.mj-event-page a.mj-event-page__btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    margin: 0;
     padding: 0.75rem 1.5rem;
     font-size: 1rem;
+    font-family: inherit;
     font-weight: 600;
-    border: none;
+    line-height: 1.2;
+    border: none !important;
     border-radius: var(--mj-event-radius-sm);
+    text-decoration: none !important;
     cursor: pointer;
     transition: all var(--mj-event-transition);
 }
 
-.mj-event-page__btn:disabled {
+.mj-event-page a.mj-event-page__btn:visited {
+    color: inherit !important;
+}
+
+.mj-event-page button.mj-event-page__btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.mj-event-page__btn--primary {
-    background: var(--mj-event-accent);
-    color: var(--mj-event-contrast);
+.mj-event-page button.mj-event-page__btn--primary,
+.mj-event-page a.mj-event-page__btn--primary {
+    background: var(--mj-event-accent) !important;
+    color: var(--mj-event-contrast) !important;
 }
 
-.mj-event-page__btn--primary:hover:not(:disabled),
-.mj-event-page__btn--primary:focus:not(:disabled) {
+.mj-event-page button.mj-event-page__btn--primary:hover:not(:disabled),
+.mj-event-page button.mj-event-page__btn--primary:focus:not(:disabled),
+.mj-event-page a.mj-event-page__btn--primary:hover,
+.mj-event-page a.mj-event-page__btn--primary:focus {
     filter: brightness(1.1);
     box-shadow: var(--mj-event-shadow);
+    color: var(--mj-event-contrast) !important;
 }
 
-.mj-event-page__btn--secondary {
-    background: var(--mj-event-surface-alt);
-    color: var(--mj-event-text);
-    border: 1px solid var(--mj-event-border);
+.mj-event-page button.mj-event-page__btn--secondary,
+.mj-event-page a.mj-event-page__btn--secondary {
+    background: var(--mj-event-surface-alt) !important;
+    color: var(--mj-event-text) !important;
+    border: 1px solid var(--mj-event-border) !important;
 }
 
-.mj-event-page__btn--secondary:hover:not(:disabled),
-.mj-event-page__btn--secondary:focus:not(:disabled) {
-    background: var(--mj-event-surface);
+.mj-event-page button.mj-event-page__btn--secondary:hover:not(:disabled),
+.mj-event-page button.mj-event-page__btn--secondary:focus:not(:disabled),
+.mj-event-page a.mj-event-page__btn--secondary:hover,
+.mj-event-page a.mj-event-page__btn--secondary:focus {
+    background: var(--mj-event-surface) !important;
     box-shadow: var(--mj-event-shadow);
+    color: var(--mj-event-text) !important;
 }
 
 .mj-event-page__btn-icon {
     font-size: 1.25rem;
+    line-height: 1;
+}
+
+/* Sur les boutons à fond coloré (accent), l'émoji seul manque de contraste
+   selon la couleur d'accent du thème : on lui donne un petit fond clair
+   pour qu'il reste lisible quel que soit le fond. Dimensions en px fixes
+   (pas em) pour un centrage prévisible indépendant de la cascade de tailles
+   de police, et un radius léger plutôt qu'un disque complet. */
+.mj-event-page button.mj-event-page__btn--primary .mj-event-page__btn-icon,
+.mj-event-page a.mj-event-page__btn--primary .mj-event-page__btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.95);
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+}
+
+/* Rangée "Inscrire / Télécharger le contrat / Annuler" : espacement cohérent
+   entre les 3 boutons, quel que soit le nombre effectivement affiché. */
+.mj-event-page__registration-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
 }
 
 .mj-event-page__registration-login-buttons {

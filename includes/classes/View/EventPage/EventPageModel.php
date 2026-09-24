@@ -1802,6 +1802,7 @@ final class EventPageModel
                     )),
                     'is_primary' => true,
                     'is_guardian' => false,
+                    'avatar_url' => $this->resolveParticipantAvatarUrl($currentMember),
                 );
             }
 
@@ -1817,6 +1818,7 @@ final class EventPageModel
                     )),
                     'is_primary' => false,
                     'is_child' => true,
+                    'avatar_url' => $this->resolveParticipantAvatarUrl($child),
                 );
             }
         } else {
@@ -1831,10 +1833,25 @@ final class EventPageModel
                 )),
                 'is_primary' => true,
                 'is_guardian' => false,
+                'avatar_url' => $this->resolveParticipantAvatarUrl($currentMember),
             );
         }
 
         return $participants;
+    }
+
+    /**
+     * @param object $member
+     */
+    private function resolveParticipantAvatarUrl($member): string
+    {
+        if (!$member || !function_exists('mj_member_account_get_photo_preview')) {
+            return '';
+        }
+
+        $preview = mj_member_account_get_photo_preview($member);
+
+        return isset($preview['url']) ? (string) $preview['url'] : '';
     }
 
     /**
@@ -1889,6 +1906,9 @@ final class EventPageModel
             }
         }
 
+        $registrationDocument = $this->event ? (string) $this->event->get('registration_document', '') : '';
+        $hasContract = trim(wp_strip_all_tags($registrationDocument)) !== '';
+
         $reservations = array();
         foreach ($registrations as $reg) {
             // EventRegistrationData est un value object avec des getters magiques
@@ -1922,12 +1942,27 @@ final class EventPageModel
                 }
             }
 
+            $registrationId = isset($regArray['id']) ? (int) $regArray['id'] : 0;
+
+            $contractUrl = '';
+            if ($hasContract && $registrationId > 0) {
+                $contractUrl = add_query_arg(
+                    array(
+                        'action' => 'mj_member_download_registration_contract',
+                        'registration_id' => $registrationId,
+                        'nonce' => wp_create_nonce('mj_member_download_registration_contract'),
+                    ),
+                    admin_url('admin-ajax.php')
+                );
+            }
+
             $reservations[] = array(
-                'id' => isset($regArray['id']) ? (int) $regArray['id'] : 0,
+                'id' => $registrationId,
                 'member_id' => isset($regArray['member_id']) ? (int) $regArray['member_id'] : 0,
                 'status' => $status,
                 'occurrence_ids' => $occurrenceIds,
                 'created_at' => isset($regArray['created_at']) ? (string) $regArray['created_at'] : '',
+                'contract_url' => $contractUrl,
             );
         }
 

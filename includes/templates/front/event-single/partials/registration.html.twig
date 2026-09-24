@@ -124,6 +124,14 @@
                                                     {{ entry.status_text }}
                                                 {% endif %}
                                             </span>
+                                            {% if entry.contract_url|default('') %}
+                                                <a
+                                                    class="mj-member-event-single__registration-member-contract"
+                                                    href="{{ entry.contract_url|esc_url }}"
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                >{{ __('Télécharger le contrat', 'mj-member') }}</a>
+                                            {% endif %}
                                             {% if not entry.eligible|default(true) and entry.reasons|default([])|length %}
                                                 <ul class="mj-member-event-single__registration-member-reasons">
                                                     {% for reason in entry.reasons %}
@@ -216,14 +224,26 @@
                                             <span class="mj-member-event-single__reservation-status{{ reservation_status_class ? ' ' ~ reservation_status_class|esc_attr : '' }}">{{ reservation.status_label }}</span>
                                         {% endif %}
                                     </div>
-                                    {% if reservation.can_cancel|default(false) %}
-                                        <button
-                                            type="button"
-                                            class="mj-member-event-single__reservation-cancel"
-                                            data-mj-event-cancel
-                                            data-member-id="{{ reservation.member_id|default(0) }}"
-                                            data-registration-id="{{ reservation.registration_id|default(0) }}"
-                                        >{{ __('Se désinscrire', 'mj-member') }}</button>
+                                    {% if reservation.can_cancel|default(false) or reservation.contract_url|default('') %}
+                                        <div class="mj-member-event-single__reservation-actions">
+                                            {% if reservation.contract_url|default('') %}
+                                                <a
+                                                    class="mj-member-event-single__reservation-contract"
+                                                    href="{{ reservation.contract_url|esc_url }}"
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                >{{ __('Télécharger le contrat', 'mj-member') }}</a>
+                                            {% endif %}
+                                            {% if reservation.can_cancel|default(false) %}
+                                                <button
+                                                    type="button"
+                                                    class="mj-member-event-single__reservation-cancel"
+                                                    data-mj-event-cancel
+                                                    data-member-id="{{ reservation.member_id|default(0) }}"
+                                                    data-registration-id="{{ reservation.registration_id|default(0) }}"
+                                                >{{ __('Se désinscrire', 'mj-member') }}</button>
+                                            {% endif %}
+                                        </div>
                                     {% endif %}
                                 </div>
                                 {% if reservation.created_label|default('') %}

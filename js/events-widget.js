@@ -174,15 +174,34 @@
 
         header.appendChild(main);
 
-        if (entry && entry.can_cancel && memberId > 0) {
-            var cancel = document.createElement('button');
-            cancel.type = 'button';
-            cancel.className = 'mj-member-event-single__reservation-cancel';
-            cancel.setAttribute('data-mj-event-cancel', '');
-            cancel.setAttribute('data-member-id', String(memberId));
-            cancel.setAttribute('data-registration-id', String(registrationId));
-            cancel.textContent = strings.unregister || 'Se désinscrire';
-            header.appendChild(cancel);
+        var hasCancel = entry && entry.can_cancel && memberId > 0;
+        var hasContract = entry && entry.contract_url;
+        if (hasCancel || hasContract) {
+            var actions = document.createElement('div');
+            actions.className = 'mj-member-event-single__reservation-actions';
+
+            if (hasContract) {
+                var contract = document.createElement('a');
+                contract.className = 'mj-member-event-single__reservation-contract';
+                contract.href = String(entry.contract_url);
+                contract.target = '_blank';
+                contract.rel = 'noopener';
+                contract.textContent = strings.downloadContract || 'Télécharger le contrat';
+                actions.appendChild(contract);
+            }
+
+            if (hasCancel) {
+                var cancel = document.createElement('button');
+                cancel.type = 'button';
+                cancel.className = 'mj-member-event-single__reservation-cancel';
+                cancel.setAttribute('data-mj-event-cancel', '');
+                cancel.setAttribute('data-member-id', String(memberId));
+                cancel.setAttribute('data-registration-id', String(registrationId));
+                cancel.textContent = strings.unregister || 'Se désinscrire';
+                actions.appendChild(cancel);
+            }
+
+            header.appendChild(actions);
         }
 
         listItem.appendChild(header);

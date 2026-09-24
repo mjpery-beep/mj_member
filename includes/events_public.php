@@ -445,6 +445,7 @@ if (!function_exists('mj_member_ensure_events_widget_localized')) {
                     'notePlaceholder' => __('Précisez une remarque utile (allergies, arrivée tardive, etc.).', 'mj-member'),
                     'cta' => __("S'inscrire", 'mj-member'),
                     'unregister' => __('Se désinscrire', 'mj-member'),
+                    'downloadContract' => __('Télécharger le contrat', 'mj-member'),
                     'unregisterConfirm' => __('Annuler cette inscription ?', 'mj-member'),
                     'unregisterSuccess' => __('Inscription annulée.', 'mj-member'),
                     'unregisterError' => __('Impossible d\'annuler l\'inscription.', 'mj-member'),
@@ -3304,6 +3305,8 @@ if (!function_exists('mj_member_ajax_get_event_reservations')) {
             );
         }
 
+        $has_contract = isset($event->registration_document) && trim(wp_strip_all_tags((string) $event->registration_document)) !== '';
+
         $slug = MjEvents::get_or_create_slug($event_id);
         $context = mj_member_prepare_event_page_context($slug);
         if (!$context || !is_array($context)) {
@@ -3638,6 +3641,18 @@ if (!function_exists('mj_member_ajax_get_event_reservations')) {
                     }
                 }
 
+                $contract_url = '';
+                if ($has_contract && $registration_id > 0) {
+                    $contract_url = add_query_arg(
+                        array(
+                            'action' => 'mj_member_download_registration_contract',
+                            'registration_id' => $registration_id,
+                            'nonce' => wp_create_nonce('mj_member_download_registration_contract'),
+                        ),
+                        admin_url('admin-ajax.php')
+                    );
+                }
+
                 $sanitized_reservations[] = array(
                     'name' => sanitize_text_field($participant_name),
                     'status_label' => sanitize_text_field($status_label),
@@ -3648,6 +3663,7 @@ if (!function_exists('mj_member_ajax_get_event_reservations')) {
                     'member_id' => $participant_member_id,
                     'registration_id' => $registration_id,
                     'can_cancel' => $owns_participant && $registration_id > 0,
+                    'contract_url' => $contract_url,
                 );
             }
         }

@@ -523,33 +523,56 @@
             );
         }
 
-        return h('fieldset', { className: 'mj-event-page__registration-fieldset' },
-            h('legend', null, 'Choisir le participant'),
-            h('div', { className: 'mj-event-page__participants' },
+        return h('fieldset', { className: 'mj-event-page__registration-fieldset mj-event-page__participant-picker' },
+            h('legend', { className: 'mj-event-page__participant-picker-label' }, 'Inscription pour qui ?'),
+            h('nav', { className: 'mj-account-tabs mj-event-page__participant-tabs', role: 'tablist' },
                 participants.map(p => {
                     const registered = isRegistered(p.id);
                     const pending = isPending(p.id);
-                    // DEBUG
-                    console.log('[ParticipantSelector] participant:', p.id, p.full_name, 'registered:', registered, 'pending:', pending, 'reservations:', reservations);
-                    return h('label', {
+                    const isActive = selectedId === p.id;
+                    const fallbackIcon = p.is_child ? '🧒' : '📋';
+
+                    return h('button', {
                         key: p.id,
-                        className: `mj-event-page__registration-participant ${selectedId === p.id ? 'is-selected' : ''} ${registered ? 'is-registered' : ''} ${pending ? 'is-pending' : ''}`,
+                        type: 'button',
+                        role: 'tab',
+                        className: `mj-account-tab ${isActive ? 'mj-account-tab--active' : ''} ${registered ? 'is-registered' : ''} ${pending ? 'is-pending' : ''}`,
+                        'aria-selected': isActive ? 'true' : 'false',
+                        disabled: disabled,
+                        onClick: () => onChange(p.id),
                     },
-                        h('input', {
-                            type: 'radio',
-                            name: 'participant_id',
-                            value: p.id,
-                            checked: selectedId === p.id,
-                            disabled: disabled,
-                            onChange: () => onChange(p.id),
-                        }),
-                        h('span', null, p.full_name || p.name),
+                        h('span', { className: 'mj-account-tab__avatar-wrap' },
+                            p.avatar_url
+                                ? h('img', { className: 'mj-account-tab__avatar', src: p.avatar_url, alt: '', loading: 'lazy' })
+                                : h('span', { className: 'mj-account-tab__icon', 'aria-hidden': 'true' }, fallbackIcon),
+                            isActive && h('span', { className: 'mj-account-tab__check', 'aria-hidden': 'true' }, '✓')
+                        ),
+                        h('span', { className: 'mj-account-tab__label' }, p.full_name || p.name),
                         p.is_child && h('span', { className: 'mj-event-page__participant-badge' }, 'Enfant'),
                         registered && renderStatusBadge(p.id)
                     );
                 })
             )
         );
+    }
+
+    /**
+     * Formate la date/heure d'une occurrence unique pour l'affichage en résumé
+     * (pas besoin d'un calendrier complet quand il n'y a qu'une seule date possible).
+     */
+    function formatSingleOccurrenceLabel(occ) {
+        if (!occ) return '';
+        var ts = occ.timestamp ? occ.timestamp * 1000 : (occ.start ? Date.parse(occ.start.replace(' ', 'T')) : null);
+        if (!ts) return occ.date || '';
+        var date = new Date(ts);
+        try {
+            var dateStr = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+            var timeStr = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(date);
+            dateStr = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+            return timeStr ? (dateStr + ' à ' + timeStr) : dateStr;
+        } catch (e) {
+            return occ.date || '';
+        }
     }
 
     /**
@@ -573,6 +596,14 @@
 
         if (!occurrences || occurrences.length === 0) {
             return null;
+        }
+
+        // Une seule occurrence possible : pas de calendrier à afficher, juste la date.
+        if (occurrences.length === 1) {
+            return h('div', { className: 'mj-event-page__occurrence-summary' },
+                h('span', { className: 'mj-event-page__occurrence-summary-icon', 'aria-hidden': 'true' }, '📅'),
+                h('span', null, formatSingleOccurrenceLabel(occurrences[0]) || 'Date à confirmer')
+            );
         }
 
         // Créer un index des occurrences par date (YYYY-MM-DD)
@@ -962,10 +993,24 @@
             }
         }, [isLoading, config.event?.id, selectedParticipant, i18n]);
 
-        // Déterminer le label du bouton
-        const ctaLabel = isParticipantRegistered
-            ? (i18n.update_registration || 'Mettre à jour')
-            : (i18n.register || "S'inscrire");
+        // Prénom du participant actuellement sélectionné : les boutons d'action
+        // l'affichent toujours pour ne laisser aucun doute sur la personne
+        // concernée ("Inscrire Léa", "Annuler l'inscription de Léa").
+        const participantsList = registration.participants || [];
+        const selectedParticipantObj = participantsList.find(p => p.id === selectedParticipant) || null;
+        const selectedParticipantFirstName = selectedParticipantObj
+            ? (selectedParticipantObj.name || selectedParticipantObj.full_name || '')
+            : '';
+
+        const ctaLabel = selectedParticipantFirstName
+            ? (isParticipantRegistered
+                ? `${i18n.update_registration || 'Mettre à jour'} ${selectedParticipantFirstName}`
+                : `${i18n.register || 'Inscrire'} ${selectedParticipantFirstName}`)
+            : (isParticipantRegistered ? (i18n.update_registration || 'Mettre à jour') : (i18n.register || 'Inscrire'));
+
+        const cancelLabel = selectedParticipantFirstName
+            ? (i18n.cancel_registration_named || 'Annuler l\'inscription de %s').replace('%s', selectedParticipantFirstName)
+            : (i18n.cancel_registration || 'Annuler mon inscription');
 
         // Vérifier si le formulaire est valide
         const isFormValid = selectedParticipant > 0 && (
@@ -1020,15 +1065,30 @@
                         className: 'mj-event-page__btn mj-event-page__btn--primary',
                         disabled: isLoading || !isFormValid,
                     },
-                        isLoading && h(Spinner),
+                        isLoading
+                            ? h(Spinner)
+                            : h('span', { className: 'mj-event-page__btn-icon', 'aria-hidden': 'true' }, '✍️'),
                         isLoading ? (i18n.loading || 'Chargement…') : ctaLabel
                     ),
+                    isParticipantRegistered && currentReservation?.contract_url && h('a', {
+                        className: 'mj-event-page__btn mj-event-page__btn--secondary',
+                        href: currentReservation.contract_url,
+                        target: '_blank',
+                        rel: 'noopener',
+                    },
+                        h('span', { className: 'mj-event-page__btn-icon', 'aria-hidden': 'true' }, '📥'),
+                        i18n.download_contract || 'Télécharger le contrat'
+                    ),
+
                     isParticipantRegistered && h('button', {
                         type: 'button',
                         className: 'mj-event-page__btn mj-event-page__btn--primary',
                         onClick: handleCancel,
                         disabled: isLoading,
-                    }, i18n.cancel_registration || 'Annuler l\'inscription')
+                    },
+                        h('span', { className: 'mj-event-page__btn-icon', 'aria-hidden': 'true' }, '❌'),
+                        cancelLabel
+                    )
                 ),
 
                 // Feedback

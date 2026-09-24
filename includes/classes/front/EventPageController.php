@@ -287,9 +287,11 @@ class EventPageController extends Controller
     private function buildI18nLocalization(): array
     {
         return array(
-            'register' => __("S'inscrire", 'mj-member'),
+            'register' => __('Inscrire', 'mj-member'),
             'update_registration' => __('Mettre à jour mon inscription', 'mj-member'),
             'cancel_registration' => __('Annuler mon inscription', 'mj-member'),
+            'cancel_registration_named' => __('Annuler l\'inscription de %s', 'mj-member'),
+            'download_contract' => __('Télécharger le contrat', 'mj-member'),
             'login_required' => __('Connecte-toi pour continuer.', 'mj-member'),
             'login' => __('Se connecter', 'mj-member'),
             'free_participation' => __('Participation libre : aucune inscription requise.', 'mj-member'),

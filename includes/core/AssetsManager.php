@@ -835,6 +835,7 @@ final class AssetsManager
             case 'event-page':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-event-page');
+                wp_enqueue_style('mj-member-account-tabs');
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');
                 wp_enqueue_script('mj-member-event-page-app');

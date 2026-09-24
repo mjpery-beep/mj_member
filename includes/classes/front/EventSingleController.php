@@ -746,13 +746,20 @@ class EventSingleController extends Controller
 
 
 
+        $eventRegistrationDocument = isset($legacy['event']['registration_document'])
+            ? (string) $legacy['event']['registration_document']
+            : '';
+        $hasContract = trim(wp_strip_all_tags($eventRegistrationDocument)) !== '';
+
         $participants = $this->prepareRegistrationParticipants(
 
             $formParticipants,
 
             !empty($legacy['registration_all_registered']),
 
-            $formAvailableCount
+            $formAvailableCount,
+
+            $hasContract
 
         );
 
@@ -1012,7 +1019,7 @@ class EventSingleController extends Controller
 
      */
 
-    private function prepareRegistrationParticipants(array $participants, bool $allRegistered, int $availableCount): array
+    private function prepareRegistrationParticipants(array $participants, bool $allRegistered, int $availableCount, bool $hasContract = false): array
 
     {
 
@@ -1120,6 +1127,38 @@ class EventSingleController extends Controller
 
 
 
+                $participantRegistrationId = isset($participant['registration_id'])
+
+                    ? (int) $participant['registration_id']
+
+                    : (isset($participant['registrationId']) ? (int) $participant['registrationId'] : 0);
+
+
+
+                $contractUrl = '';
+
+                if ($hasContract && $participantIsRegistered && $participantRegistrationId > 0) {
+
+                    $contractUrl = add_query_arg(
+
+                        array(
+
+                            'action' => 'mj_member_download_registration_contract',
+
+                            'registration_id' => $participantRegistrationId,
+
+                            'nonce' => wp_create_nonce('mj_member_download_registration_contract'),
+
+                        ),
+
+                        admin_url('admin-ajax.php')
+
+                    );
+
+                }
+
+
+
                 $entries[] = array(
 
                     'id' => $participantId,
@@ -1141,6 +1180,10 @@ class EventSingleController extends Controller
                     'input_disabled' => $inputDisabled,
 
                     'should_check' => $shouldCheck,
+
+                    'registration_id' => $participantRegistrationId,
+
+                    'contract_url' => $contractUrl,
 
                 );
 

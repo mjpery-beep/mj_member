@@ -393,6 +393,93 @@ if (!function_exists('mj_member_process_account_deletion_early')) {
     }
 }
 
+if (!function_exists('mj_member_process_child_deletion_early')) {
+    /**
+     * Deletes (deactivates + detaches) a child member of the current guardian before rendering.
+     * Returns the redirect URL on success, false otherwise.
+     *
+     * @return string|false
+     */
+    function mj_member_process_child_deletion_early() {
+        if (!is_user_logged_in()) {
+            return false;
+        }
+
+        $child_id = isset($_POST['mj_member_child_id']) ? (int) $_POST['mj_member_child_id'] : 0;
+        if ($child_id <= 0) {
+            return false;
+        }
+
+        $nonce = isset($_POST['mj_member_child_delete_nonce']) ? sanitize_text_field(wp_unslash((string) $_POST['mj_member_child_delete_nonce'])) : '';
+        if (!wp_verify_nonce($nonce, 'mj_member_child_delete_' . $child_id)) {
+            return false;
+        }
+
+        if (!class_exists('MjMembers') || !function_exists('mj_member_get_current_member') || !function_exists('mj_member_get_guardian_children')) {
+            return false;
+        }
+
+        $guardian = mj_member_get_current_member();
+        if (!$guardian || !is_object($guardian) || !mj_member_can_manage_children($guardian)) {
+            return false;
+        }
+
+        // The child must be linked to the current guardian.
+        $target_child = null;
+        foreach (mj_member_get_guardian_children($guardian) as $child) {
+            if ($child && (int) $child->id === $child_id) {
+                $target_child = $child;
+                break;
+            }
+        }
+        if (!$target_child) {
+            return false;
+        }
+
+        $child_wp_user_id = isset($target_child->wp_user_id) ? (int) $target_child->wp_user_id : 0;
+
+        $result = MjMembers::update($child_id, array(
+            'status' => MjMembers::STATUS_INACTIVE,
+            'guardian_id' => null,
+            'wp_user_id' => null,
+            'newsletter_opt_in' => 0,
+            'sms_opt_in' => 0,
+            'whatsapp_opt_in' => 0,
+        ));
+        if (is_wp_error($result)) {
+            return false;
+        }
+
+        if (class_exists(\Mj\Member\Classes\Crud\MjMemberGuardians::class)) {
+            \Mj\Member\Classes\Crud\MjMemberGuardians::remove_all_for_member($child_id);
+        }
+
+        // Remove the child's own WordPress login, if any (never a privileged account nor the guardian's).
+        if ($child_wp_user_id > 0 && $child_wp_user_id !== get_current_user_id() && !user_can($child_wp_user_id, 'edit_posts')) {
+            if (!function_exists('wp_delete_user')) {
+                require_once ABSPATH . 'wp-admin/includes/user.php';
+            }
+
+            $delete_cap_callback = static function ($allcaps, $caps, $args) use ($child_wp_user_id) {
+                $requested = isset($args[0]) ? (string) $args[0] : '';
+                if ($requested === 'delete_users' || ($requested === 'delete_user' && isset($args[2]) && (int) $args[2] === $child_wp_user_id)) {
+                    $allcaps[$requested] = true;
+                }
+                return $allcaps;
+            };
+
+            add_filter('user_has_cap', $delete_cap_callback, 10, 3);
+            wp_delete_user($child_wp_user_id);
+            remove_filter('user_has_cap', $delete_cap_callback, 10);
+        }
+
+        $current_url = function_exists('mj_member_get_current_url') ? mj_member_get_current_url() : home_url('/');
+
+        /** @var string $redirect_url Allows customizing the redirect after a child deletion. */
+        return apply_filters('mj_member_child_deletion_redirect', add_query_arg('mj-child-deleted', '1', $current_url), $target_child, $guardian);
+    }
+}
+
 if (!function_exists('mj_member_render_account_component')) {
     /**
      * Rend le composant Elementor / shortcode de l’espace membre.
@@ -420,6 +507,19 @@ if (!function_exists('mj_member_render_account_component')) {
                 // Headers déjà envoyés, retourner un script de redirection
                 return '<script>window.location.href = ' . wp_json_encode($delete_redirect) . ';</script>'
                      . '<noscript><meta http-equiv="refresh" content="0;url=' . esc_attr($delete_redirect) . '"></noscript>';
+            }
+        }
+
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_account_action']) && $_POST['mj_member_account_action'] === 'delete_child') {
+            $child_delete_redirect = mj_member_process_child_deletion_early();
+            if ($child_delete_redirect !== false) {
+                if (!headers_sent()) {
+                    wp_safe_redirect($child_delete_redirect);
+                    exit;
+                }
+                return '<script>window.location.href = ' . wp_json_encode($child_delete_redirect) . ';</script>'
+                     . '<noscript><meta http-equiv="refresh" content="0;url=' . esc_attr($child_delete_redirect) . '"></noscript>';
             }
         }
 
@@ -1005,6 +1105,12 @@ if (!function_exists('mj_member_render_account_component')) {
                         </div>
                     <?php endif; ?>
 
+                    <?php if (!empty($_GET['mj-child-deleted'])) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+                        <div class="mj-notice mj-notice--success">
+                            <p><?php esc_html_e('Le profil du jeune a bien été supprimé.', 'mj-member'); ?></p>
+                        </div>
+                    <?php endif; ?>
+
                     <?php if ($show_membership_section) : ?>
                         <div class="mj-account-membership mj-account-membership--<?php echo esc_attr($status_key !== '' ? $status_key : 'unknown'); ?>">
                             <?php if ($has_status_description) : ?>
@@ -1335,10 +1441,26 @@ if (!function_exists('mj_member_render_account_component')) {
 
                         <?php if (!$is_preview) : ?>
                         <div class="mj-account-danger-zone">
+                            <?php
+                            $danger_member_name = trim((string) ($member->first_name ?? '') . ' ' . (string) ($member->last_name ?? ''));
+                            $danger_is_guardian = function_exists('mj_member_can_manage_children') && mj_member_can_manage_children($member);
+                            ?>
                             <h4 class="mj-account-danger-zone__title"><?php esc_html_e('Zone de danger', 'mj-member'); ?></h4>
+                            <?php if ($danger_member_name !== '') : ?>
+                                <p class="mj-account-danger-zone__member">
+                                    <?php esc_html_e('Membre concerné :', 'mj-member'); ?>
+                                    <strong><?php echo esc_html($danger_member_name); ?></strong>
+                                    <span class="mj-account-danger-zone__member-hint"><?php esc_html_e('(votre compte)', 'mj-member'); ?></span>
+                                </p>
+                            <?php endif; ?>
                             <p class="mj-account-danger-zone__text">
-                                <?php esc_html_e('La suppression de votre compte est irréversible. Toutes vos données personnelles seront effacées.', 'mj-member'); ?>
+                                <?php esc_html_e('La suppression de votre compte est irréversible : vous ne pourrez plus vous connecter. L\'historique de vos inscriptions est conservé par la MJ.', 'mj-member'); ?>
                             </p>
+                            <?php if ($danger_is_guardian) : ?>
+                                <p class="mj-account-danger-zone__text">
+                                    <?php esc_html_e('Les jeunes associés à votre compte ne seront pas supprimés.', 'mj-member'); ?>
+                                </p>
+                            <?php endif; ?>
                             <button type="button" class="mj-button mj-button--danger" data-mj-member-delete-trigger>
                                 <?php esc_html_e('Supprimer mon compte', 'mj-member'); ?>
                             </button>
@@ -1360,6 +1482,10 @@ if (!function_exists('mj_member_render_account_component')) {
                                     <li><?php esc_html_e('Votre profil membre sera désactivé', 'mj-member'); ?></li>
                                     <li><?php esc_html_e('Votre compte utilisateur WordPress sera supprimé', 'mj-member'); ?></li>
                                     <li><?php esc_html_e('Vous serez désinscrit de toutes les communications', 'mj-member'); ?></li>
+                                    <li><?php esc_html_e('L\'historique de vos inscriptions et paiements est conservé', 'mj-member'); ?></li>
+                                    <?php if (!empty($danger_is_guardian)) : ?>
+                                        <li><?php esc_html_e('Les jeunes associés à votre compte ne seront pas supprimés', 'mj-member'); ?></li>
+                                    <?php endif; ?>
                                 </ul>
                             </div>
                             <footer class="mj-modal__footer">
@@ -1408,7 +1534,14 @@ if (!function_exists('mj_member_render_account_component')) {
                 <section class="mj-account-card mj-account-card--child-detail" data-mj-tab-panel="child-<?php echo esc_attr((string) $tc_id); ?>" hidden>
                     <header class="mj-account-card__header">
                         <div class="mj-account-card__header-main">
-                            <h2 class="mj-account-card__title">🧒 <?php echo esc_html($tc_full_name); ?></h2>
+                            <h2 class="mj-account-card__title">
+                                <?php if ($tc_photo_url !== '') : ?>
+                                    <img class="mj-account-card__title-avatar" src="<?php echo esc_url($tc_photo_url); ?>" alt="" loading="lazy" />
+                                <?php else : ?>
+                                    <span class="mj-account-card__title-icon" aria-hidden="true">🧒</span>
+                                <?php endif; ?>
+                                <span class="mj-account-card__title-text"><?php echo esc_html($tc_full_name); ?></span>
+                            </h2>
                         </div>
                         <?php if ($tc_label !== '') : ?>
                             <span class="mj-account-chip mj-account-chip--<?php echo esc_attr($tc_status); ?>"><?php echo esc_html($tc_label); ?></span>
@@ -1674,7 +1807,68 @@ if (!function_exists('mj_member_render_account_component')) {
                                 <?php esc_html_e('Enregistrer', 'mj-member'); ?>
                             </button>
                         </div>
+
+                        <?php if (!$is_preview) : ?>
+                        <div class="mj-account-danger-zone">
+                            <h4 class="mj-account-danger-zone__title"><?php esc_html_e('Zone de danger', 'mj-member'); ?></h4>
+                            <p class="mj-account-danger-zone__text">
+                                <?php
+                                /* translators: %s: child full name */
+                                echo esc_html(sprintf(__('La suppression du profil de %s est irréversible. Il sera désactivé et détaché de votre compte.', 'mj-member'), $tc_full_name));
+                                ?>
+                            </p>
+                            <button type="button" class="mj-button mj-button--danger" data-mj-member-delete-trigger="<?php echo esc_attr($tc_prefix . '-delete-modal'); ?>">
+                                <?php
+                                /* translators: %s: child full name */
+                                echo esc_html(sprintf(__('Supprimer %s', 'mj-member'), $tc_full_name));
+                                ?>
+                            </button>
+                        </div>
+                        <?php endif; ?>
                     </form>
+
+                    <?php if (!$is_preview) : ?>
+                    <div id="<?php echo esc_attr($tc_prefix . '-delete-modal'); ?>" class="mj-modal" hidden aria-labelledby="<?php echo esc_attr($tc_prefix . '-delete-modal-title'); ?>" aria-modal="true" role="dialog">
+                        <div class="mj-modal__backdrop" data-mj-member-delete-dismiss></div>
+                        <div class="mj-modal__dialog">
+                            <header class="mj-modal__header">
+                                <h3 id="<?php echo esc_attr($tc_prefix . '-delete-modal-title'); ?>" class="mj-modal__title"><?php esc_html_e('Confirmer la suppression', 'mj-member'); ?></h3>
+                                <button type="button" class="mj-modal__close" data-mj-member-delete-dismiss aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>">&times;</button>
+                            </header>
+                            <div class="mj-modal__body">
+                                <p>
+                                    <?php
+                                    /* translators: %s: child full name */
+                                    echo wp_kses(sprintf(__('Êtes-vous sûr de vouloir supprimer le profil de %s ? Cette action est irréversible.', 'mj-member'), '<strong>' . esc_html($tc_full_name) . '</strong>'), array('strong' => array()));
+                                    ?>
+                                </p>
+                                <ul>
+                                    <li><?php esc_html_e('Le profil du jeune sera désactivé', 'mj-member'); ?></li>
+                                    <li><?php esc_html_e('Il ne sera plus rattaché à votre compte', 'mj-member'); ?></li>
+                                    <li><?php esc_html_e('Son éventuel compte de connexion sera supprimé', 'mj-member'); ?></li>
+                                    <li><?php esc_html_e('Il sera désinscrit de toutes les communications', 'mj-member'); ?></li>
+                                    <li><?php esc_html_e('L\'historique de ses inscriptions et paiements est conservé', 'mj-member'); ?></li>
+                                </ul>
+                            </div>
+                            <footer class="mj-modal__footer">
+                                <button type="button" class="mj-button mj-button--secondary" data-mj-member-delete-dismiss>
+                                    <?php esc_html_e('Annuler', 'mj-member'); ?>
+                                </button>
+                                <form method="post" class="mj-account-delete-form">
+                                    <?php wp_nonce_field('mj_member_child_delete_' . $tc_id, 'mj_member_child_delete_nonce', false); ?>
+                                    <input type="hidden" name="mj_member_account_action" value="delete_child">
+                                    <input type="hidden" name="mj_member_child_id" value="<?php echo esc_attr((string) $tc_id); ?>">
+                                    <button type="submit" class="mj-button mj-button--danger">
+                                        <?php
+                                        /* translators: %s: child full name */
+                                        echo esc_html(sprintf(__('Oui, supprimer %s', 'mj-member'), $tc_full_name));
+                                        ?>
+                                    </button>
+                                </form>
+                            </footer>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </section>
                 <?php endforeach; endif; ?>
 
@@ -2180,6 +2374,20 @@ if (function_exists('add_shortcode') && function_exists('mj_member_render_accoun
     font-weight: 700;
 }
 
+.mj-account-card--child-detail .mj-account-card__title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mj-account-card__title-avatar {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
 .mj-account-card__intro {
     margin: 8px 0 0;
     color: var(--mj-account-muted);
@@ -2409,6 +2617,20 @@ if (function_exists('add_shortcode') && function_exists('mj_member_render_accoun
 
 .mj-account-danger-zone__text {
     margin: 0;
+    color: var(--mj-account-muted);
+}
+
+.mj-account-danger-zone__member {
+    margin: 0;
+    font-weight: 600;
+}
+
+.mj-account-danger-zone__member strong {
+    color: #b83232;
+}
+
+.mj-account-danger-zone__member-hint {
+    font-weight: 400;
     color: var(--mj-account-muted);
 }
 
@@ -3372,7 +3594,31 @@ img.wp-smiley, img.emoji {
                                 }
                                 // update header title
                                 var header = form.parentElement.querySelector('.mj-account-card__title');
-                                if (header && newName) header.textContent = '🧒 ' + newName;
+                                if (header) {
+                                    var headerText = header.querySelector('.mj-account-card__title-text');
+                                    if (headerText && newName) headerText.textContent = newName;
+                                    if (resp.data.child.photo) {
+                                        var photoUrl = resp.data.child.photo.url || '';
+                                        var headerMedia = header.querySelector('.mj-account-card__title-avatar, .mj-account-card__title-icon');
+                                        var newMedia;
+                                        if (photoUrl) {
+                                            newMedia = document.createElement('img');
+                                            newMedia.className = 'mj-account-card__title-avatar';
+                                            newMedia.src = photoUrl;
+                                            newMedia.alt = '';
+                                        } else {
+                                            newMedia = document.createElement('span');
+                                            newMedia.className = 'mj-account-card__title-icon';
+                                            newMedia.setAttribute('aria-hidden', 'true');
+                                            newMedia.textContent = '🧒';
+                                        }
+                                        if (headerMedia) {
+                                            header.replaceChild(newMedia, headerMedia);
+                                        } else {
+                                            header.insertBefore(newMedia, header.firstChild);
+                                        }
+                                    }
+                                }
                             }
                         } else {
                             if (feedback) {

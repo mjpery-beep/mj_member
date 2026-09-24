@@ -2,7 +2,12 @@
    Reused wherever a member's data needs to be split between "moi" and
    "mes jeunes" (mes informations, mes inscriptions, ...). Custom properties
    are declared with defaults on .mj-account-tabs itself so the component
-   renders correctly even outside the .mj-account-modern design system. */
+   renders correctly even outside the .mj-account-modern design system.
+   Selectors are scoped under .mj-account-tabs and qualified with the
+   element type, and the identity-defining properties are !important:
+   plugin buttons/links otherwise lose to theme-level button/link resets
+   (single-class selectors are easily beaten by a theme's own compound
+   selectors, e.g. ".entry-content button" or "a"/"button" with !important). */
 .mj-account-tabs {
     --mj-account-radius-lg: 24px;
     --mj-account-border: rgba(47, 82, 143, 0.08);
@@ -18,47 +23,62 @@
     background: rgba(47, 82, 143, 0.06);
     border-radius: var(--mj-account-radius-lg);
     border: 1px solid var(--mj-account-border);
+    list-style: none;
+    margin: 0;
 }
 
-.mj-account-tab {
+.mj-account-tabs button.mj-account-tab,
+.mj-account-tabs a.mj-account-tab {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    margin: 0;
     padding: 10px 18px;
-    border: none;
+    border: none !important;
     border-radius: calc(var(--mj-account-radius-lg) - 4px);
-    background: transparent;
-    color: var(--mj-account-muted);
+    background: transparent !important;
+    color: var(--mj-account-muted) !important;
     font-weight: 600;
     font-size: 0.95rem;
+    line-height: 1.2;
+    text-align: left;
+    text-decoration: none !important;
     cursor: pointer;
     transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
     white-space: nowrap;
     font-family: inherit;
+    box-shadow: none;
 }
 
-.mj-account-tab:hover {
-    background: rgba(47, 82, 143, 0.08);
-    color: var(--mj-account-text);
+.mj-account-tabs a.mj-account-tab:visited {
+    color: var(--mj-account-muted) !important;
 }
 
-.mj-account-tab--active {
-    background: var(--mj-account-card-bg);
-    color: var(--mj-account-accent);
+.mj-account-tabs button.mj-account-tab:hover,
+.mj-account-tabs a.mj-account-tab:hover {
+    background: rgba(47, 82, 143, 0.08) !important;
+    color: var(--mj-account-text) !important;
+    text-decoration: none !important;
+}
+
+.mj-account-tabs button.mj-account-tab--active,
+.mj-account-tabs a.mj-account-tab--active {
+    background: var(--mj-account-card-bg) !important;
+    color: var(--mj-account-accent) !important;
     box-shadow: 0 2px 8px rgba(47, 82, 143, 0.12);
 }
 
-.mj-account-tab--add {
+.mj-account-tabs .mj-account-tab--add {
     margin-left: auto;
-    color: var(--mj-account-accent);
+    color: var(--mj-account-accent) !important;
     font-size: 0.9rem;
 }
 
-.mj-account-tab--add:hover {
-    background: rgba(47, 82, 143, 0.12);
+.mj-account-tabs .mj-account-tab--add:hover {
+    background: rgba(47, 82, 143, 0.12) !important;
 }
 
-.mj-account-tab--add[disabled] {
+.mj-account-tabs .mj-account-tab--add[disabled] {
     opacity: 0.5;
     cursor: not-allowed;
 }
@@ -66,9 +86,11 @@
 .mj-account-tab__avatar {
     width: 22px;
     height: 22px;
+    min-width: 22px;
     border-radius: 50%;
     object-fit: cover;
     flex: 0 0 auto;
+    border: none;
 }
 
 .mj-account-tab__icon {
@@ -78,6 +100,8 @@
 
 .mj-account-tab__label {
     line-height: 1.2;
+    color: inherit !important;
+    text-decoration: none !important;
 }
 
 @media (max-width: 640px) {
@@ -86,12 +110,13 @@
         padding: 4px;
     }
 
-    .mj-account-tab {
+    .mj-account-tabs button.mj-account-tab,
+    .mj-account-tabs a.mj-account-tab {
         padding: 8px 12px;
         font-size: 0.85rem;
     }
 
-    .mj-account-tab--add {
+    .mj-account-tabs .mj-account-tab--add {
         margin-left: 0;
         width: 100%;
         justify-content: center;
