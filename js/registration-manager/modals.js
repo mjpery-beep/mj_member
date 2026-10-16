@@ -2485,7 +2485,7 @@
                     copyFeedback && h('p', { class: 'mj-regmgr-modal__description' }, copyFeedback),
                 ]),
 
-                claimLink && h('div', { class: 'mj-regmgr-form__group' }, [
+                claimLink && !isLinked && h('div', { class: 'mj-regmgr-form__group' }, [
                     h('label', { for: 'member-account-claim-link' }, claimLinkLabel),
                     h('input', {
                         type: 'text',

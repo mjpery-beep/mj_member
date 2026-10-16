@@ -12108,7 +12108,10 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
         }
 
-        if (function_exists('mj_member_get_card_claim_url')) {
+        // The claim link only makes sense while no existing WP account is linked
+        // (otherwise the claim page redirects straight to wp-login).
+        $has_existing_account = $member['hasLinkedAccount'] && get_userdata((int) $member['userId']);
+        if (!$has_existing_account && function_exists('mj_member_get_card_claim_url')) {
             $member['cardClaimUrl'] = mj_member_get_card_claim_url((int) $memberData->id);
         }
 

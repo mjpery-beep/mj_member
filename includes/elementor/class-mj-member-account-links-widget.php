@@ -135,16 +135,6 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
         );
 
         $this->add_control(
-            'title',
-            array(
-                'label' => __('Titre', 'mj-member'),
-                'type' => Controls_Manager::TEXT,
-                'default' => __('Mon espace MJ', 'mj-member'),
-                'label_block' => true,
-            )
-        );
-
-        $this->add_control(
             'intro',
             array(
                 'label' => __('Texte introductif', 'mj-member'),
@@ -286,45 +276,8 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
         $this->start_controls_section(
             'section_style_title',
             array(
-                'label' => __('Titre', 'mj-member'),
+                'label' => __('Texte introductif', 'mj-member'),
                 'tab' => Controls_Manager::TAB_STYLE,
-            )
-        );
-
-        $this->add_control(
-            'title_color',
-            array(
-                'label' => __('Couleur du titre', 'mj-member'),
-                'type' => Controls_Manager::COLOR,
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-links__title' => 'color: {{VALUE}};',
-                ),
-            )
-        );
-
-        if (class_exists('Elementor\\Group_Control_Typography')) {
-            $this->add_group_control(
-                Group_Control_Typography::get_type(),
-                array(
-                    'name' => 'title_typography',
-                    'selector' => '{{WRAPPER}} .mj-member-account-links__title',
-                )
-            );
-        }
-
-        $this->add_responsive_control(
-            'title_spacing',
-            array(
-                'label' => __('Marge inférieure', 'mj-member'),
-                'type' => Controls_Manager::SLIDER,
-                'size_units' => array('px'),
-                'range' => array(
-                    'px' => array('min' => 0, 'max' => 60),
-                ),
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-links__title' => 'margin-bottom: {{SIZE}}{{UNIT}};',
-                ),
-                'condition' => array('title!' => ''),
             )
         );
 
@@ -662,10 +615,6 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
         }
 
         echo '<div ' . implode(' ', $wrapper_attributes) . '>';
-
-        if (!empty($settings['title'])) {
-            echo '<h2 class="mj-member-account-links__title">' . esc_html($settings['title']) . '</h2>';
-        }
 
         if (!empty($settings['intro'])) {
             echo '<p class="mj-member-account-links__intro">' . wp_kses_post($settings['intro']) . '</p>';

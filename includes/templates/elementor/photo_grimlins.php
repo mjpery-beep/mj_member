@@ -75,9 +75,14 @@ if ($members_only && !$is_preview && is_user_logged_in() && function_exists('mj_
                 $self_initials = 'M';
             }
 
+            $self_label = trim(sprintf('%s %s', (string) ($tabs_member->first_name ?? ''), (string) ($tabs_member->last_name ?? '')));
+            if ($self_label === '') {
+                $self_label = __('Mon avatar', 'mj-member');
+            }
+
             $avatar_tabs[] = array(
                 'member_id' => 0,
-                'label' => __('Mon avatar', 'mj-member'),
+                'label' => $self_label,
                 'photo_url' => is_string($self_photo_url) ? $self_photo_url : '',
                 'initials' => $self_initials,
             );
@@ -124,6 +129,18 @@ if ($members_only && !$is_preview && is_user_logged_in() && function_exists('mj_
             }
 
             $show_avatar_tabs = (count($avatar_tabs) >= 2) || $allow_young_search;
+        }
+    }
+}
+
+// Preselect the tab of the member passed in the URL (?member_id=), e.g. from the "Photo du jeune" link.
+$active_tab_index = 0;
+$requested_member_id = isset($_GET['member_id']) ? absint(wp_unslash($_GET['member_id'])) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+if ($requested_member_id > 0) {
+    foreach ($avatar_tabs as $tab_index => $avatar_tab) {
+        if ((int) $avatar_tab['member_id'] === $requested_member_id) {
+            $active_tab_index = (int) $tab_index;
+            break;
         }
     }
 }
@@ -214,13 +231,13 @@ if ($fullscreen) {
             <?php foreach ($avatar_tabs as $tab_index => $avatar_tab) : ?>
                 <button
                     type="button"
-                    class="mj-photo-grimlins-tabs__btn<?php echo $tab_index === 0 ? ' mj-photo-grimlins-tabs__btn--active' : ''; ?>"
+                    class="mj-photo-grimlins-tabs__btn<?php echo $tab_index === $active_tab_index ? ' mj-photo-grimlins-tabs__btn--active' : ''; ?>"
                     role="tab"
-                    aria-selected="<?php echo $tab_index === 0 ? 'true' : 'false'; ?>"
+                    aria-selected="<?php echo $tab_index === $active_tab_index ? 'true' : 'false'; ?>"
                     data-mj-pg-tab-btn
                     data-mj-pg-target-member="<?php echo esc_attr((string) $avatar_tab['member_id']); ?>"
                     data-mj-pg-member-label="<?php echo esc_attr((string) $avatar_tab['label']); ?>"
-                    <?php if ($tab_index > 0) : ?>tabindex="-1"<?php endif; ?>
+                    <?php if ($tab_index !== $active_tab_index) : ?>tabindex="-1"<?php endif; ?>
                 >
                     <span class="mj-photo-grimlins-tabs__avatar" aria-hidden="true">
                         <?php if (!empty($avatar_tab['photo_url'])) : ?>

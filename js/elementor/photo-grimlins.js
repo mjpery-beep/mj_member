@@ -1587,14 +1587,29 @@
         if (tab) {
             tab.click();
         } else {
+            // Member not in the tabs: unselect tabs so the search button is the only visible selection.
+            var tabs = this.root ? this.root.querySelectorAll('[data-mj-pg-tab-btn]') : [];
+            Array.prototype.forEach.call(tabs, function(b) {
+                b.classList.remove('mj-photo-grimlins-tabs__btn--active');
+                b.setAttribute('aria-selected', 'false');
+            });
             this.activeTargetMemberId = normalizedId;
             if (this.config) {
                 this.config.targetMemberId = normalizedId;
             }
+            if (this.root) {
+                this.root.setAttribute('data-target-member-id', String(normalizedId));
+            }
             this.switchTargetMember(normalizedId, memberLabel || '');
+            if (this.dom.openYoungSearchBtn) {
+                this.dom.openYoungSearchBtn.classList.add('mj-photo-grimlins-tabs__search-btn--active');
+            }
         }
 
         if (this.dom.openYoungSearchBtn && memberLabel) {
+            if (!this.dom.openYoungSearchBtn.hasAttribute('data-default-label')) {
+                this.dom.openYoungSearchBtn.setAttribute('data-default-label', this.dom.openYoungSearchBtn.textContent);
+            }
             this.dom.openYoungSearchBtn.textContent = memberLabel;
         }
 
@@ -2329,6 +2344,14 @@
                 btn.classList.add('mj-photo-grimlins-tabs__btn--active');
                 btn.setAttribute('aria-selected', 'true');
                 btn.removeAttribute('tabindex');
+
+                var searchBtn = container.querySelector('.mj-photo-grimlins-tabs__search-btn');
+                if (searchBtn && searchBtn.classList.contains('mj-photo-grimlins-tabs__search-btn--active')) {
+                    searchBtn.classList.remove('mj-photo-grimlins-tabs__search-btn--active');
+                    if (searchBtn.hasAttribute('data-default-label')) {
+                        searchBtn.textContent = searchBtn.getAttribute('data-default-label');
+                    }
+                }
 
                 if (panelId) {
                     var panels = container.querySelectorAll('[role="tabpanel"]');

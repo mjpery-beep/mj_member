@@ -393,6 +393,69 @@ if (!function_exists('mj_member_process_account_deletion_early')) {
     }
 }
 
+if (!function_exists('mj_member_account_get_avatar_creator_link')) {
+    /**
+     * Returns the configured "Créer mon avatar" account link (URL, label, icon), or null when disabled/unavailable.
+     *
+     * @return array{url:string,label:string,icon_html:string}|null
+     */
+    function mj_member_account_get_avatar_creator_link() {
+        static $cache = false;
+        if ($cache !== false) {
+            return $cache;
+        }
+        $cache = null;
+
+        if (!class_exists(\Mj\Member\Classes\MjAccountLinks::class)) {
+            return null;
+        }
+
+        foreach (\Mj\Member\Classes\MjAccountLinks::getLinks(home_url('/')) as $link) {
+            if (!is_array($link) || ($link['key'] ?? '') !== 'photo_grimlins' || empty($link['url'])) {
+                continue;
+            }
+
+            $icon = isset($link['icon']) && is_array($link['icon']) ? $link['icon'] : array();
+            $icon_html = '';
+            if (!empty($icon['url'])) {
+                $icon_html = '<img class="mj-account-photo-control__avatar-link-icon" src="' . esc_url((string) ($icon['preview_url'] ?? $icon['url'])) . '" alt="" loading="lazy" />';
+            }
+
+            $cache = array(
+                'url' => (string) $link['url'],
+                'label' => (string) ($link['label'] ?? __('Créer mon avatar', 'mj-member')),
+                'icon_html' => $icon_html,
+            );
+            return $cache;
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('mj_member_account_render_avatar_creator_link')) {
+    /**
+     * Renders the "Créer mon avatar" button next to a photo upload control.
+     *
+     * @param int $member_id Target member (child) preselected in the avatar widget; 0 = current member.
+     * @return string
+     */
+    function mj_member_account_render_avatar_creator_link($member_id = 0) {
+        $link = mj_member_account_get_avatar_creator_link();
+        if (!$link) {
+            return '';
+        }
+
+        $url = (int) $member_id > 0 ? add_query_arg('member_id', (int) $member_id, $link['url']) : $link['url'];
+        $icon = $link['icon_html'] !== '' ? wp_kses_post($link['icon_html']) : '✨';
+
+        return '<a class="mj-account-photo-control__avatar-link" href="' . esc_url($url) . '">'
+            . '<span class="mj-account-upload__icon" aria-hidden="true">' . $icon . '</span>'
+            . '<span class="mj-account-upload__text">' . esc_html($link['label']) . '</span>'
+            . '</a>';
+    }
+}
+
 if (!function_exists('mj_member_process_child_deletion_early')) {
     /**
      * Deletes (deactivates + detaches) a child member of the current guardian before rendering.
@@ -633,21 +696,6 @@ if (!function_exists('mj_member_render_account_component')) {
                 $payment_history = mj_member_get_payment_timeline((int) $member->id, max(1, (int) $options['payment_limit']));
             }
         }
-
-        $presence_days = 0;
-        if ($is_preview) {
-            $presence_days = 12;
-        } elseif (function_exists('mj_member_get_presence_days_count')) {
-            $presence_days = mj_member_get_presence_days_count((int) $member->id);
-        }
-
-        $presence_days_label = sprintf(
-            _n('%s jour de présence', '%s jours de présence', $presence_days, 'mj-member'),
-            number_format_i18n($presence_days)
-        );
-        $presence_days_hint = $presence_days > 0
-            ? __('Jours où votre présence a été enregistrée.', 'mj-member')
-            : __('Aucune présence enregistrée pour le moment.', 'mj-member');
 
         $form_values = array(
             'first_name' => isset($member->first_name) ? sanitize_text_field((string) $member->first_name) : '',
@@ -1045,7 +1093,13 @@ if (!function_exists('mj_member_render_account_component')) {
             <div class="mj-account-shell">
                 <?php if ($has_children_tabs) : ?>
                 <nav class="mj-account-tabs" role="tablist" data-mj-account-tabs>
-                    <?php echo mj_member_render_account_tab_button('parent', __('Mes données', 'mj-member'), $photo_preview['url'] ?? '', '📋', true); ?>
+                    <?php
+                    $parent_tab_label = trim((string) ($member->first_name ?? '') . ' ' . (string) ($member->last_name ?? ''));
+                    if ($parent_tab_label === '') {
+                        $parent_tab_label = __('Mes données', 'mj-member');
+                    }
+                    echo mj_member_render_account_tab_button('parent', $parent_tab_label, $photo_preview['url'] ?? '', '📋', true);
+                    ?>
                     <?php foreach ($children_payload as $tab_child) :
                         $tab_child_avatar = !empty($tab_child['photo']['url']) ? $tab_child['photo']['url'] : '';
                         $tab_child_label = $tab_child['full_name'] !== '' ? $tab_child['full_name'] : __('Jeune', 'mj-member');
@@ -1065,9 +1119,21 @@ if (!function_exists('mj_member_render_account_component')) {
                 <section class="mj-account-card mj-account-card--profile"<?php echo $has_children_tabs ? ' data-mj-tab-panel="parent"' : ''; ?>>
                     <header class="mj-account-card__header">
                         <div class="mj-account-card__header-main">
-                            <?php if ($title !== '') : ?>
-                                <h2 class="mj-account-card__title"><?php echo esc_html($title); ?></h2>
-                            <?php endif; ?>
+                            <?php
+                            $profile_title = trim((string) ($member->first_name ?? '') . ' ' . (string) ($member->last_name ?? ''));
+                            if ($profile_title === '') {
+                                $profile_title = $title !== '' ? $title : __('Mes informations', 'mj-member');
+                            }
+                            $profile_avatar_url = isset($photo_preview['url']) ? (string) $photo_preview['url'] : '';
+                            ?>
+                            <h2 class="mj-account-card__title">
+                                <?php if ($profile_avatar_url !== '') : ?>
+                                    <img class="mj-account-card__title-avatar" src="<?php echo esc_url($profile_avatar_url); ?>" alt="" loading="lazy" />
+                                <?php else : ?>
+                                    <span class="mj-account-card__title-icon" aria-hidden="true">👤</span>
+                                <?php endif; ?>
+                                <span class="mj-account-card__title-text"><?php echo esc_html($profile_title); ?></span>
+                            </h2>
                             <?php if ($description !== '') : ?>
                                 <p class="mj-account-card__intro"><?php echo wp_kses_post($description); ?></p>
                             <?php endif; ?>
@@ -1078,14 +1144,6 @@ if (!function_exists('mj_member_render_account_component')) {
                             </span>
                         <?php endif; ?>
                     </header>
-
-                    <div class="mj-account-card__stats">
-                        <article class="mj-account-stat mj-account-stat--presence">
-                            <span class="mj-account-stat__label"><?php esc_html_e('Présences', 'mj-member'); ?></span>
-                            <strong class="mj-account-stat__value"><?php echo esc_html($presence_days_label); ?></strong>
-                            <span class="mj-account-stat__hint"><?php echo esc_html($presence_days_hint); ?></span>
-                        </article>
-                    </div>
 
                     <?php if (!empty($errors)) : ?>
                         <div class="mj-notice mj-notice--error">
@@ -1153,7 +1211,6 @@ if (!function_exists('mj_member_render_account_component')) {
                         <?php endif; ?>
 
                         <fieldset class="mj-fieldset">
-                            <legend><?php esc_html_e('Informations personnelles', 'mj-member'); ?></legend>
                             <div class="mj-field-grid">
                                 <div class="mj-field-group">
                                     <label for="mj-account-first-name"><?php esc_html_e('Prénom', 'mj-member'); ?></label>
@@ -1379,27 +1436,30 @@ if (!function_exists('mj_member_render_account_component')) {
                                 <div class="mj-account-photo-control__fields">
                                     <div class="mj-field-group mj-account-photo-control__upload">
                                         <span id="<?php echo esc_attr($photo_label_id); ?>" class="mj-account-photo-control__label"><?php esc_html_e('Photo de profil', 'mj-member'); ?></span>
-                                        <div class="<?php echo esc_attr(implode(' ', $upload_container_classes)); ?>" data-mj-account-upload>
-                                            <input
-                                                type="file"
-                                                id="<?php echo esc_attr($photo_input_id); ?>"
-                                                class="mj-account-upload__input"
-                                                name="member_photo"
-                                                accept="image/*"
-                                                aria-labelledby="<?php echo esc_attr($photo_label_id . ' ' . $photo_trigger_id); ?>"
-                                                aria-describedby="<?php echo esc_attr($photo_hint_id); ?>"
-                                                <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
-                                            <label
-                                                class="mj-account-upload__trigger"
-                                                id="<?php echo esc_attr($photo_trigger_id); ?>"
-                                                for="<?php echo esc_attr($photo_input_id); ?>"<?php echo $is_preview ? ' aria-disabled="true" tabindex="-1"' : ''; ?>>
-                                                <span class="mj-account-upload__icon" aria-hidden="true">📷</span>
-                                                <span class="mj-account-upload__text"><?php esc_html_e('Choisir une image', 'mj-member'); ?></span>
-                                            </label>
-                                            <div class="mj-account-upload__meta">
-                                                <span class="mj-account-upload__filename" data-default="<?php echo esc_attr($upload_default_text); ?>"><?php echo esc_html($upload_default_text); ?></span>
-                                                <span class="mj-account-upload__hint" id="<?php echo esc_attr($photo_hint_id); ?>"><?php esc_html_e('Formats acceptés : JPG ou PNG, 5 Mo max.', 'mj-member'); ?></span>
+                                        <div class="mj-account-photo-control__actions">
+                                            <div class="<?php echo esc_attr(implode(' ', $upload_container_classes)); ?>" data-mj-account-upload>
+                                                <input
+                                                    type="file"
+                                                    id="<?php echo esc_attr($photo_input_id); ?>"
+                                                    class="mj-account-upload__input"
+                                                    name="member_photo"
+                                                    accept="image/*"
+                                                    aria-labelledby="<?php echo esc_attr($photo_label_id . ' ' . $photo_trigger_id); ?>"
+                                                    aria-describedby="<?php echo esc_attr($photo_hint_id); ?>"
+                                                    <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                                <label
+                                                    class="mj-account-upload__trigger"
+                                                    id="<?php echo esc_attr($photo_trigger_id); ?>"
+                                                    for="<?php echo esc_attr($photo_input_id); ?>"<?php echo $is_preview ? ' aria-disabled="true" tabindex="-1"' : ''; ?>>
+                                                    <span class="mj-account-upload__icon" aria-hidden="true">📷</span>
+                                                    <span class="mj-account-upload__text"><?php esc_html_e('Choisir une image', 'mj-member'); ?></span>
+                                                </label>
+                                                <div class="mj-account-upload__meta">
+                                                    <span class="mj-account-upload__filename" data-default="<?php echo esc_attr($upload_default_text); ?>"><?php echo esc_html($upload_default_text); ?></span>
+                                                    <span class="mj-account-upload__hint" id="<?php echo esc_attr($photo_hint_id); ?>"><?php esc_html_e('Formats acceptés : JPG ou PNG, 5 Mo max.', 'mj-member'); ?></span>
+                                                </div>
                                             </div>
+                                            <?php echo mj_member_account_render_avatar_creator_link(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper ?>
                                         </div>
                                     </div>
                                     <?php if ($is_preview) : ?>
@@ -1554,7 +1614,6 @@ if (!function_exists('mj_member_render_account_component')) {
                         <input type="hidden" name="child_id" value="<?php echo esc_attr((string) $tc_id); ?>" />
 
                         <fieldset class="mj-fieldset">
-                            <legend><?php esc_html_e('Informations personnelles', 'mj-member'); ?></legend>
                             <div class="mj-field-grid">
                                 <div class="mj-field-group">
                                     <label for="<?php echo esc_attr($tc_prefix); ?>-first-name"><?php esc_html_e('Prénom', 'mj-member'); ?></label>
@@ -1767,16 +1826,21 @@ if (!function_exists('mj_member_render_account_component')) {
                                 <div class="mj-account-photo-control__fields">
                                     <div class="mj-field-group mj-account-photo-control__upload">
                                         <span id="<?php echo esc_attr($tc_photo_label_id_tab); ?>" class="mj-account-photo-control__label"><?php esc_html_e('Photo du jeune', 'mj-member'); ?></span>
-                                        <div class="mj-account-upload" data-mj-account-upload>
-                                            <input type="file" id="<?php echo esc_attr($tc_photo_input_id_tab); ?>" class="mj-account-upload__input" name="child_photo" accept="image/*" aria-labelledby="<?php echo esc_attr($tc_photo_label_id_tab . ' ' . $tc_photo_trigger_id_tab); ?>" aria-describedby="<?php echo esc_attr($tc_photo_hint_id_tab); ?>" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
-                                            <label class="mj-account-upload__trigger" id="<?php echo esc_attr($tc_photo_trigger_id_tab); ?>" for="<?php echo esc_attr($tc_photo_input_id_tab); ?>"<?php echo $is_preview ? ' aria-disabled="true" tabindex="-1"' : ''; ?>>
-                                                <span class="mj-account-upload__icon" aria-hidden="true">📷</span>
-                                                <span class="mj-account-upload__text"><?php esc_html_e('Choisir une image', 'mj-member'); ?></span>
-                                            </label>
-                                            <div class="mj-account-upload__meta">
-                                                <span class="mj-account-upload__filename" data-default="<?php echo esc_attr($tc_upload_default); ?>"><?php echo esc_html($tc_upload_default); ?></span>
-                                                <span class="mj-account-upload__hint" id="<?php echo esc_attr($tc_photo_hint_id_tab); ?>"><?php esc_html_e('Formats acceptés : JPG ou PNG, 5 Mo max.', 'mj-member'); ?></span>
+                                        <div class="mj-account-photo-control__actions">
+                                            <div class="mj-account-upload" data-mj-account-upload>
+                                                <input type="file" id="<?php echo esc_attr($tc_photo_input_id_tab); ?>" class="mj-account-upload__input" name="child_photo" accept="image/*" aria-labelledby="<?php echo esc_attr($tc_photo_label_id_tab . ' ' . $tc_photo_trigger_id_tab); ?>" aria-describedby="<?php echo esc_attr($tc_photo_hint_id_tab); ?>" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                                <label class="mj-account-upload__trigger" id="<?php echo esc_attr($tc_photo_trigger_id_tab); ?>" for="<?php echo esc_attr($tc_photo_input_id_tab); ?>"<?php echo $is_preview ? ' aria-disabled="true" tabindex="-1"' : ''; ?>>
+                                                    <span class="mj-account-upload__icon" aria-hidden="true">📷</span>
+                                                    <span class="mj-account-upload__text"><?php esc_html_e('Choisir une image', 'mj-member'); ?></span>
+                                                </label>
+                                                <div class="mj-account-upload__meta">
+                                                    <span class="mj-account-upload__filename" data-default="<?php echo esc_attr($tc_upload_default); ?>"><?php echo esc_html($tc_upload_default); ?></span>
+                                                    <span class="mj-account-upload__hint" id="<?php echo esc_attr($tc_photo_hint_id_tab); ?>"><?php esc_html_e('Formats acceptés : JPG ou PNG, 5 Mo max.', 'mj-member'); ?></span>
+                                                </div>
                                             </div>
+                                            <?php if (!$is_preview) : ?>
+                                                <?php echo mj_member_account_render_avatar_creator_link($tc_id); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper ?>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                     <?php if ($is_preview) : ?>
@@ -2374,6 +2438,7 @@ if (function_exists('add_shortcode') && function_exists('mj_member_render_accoun
     font-weight: 700;
 }
 
+.mj-account-card--profile .mj-account-card__title,
 .mj-account-card--child-detail .mj-account-card__title {
     display: flex;
     align-items: center;
@@ -2392,45 +2457,6 @@ if (function_exists('add_shortcode') && function_exists('mj_member_render_accoun
     margin: 8px 0 0;
     color: var(--mj-account-muted);
     line-height: 1.5;
-}
-
-.mj-account-card__stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin-bottom: 28px;
-}
-
-.mj-account-stat {
-    border-radius: 22px;
-    padding: 20px 22px;
-    border: 1px solid rgba(47, 82, 143, 0.12);
-    background: linear-gradient(135deg, rgba(47, 82, 143, 0.08), rgba(255, 255, 255, 0.96));
-}
-
-.mj-account-stat__label {
-    display: block;
-    margin-bottom: 8px;
-    color: var(--mj-account-muted);
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.mj-account-stat__value {
-    display: block;
-    color: #111827;
-    font-size: 1.7rem;
-    font-weight: 800;
-    line-height: 1.1;
-}
-
-.mj-account-stat__hint {
-    display: block;
-    margin-top: 8px;
-    color: var(--mj-account-muted);
-    line-height: 1.45;
 }
 
 .mj-account-card__badge {
@@ -2914,6 +2940,53 @@ if (function_exists('add_shortcode') && function_exists('mj_member_render_accoun
     transform: none;
 }
 
+.mj-account-photo-control__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px 16px;
+}
+
+.mj-account-modern a.mj-account-photo-control__avatar-link,
+.mj-account-modern a.mj-account-photo-control__avatar-link:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1.1rem;
+    border-radius: var(--mj-account-radius-sm);
+    background: rgba(47, 82, 143, 0.12);
+    border: 1px dashed rgba(47, 82, 143, 0.45);
+    color: var(--mj-account-accent);
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: none;
+    background-image: none;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.mj-account-modern a.mj-account-photo-control__avatar-link:hover,
+.mj-account-modern a.mj-account-photo-control__avatar-link:focus-visible {
+    background: rgba(47, 82, 143, 0.18);
+    border-color: var(--mj-account-accent);
+    color: var(--mj-account-accent);
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+.mj-account-modern a.mj-account-photo-control__avatar-link span {
+    text-decoration: none;
+}
+
+.mj-account-photo-control__avatar-link .mj-account-upload__icon {
+    overflow: hidden;
+}
+
+.mj-account-photo-control__avatar-link-icon {
+    width: 70%;
+    height: 70%;
+    object-fit: contain;
+}
+
 .mj-account-photo-control__remove {
     display: flex;
     align-items: center;
@@ -3310,6 +3383,15 @@ if (function_exists('add_shortcode') && function_exists('mj_member_render_accoun
 }
 
 @media (max-width: 640px) {
+    .mj-account-photo-control__actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mj-account-modern a.mj-account-photo-control__avatar-link {
+        justify-content: center;
+    }
+
     .mj-account-modern {
         padding: 32px 18px;
     }

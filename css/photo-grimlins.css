@@ -1286,43 +1286,47 @@ a.mj-photo-grimlins__history-download {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    padding: 0;
-    border: none;
-    background: none;
-    justify-content: space-around;
-    align-content: flex-end;
-    flex-direction: row;
+    padding: 0.4rem;
     margin-bottom: 17px;
-    align-items: flex-end;
+    border: 1px solid #e2e8f0;
+    border-radius: 9px;
+    background: #f1f5f9;
+    justify-content: center;
+    align-items: center;
 }
 
 .mj-photo-grimlins-tabs__btn {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 0.45rem;
-    padding: 0.5rem 0.85rem;
-    border: 1px solid rgba(148, 163, 184, 0.35);
+    gap: 0.5rem;
+    padding: 0.35rem 0.95rem 0.35rem 0.35rem;
+    border: 2px solid transparent;
     border-radius: 999px;
-    background: linear-gradient(180deg, #ffffff, #f8fafc);
-    color: #334155;
+    background: transparent;
+    color: #64748b;
     font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
-    transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s;
     white-space: nowrap;
 }
 
 .mj-photo-grimlins-tabs__avatar {
-    width: 1.65rem;
-    height: 1.65rem;
+    position: relative;
+    width: 2rem;
+    height: 2rem;
     border-radius: 999px;
     overflow: hidden;
     background: #e2e8f0;
-    border: 1px solid rgba(15, 23, 42, 0.08);
+    border: 2px solid #ffffff;
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    opacity: 0.75;
+    filter: grayscale(0.4);
+    transition: opacity 0.15s, filter 0.15s, box-shadow 0.15s;
 }
 
 .mj-photo-grimlins-tabs__avatar img {
@@ -1333,24 +1337,57 @@ a.mj-photo-grimlins__history-download {
 }
 
 .mj-photo-grimlins-tabs__avatar-fallback {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 700;
     color: #334155;
 }
 
-.mj-photo-grimlins-tabs__btn:hover {
-    border-color: #22c55e;
-    background: #f0fdf4;
+.mj-photo-grimlins-tabs__btn:hover,
+.mj-photo-grimlins-tabs__btn:focus-visible {
+    background: #ffffff;
     color: #1e293b;
-    box-shadow: 0 8px 18px rgba(34, 197, 94, 0.14);
+    outline: none;
 }
 
-.mj-photo-grimlins-tabs__btn--active {
-    border-color: #22c55e;
-    background: #f0fdf4;
-    color: #166534;
-    font-weight: 600;
-    box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.24);
+.mj-photo-grimlins-tabs__btn:focus-visible {
+    border-color: #86efac;
+}
+
+.mj-photo-grimlins-tabs__btn:hover .mj-photo-grimlins-tabs__avatar {
+    opacity: 1;
+    filter: none;
+}
+
+.mj-photo-grimlins-tabs__btn--active,
+.mj-photo-grimlins-tabs__btn--active:hover,
+.mj-photo-grimlins-tabs__btn--active:focus-visible {
+    background: #16a34a;
+    border-color: #16a34a;
+    color: #ffffff;
+    font-weight: 700;
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.35);
+    transform: translateY(-1px);
+}
+
+.mj-photo-grimlins-tabs__btn--active .mj-photo-grimlins-tabs__avatar {
+    opacity: 1;
+    filter: none;
+    box-shadow: 0 0 0 2px #16a34a, 0 0 0 4px #ffffff;
+}
+
+.mj-photo-grimlins-tabs__btn--active::after {
+    content: "\2713";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    margin-left: 0.1rem;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #16a34a;
+    font-size: 0.7rem;
+    font-weight: 900;
 }
 
 .mj-photo-grimlins-tabs__search-btn {
@@ -1373,6 +1410,20 @@ a.mj-photo-grimlins__history-download {
     background: #ccfbf1;
     border-color: rgba(13, 148, 136, 0.6);
     transform: translateY(-1px);
+}
+
+.mj-photo-grimlins-tabs__search-btn--active,
+.mj-photo-grimlins-tabs__search-btn--active:hover,
+.mj-photo-grimlins-tabs__search-btn--active:focus-visible {
+    background: #16a34a;
+    border: 2px solid #16a34a;
+    color: #ffffff;
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.35);
+}
+
+.mj-photo-grimlins-tabs__search-btn--active::after {
+    content: "\2713";
+    margin-left: 0.4rem;
 }
 
 .mj-photo-grimlins-young-search {

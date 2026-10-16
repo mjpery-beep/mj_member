@@ -2451,7 +2451,7 @@ if (!function_exists('mj_member_maybe_process_card_claim_form')) {
             return;
         }
 
-        if (!empty($member->wp_user_id)) {
+        if (!empty($member->wp_user_id) && get_userdata((int) $member->wp_user_id)) {
             $login_url = mj_member_get_card_login_url($member, $key);
             wp_safe_redirect($login_url);
             exit;
@@ -2552,7 +2552,7 @@ if (!function_exists('mj_member_maybe_override_card_template')) {
 
         $member = mj_member_get_member_by_card_key($key);
 
-        if ($member && !empty($member->wp_user_id)) {
+        if ($member && !empty($member->wp_user_id) && get_userdata((int) $member->wp_user_id)) {
             $login_url = mj_member_get_card_login_url($member, $key);
             wp_safe_redirect($login_url);
             exit;
